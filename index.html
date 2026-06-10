@@ -1,0 +1,747 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Cyber Wrestling Chatroom</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root{
+    --bg:#0b0f1a; --card:#0f1724; --accent:#ff3b6b; --muted:#9aa4b2; --glass: rgba(255,255,255,0.03);
+    --success:#2dd4bf; --danger:#ff6b6b; font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;
+  }
+  html,body{height:100%;margin:0;background:linear-gradient(180deg,#071021 0%, #0b1220 100%);color:#e6eef6}
+  .container{max-width:1100px;margin:36px auto;padding:28px;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .brand{display:flex;align-items:center;gap:12px}
+  .logo{width:56px;height:56px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#7c3aed);display:flex;align-items:center;justify-content:center;font-weight:700;color:white}
+  h1{margin:0;font-size:20px}
+  p.lead{margin:6px 0 0;color:var(--muted)}
+  .actions{display:flex;gap:10px;flex-wrap:wrap}
+  button{background:var(--accent);border:0;padding:10px 14px;border-radius:8px;color:white;font-weight:600;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+  .grid{display:grid;grid-template-columns:1fr 320px;gap:18px;margin-top:22px}
+  .card{background:var(--card);padding:18px;border-radius:10px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.02)}
+  .hero{min-height:220px;display:flex;flex-direction:column;justify-content:center;gap:12px}
+  .cta-row{display:flex;gap:10px}
+  .muted{color:var(--muted);font-size:13px}
+  .roster-list{display:flex;flex-direction:column;gap:8px;max-height:420px;overflow:auto;padding-right:6px}
+  .user-row{display:flex;align-items:center;gap:12px;padding:8px;border-radius:8px;background:var(--glass)}
+  .avatar{width:44px;height:44px;border-radius:8px;background:linear-gradient(135deg,#1f2937,#111827);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
+  .status{width:10px;height:10px;border-radius:50%}
+  .status.online{background:var(--success)}
+  .status.offline{background:var(--muted)}
+  .small{font-size:13px;color:var(--muted)}
+  .chat-popup{position:fixed;right:28px;bottom:28px;width:420px;height:520px;background:linear-gradient(180deg,#071226,#071226);border-radius:12px;border:1px solid rgba(255,255,255,0.03);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(2,6,23,0.6)}
+  .chat-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,0.02)}
+  .chat-body{display:flex;flex:1;gap:10px;overflow:hidden}
+  .public-feed{flex:1;padding:12px;display:flex;flex-direction:column;gap:10px;overflow:auto}
+  .online-list{width:140px;border-left:1px solid rgba(255,255,255,0.02);padding:12px;display:flex;flex-direction:column;gap:8px;overflow:auto}
+  .message{padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.02);max-width:78%}
+  .message.me{background:linear-gradient(90deg, rgba(255,59,107,0.12), rgba(124,58,237,0.06));align-self:flex-end}
+  .chat-input{display:flex;padding:10px;border-top:1px solid rgba(255,255,255,0.02);gap:8px}
+  input[type="text"],input[type="email"],input[type="number"],input[type="password"],textarea,select{background:transparent;border:1px solid rgba(255,255,255,0.12);padding:8px;border-radius:8px;color:#e6eef6;flex:1}
+  .pm-window{position:fixed;right:460px;bottom:28px;width:320px;height:360px;background:linear-gradient(180deg,#071226,#071226);border-radius:10px;border:1px solid rgba(255,255,255,0.03);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(2,6,23,0.6)}
+  .pm-header{padding:10px;border-bottom:1px solid rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:space-between}
+  .pm-body{flex:1;padding:10px;display:flex;flex-direction:column;gap:8px;overflow:auto}
+  .pm-input{display:flex;padding:8px;border-top:1px solid rgba(255,255,255,0.02);gap:8px}
+  .small-btn{padding:6px 8px;border-radius:8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.12);color:var(--muted);cursor:pointer}
+  footer{margin-top:18px;color:var(--muted);font-size:13px;text-align:center}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}.chat-popup{right:12px;left:12px;width:auto}}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="brand">
+      <div class="logo">CW</div>
+      <div>
+        <h1>Cyber Wrestling Chatroom</h1>
+        <p class="lead">Enter the ring, find opponents, and trash talk in real time</p>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="btnLogin">Login</button>
+      <button id="btnRegister" class="ghost">Register</button>
+      <button id="btnRoster" class="ghost">User Roster</button>
+      <button id="btnOpenChat">Open Chatroom</button>
+      <button id="btnAdmin" class="ghost">Admin Panel</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="card hero">
+      <h2>Welcome to the Arena</h2>
+      <p class="muted">Create a profile, see who is online, and start public or private matches in the chatroom.</p>
+      <div class="cta-row">
+        <button id="ctaLogin">Login</button>
+        <button id="ctaRegister" class="ghost">Register</button>
+      </div>
+      <div style="margin-top:12px" class="muted">Demo stack: Node, MongoDB, Socket.IO, Admin, Analytics.</div>
+    </div>
+
+    <aside class="card">
+      <h3 style="margin-top:0">Quick Roster</h3>
+      <div id="quickRoster" class="roster-list"></div>
+    </aside>
+  </div>
+
+  <footer>Cyber Wrestling Chatroom • Demo build</footer>
+</div>
+
+<!-- LOGIN POPUP -->
+<div id="modalLogin" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);align-items:center;justify-content:center">
+  <div style="background:#111;padding:20px;border-radius:10px;width:360px">
+    <h3>Login</h3>
+    <input id="loginUser" type="text" placeholder="Username" style="width:100%;margin-bottom:8px">
+    <input id="loginPass" type="password" placeholder="Password" style="width:100%;margin-bottom:8px">
+    <div id="loginError" style="color:#ff6b6b;display:none;margin-bottom:8px"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button id="loginCancel" class="ghost">Cancel</button>
+      <button id="loginSubmit">Login</button>
+    </div>
+  </div>
+</div>
+
+<!-- REGISTER POPUP -->
+<div id="modalRegister" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.6);align-items:center;justify-content:center">
+  <div style="background:#111;padding:18px;border-radius:10px;width:520px;max-height:90vh;overflow:auto">
+    <h3 style="margin:0 0 8px 0">Register</h3>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;gap:8px">
+        <input id="regUser" type="text" placeholder="Username" />
+        <input id="regEmail" type="email" placeholder="Email" />
+      </div>
+      <div style="display:flex;gap:8px">
+        <input id="regDisplay" type="text" placeholder="Display name" />
+        <input id="regAge" type="number" min="13" placeholder="Age" style="width:110px" />
+      </div>
+      <div style="display:flex;gap:8px">
+        <input id="regPass" type="password" placeholder="Password" />
+        <input id="regColor" type="color" title="Favorite color" />
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="regLanguage">
+          <option value="en">English</option>
+          <option value="es">Spanish</option>
+          <option value="fr">French</option>
+          <option value="de">German</option>
+        </select>
+        <input id="regWins" type="number" placeholder="Wins" style="width:90px" />
+        <input id="regLosses" type="number" placeholder="Losses" style="width:90px" />
+      </div>
+      <textarea id="regInfo" placeholder="Short bio / info" rows="3"></textarea>
+
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="regImageFile" type="file" accept="image/*" />
+        <button id="btnUploadImage" class="small-btn">Upload Image</button>
+        <div id="uploadStatus" class="small muted">No image uploaded</div>
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button id="regCancel" class="ghost">Cancel</button>
+        <button id="regSubmit">Create Account</button>
+      </div>
+      <div id="regError" class="small" style="color:#ff6b6b;display:none"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ROSTER MODAL -->
+<div id="modalRoster" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.6);align-items:center;justify-content:center">
+  <div style="background:#111;padding:18px;border-radius:10px;width:760px;max-height:80vh;overflow:auto">
+    <h3 style="margin:0 0 8px 0">User Roster</h3>
+    <div id="rosterPage" class="roster-list"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:12px">
+      <button id="rosterClose" class="ghost">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHAT POPUP -->
+<div id="chatPopup" class="chat-popup" style="display:none">
+  <div class="chat-header">
+    <div style="display:flex;gap:10px;align-items:center">
+      <div style="width:44px;height:44px;border-radius:8px;background:linear-gradient(135deg,#ff3b6b,#7c3aed);display:flex;align-items:center;justify-content:center;font-weight:700">CW</div>
+      <div>
+        <div style="font-weight:700">Arena Chat</div>
+        <div class="small muted" id="chatUserLabel">Not signed in</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button id="btnMinimize" class="small-btn">_</button>
+      <button id="btnCloseChat" class="small-btn">X</button>
+    </div>
+  </div>
+  <div class="chat-body">
+    <div class="public-feed" id="publicFeed"></div>
+    <div class="online-list card">
+      <div style="font-weight:700;margin-bottom:8px">Online</div>
+      <div id="onlineList" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+  </div>
+  <div class="chat-input">
+    <input id="publicMessage" type="text" placeholder="Say something to the arena" />
+    <button id="sendPublic">Send</button>
+  </div>
+</div>
+
+<!-- PM CONTAINER -->
+<div id="pmContainer"></div>
+
+<!-- ADMIN PANEL -->
+<div id="modalAdmin" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);align-items:center;justify-content:center">
+  <div style="background:#111;padding:20px;border-radius:10px;width:800px;max-height:90vh;overflow:auto">
+    <h2>Admin Panel</h2>
+
+    <div style="margin-top:10px;margin-bottom:10px">
+      <button id="tabUsers" class="small-btn">Users</button>
+      <button id="tabAnalytics" class="small-btn">Analytics</button>
+    </div>
+
+    <div id="adminUsersView">
+      <input id="adminSearch" type="text" placeholder="Search users..." style="width:100%;margin-bottom:10px">
+      <table id="adminTable" style="width:100%;border-collapse:collapse;color:white;font-size:13px">
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Online</th>
+            <th>Banned</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div id="adminAnalyticsView" style="display:none;margin-top:12px">
+      <h3>Analytics</h3>
+      <div id="statsSummary" class="small" style="margin-bottom:8px"></div>
+      <h4>Top IPs (24h)</h4>
+      <ul id="topIpsList" class="small"></ul>
+    </div>
+
+    <button id="adminClose" class="ghost" style="margin-top:10px">Close</button>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+
+const STORAGE_SESSION = 'cw_session_v1';
+const STORAGE_PUBLIC = 'cw_public_v1';
+
+function setSession(user){ localStorage.setItem(STORAGE_SESSION, JSON.stringify(user)); }
+function getSession(){ return JSON.parse(localStorage.getItem(STORAGE_SESSION) || 'null'); }
+function clearSession(){ localStorage.removeItem(STORAGE_SESSION); }
+
+function loadPublic(){ return JSON.parse(localStorage.getItem(STORAGE_PUBLIC) || '[]'); }
+function savePublic(arr){ localStorage.setItem(STORAGE_PUBLIC, JSON.stringify(arr)); }
+
+function show(el){ el.style.display = 'flex'; }
+function hide(el){ el.style.display = 'none'; }
+
+let users = []; // from server presence
+let uploadedImageUrl = '';
+let openPMs = {};
+window._pmStore = window._pmStore || {};
+
+const socket = io();
+
+// ---------- UI INIT ----------
+$('btnLogin').addEventListener('click', () => show($('modalLogin')));
+$('ctaLogin').addEventListener('click', () => show($('modalLogin')));
+$('loginCancel').addEventListener('click', () => hide($('modalLogin')));
+$('loginSubmit').addEventListener('click', doLogin);
+$('loginPass').addEventListener('keydown', e => { if(e.key === 'Enter') doLogin(); });
+
+$('btnRegister').addEventListener('click', () => show($('modalRegister')));
+$('ctaRegister').addEventListener('click', () => show($('modalRegister')));
+$('regCancel').addEventListener('click', () => hide($('modalRegister')));
+
+$('btnRoster').addEventListener('click', () => show($('modalRoster')));
+$('rosterClose').addEventListener('click', () => hide($('modalRoster')));
+
+$('btnOpenChat').addEventListener('click', openChat);
+$('btnCloseChat').addEventListener('click', () => hide($('chatPopup')));
+$('btnMinimize').addEventListener('click', () => {
+  const c = $('chatPopup');
+  c.style.display = c.style.display === 'none' ? 'flex' : 'none';
+});
+
+$('sendPublic').addEventListener('click', sendPublicMessage);
+$('publicMessage').addEventListener('keydown', e => { if(e.key === 'Enter') sendPublicMessage(); });
+
+$('btnAdmin').addEventListener('click', loadAdminPanel);
+$('adminClose').addEventListener('click', () => hide($('modalAdmin')));
+$('tabUsers').addEventListener('click', () => {
+  $('adminUsersView').style.display = 'block';
+  $('adminAnalyticsView').style.display = 'none';
+});
+$('tabAnalytics').addEventListener('click', loadAnalytics);
+
+// ---------- REGISTER CLIENT ----------
+async function checkAvailability(username, email) {
+  const params = new URLSearchParams();
+  if (username) params.append('username', username);
+  if (email) params.append('email', email);
+  const res = await fetch('/api/check-availability?' + params.toString());
+  return res.json();
+}
+
+$('btnUploadImage').addEventListener('click', async () => {
+  const fileInput = $('regImageFile');
+  const status = $('uploadStatus');
+  if (!fileInput.files || fileInput.files.length === 0) { status.textContent = 'Select a file first'; return; }
+  const file = fileInput.files[0];
+  const form = new FormData();
+  form.append('image', file);
+  status.textContent = 'Uploading...';
+  try {
+    const resp = await fetch('/api/upload-image', { method: 'POST', body: form });
+    const data = await resp.json();
+    if (data.ok) {
+      uploadedImageUrl = data.url;
+      status.textContent = 'Uploaded';
+    } else {
+      status.textContent = 'Upload failed';
+    }
+  } catch (e) {
+    console.error(e);
+    status.textContent = 'Upload error';
+  }
+});
+
+$('regUser').addEventListener('blur', async () => {
+  const u = $('regUser').value.trim();
+  if (!u) return;
+  const r = await checkAvailability(u, null);
+  const err = $('regError');
+  if (!r.ok && r.conflict && r.conflict.username) {
+    err.style.display='block'; err.textContent='Username already taken';
+  } else err.style.display='none';
+});
+
+$('regEmail').addEventListener('blur', async () => {
+  const e = $('regEmail').value.trim();
+  if (!e) return;
+  const r = await checkAvailability(null, e);
+  const err = $('regError');
+  if (!r.ok && r.conflict && r.conflict.email) {
+    err.style.display='block'; err.textContent='Email already in use';
+  } else err.style.display='none';
+});
+
+$('regSubmit').addEventListener('click', async () => {
+  const username = $('regUser').value.trim();
+  const email = $('regEmail').value.trim();
+  const password = $('regPass').value;
+  const display = $('regDisplay').value.trim() || username;
+  const age = $('regAge').value;
+  const wins = Number($('regWins').value || 0);
+  const losses = Number($('regLosses').value || 0);
+  const info = $('regInfo').value.trim();
+  const color = $('regColor').value;
+  const language = $('regLanguage').value;
+  const errEl = $('regError'); errEl.style.display='none';
+
+  if (!username || !email || !password) {
+    errEl.style.display='block'; errEl.textContent='Username, email and password required';
+    return;
+  }
+
+  const avail = await checkAvailability(username, email);
+  if (!avail.ok) {
+    const msgs = [];
+    if (avail.conflict.username) msgs.push('username taken');
+    if (avail.conflict.email) msgs.push('email in use');
+    errEl.style.display='block'; errEl.textContent = msgs.join(', ');
+    return;
+  }
+
+  const payload = {
+    username, email, password, display, age,
+    stats: { wins, losses },
+    info, color, language,
+    imageUrl: uploadedImageUrl || ''
+  };
+
+  try {
+    const resp = await fetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      hide($('modalRegister'));
+      alert('Account created. Please login.');
+    } else {
+      if (resp.status === 409 && data.conflict) {
+        const msgs = [];
+        if (data.conflict.username) msgs.push('username taken');
+        if (data.conflict.email) msgs.push('email in use');
+        errEl.style.display='block'; errEl.textContent = msgs.join(', ');
+      } else {
+        errEl.style.display='block'; errEl.textContent = data.error || 'Registration failed';
+      }
+    }
+  } catch (e) {
+    console.error(e);
+    errEl.style.display='block'; errEl.textContent = 'Network error';
+  }
+});
+
+// ---------- LOGIN CLIENT ----------
+async function doLogin() {
+  const username = $('loginUser').value.trim();
+  const password = $('loginPass').value;
+  const err = $('loginError');
+  err.style.display = 'none';
+
+  if (!username || !password) {
+    err.textContent = "Enter username and password";
+    err.style.display = 'block';
+    return;
+  }
+
+  try {
+    const resp = await fetch('/api/login', {
+      method: 'POST',
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await resp.json();
+    if (!data.ok) {
+      err.textContent = data.error === 'banned' ? 'You are banned.' : 'Invalid username or password';
+      err.style.display = 'block';
+      return;
+    }
+    setSession(data.user);
+    socket.emit('login', data.user);
+    hide($('modalLogin'));
+    updateUIForSession();
+  } catch (e) {
+    console.error(e);
+    err.textContent = "Network error";
+    err.style.display = 'block';
+  }
+}
+
+function logout() {
+  clearSession();
+  updateUIForSession();
+}
+
+// ---------- CHAT / PRESENCE ----------
+socket.on('presence', (onlineUsers) => {
+  users = onlineUsers;
+  renderQuickRoster();
+  renderRosterPage();
+  renderOnlineList();
+});
+
+socket.on('publicMessage', (m) => {
+  const arr = loadPublic();
+  arr.push(m);
+  savePublic(arr);
+  renderPublicFeed();
+});
+
+socket.on('privateMessage', (pm) => {
+  const key = pmKey(pm.from, pm.to);
+  window._pmStore[key] = window._pmStore[key] || [];
+  window._pmStore[key].push(pm);
+  const me = getSession();
+  const other = pm.from === (me && me.username) ? pm.to : pm.from;
+  renderPM(other);
+});
+
+socket.on('pmError', (e) => {
+  alert('PM error: ' + e.reason);
+});
+
+function openChat(){
+  $('chatPopup').style.display='flex';
+  updateUIForSession();
+  renderPublicFeed();
+  renderOnlineList();
+}
+
+function sendPublicMessage(){
+  const txt = $('publicMessage').value.trim();
+  if(!txt) return;
+  const s = getSession();
+  const msg = { from: s ? s.username : 'guest', display: s ? s.display : 'Guest', text: txt };
+  socket.emit('publicMessage', msg);
+  $('publicMessage').value='';
+}
+
+function renderPublicFeed(){
+  const feed = $('publicFeed');
+  feed.innerHTML = '';
+  const messages = loadPublic();
+  const s = getSession();
+  messages.forEach(m=>{
+    const div = document.createElement('div');
+    div.className = 'message' + (s && m.from === s.username ? ' me' : '');
+    div.innerHTML = `<div style="font-size:13px;font-weight:700">${m.display} <span class="small" style="font-weight:400;color:var(--muted)">@${m.from} • ${new Date(m.time || Date.now()).toLocaleTimeString()}</span></div>
+      <div style="margin-top:6px">${escapeHtml(m.text)}</div>`;
+    feed.appendChild(div);
+  });
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function renderQuickRoster(){
+  const el = $('quickRoster');
+  el.innerHTML = '';
+  users.slice(0,6).forEach(u=>{
+    const div = document.createElement('div');
+    div.className = 'user-row';
+    div.innerHTML = `<div class="avatar">${(u.display||u.username)[0]}</div>
+      <div style="flex:1">
+        <div style="font-weight:700">${u.display}</div>
+        <div class="small">${u.username}</div>
+      </div>
+      <div class="status online"></div>`;
+    el.appendChild(div);
+  });
+}
+
+function renderRosterPage(){
+  const el = $('rosterPage');
+  el.innerHTML = '';
+  users.forEach(u=>{
+    const row = document.createElement('div');
+    row.className = 'user-row';
+    row.innerHTML = `<div class="avatar">${(u.display||u.username)[0]}</div>
+      <div style="flex:1">
+        <div style="font-weight:700">${u.display}</div>
+        <div class="small">${u.username}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+        <div class="status online"></div>
+        <button class="small-btn" data-user="${u.username}">Message</button>
+      </div>`;
+    el.appendChild(row);
+  });
+  el.querySelectorAll('.small-btn').forEach(b=>{
+    b.addEventListener('click', e=>{
+      const target = e.currentTarget.dataset.user;
+      openPrivateWindow(target);
+    });
+  });
+}
+
+function renderOnlineList(){
+  const el = $('onlineList');
+  el.innerHTML = '';
+  users.forEach(u=>{
+    const row = document.createElement('div');
+    row.style.display='flex'; row.style.alignItems='center'; row.style.justifyContent='space-between';
+    row.innerHTML = `<div style="display:flex;gap:8px;align-items:center">
+      <div class="avatar" style="width:36px;height:36px">${(u.display||u.username)[0]}</div>
+      <div style="line-height:1">
+        <div style="font-weight:700">${u.display}</div>
+        <div class="small">${u.username}</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+      <button class="small-btn" data-user="${u.username}">PM</button>
+    </div>`;
+    el.appendChild(row);
+  });
+  el.querySelectorAll('.small-btn').forEach(b=>{
+    b.addEventListener('click', e=>{
+      const target = e.currentTarget.dataset.user;
+      openPrivateWindow(target);
+    });
+  });
+}
+
+// ---------- PM ----------
+function pmKey(a,b){ return [a,b].sort().join('::'); }
+
+function openPrivateWindow(targetUsername){
+  const s = getSession();
+  if(!s){ alert('Please login to send private messages'); return; }
+  if(targetUsername === s.username){ alert('Cannot message yourself'); return; }
+  if(openPMs[targetUsername]) return;
+
+  const target = users.find(u=>u.username===targetUsername) || { username: targetUsername, display: targetUsername[0].toUpperCase()+targetUsername.slice(1) };
+  const pm = document.createElement('div');
+  pm.className = 'pm-window';
+  pm.innerHTML = `<div class="pm-header"><div style="display:flex;gap:8px;align-items:center">
+      <div class="avatar" style="width:36px;height:36px">${(target.display||target.username)[0]}</div>
+      <div>
+        <div style="font-weight:700">${target.display}</div>
+        <div class="small">@${target.username}</div>
+      </div>
+    </div>
+    <div><button class="small-btn pm-close">X</button></div></div>
+    <div class="pm-body" id="pmBody_${target.username}"></div>
+    <div class="pm-input">
+      <input id="pmInput_${target.username}" type="text" placeholder="Message ${target.display}" />
+      <button class="small-btn" id="pmSend_${target.username}">Send</button>
+    </div>`;
+  document.body.appendChild(pm);
+  openPMs[targetUsername] = pm;
+
+  const key = pmKey(s.username, targetUsername);
+  window._pmStore[key] = window._pmStore[key] || [];
+
+  pm.querySelector('.pm-close').addEventListener('click', ()=>{
+    pm.remove();
+    delete openPMs[targetUsername];
+  });
+  $('pmSend_'+target.username).addEventListener('click', ()=>{
+    const input = $('pmInput_'+target.username);
+    const text = input.value.trim();
+    if(!text) return;
+    const message = { from:s.username,to:target.username,display:s.display,text };
+    const k = pmKey(s.username, target.username);
+    window._pmStore[k].push(message);
+    socket.emit('privateMessage', message);
+    input.value='';
+    renderPM(target.username);
+  });
+  $('pmInput_'+target.username).addEventListener('keydown', e=>{
+    if(e.key==='Enter') $('pmSend_'+target.username).click();
+  });
+
+  renderPM(target.username);
+}
+
+function renderPM(targetUsername){
+  const s = getSession();
+  if(!s) return;
+  const key = pmKey(s.username, targetUsername);
+  const body = $('pmBody_'+targetUsername);
+  if(!body) return;
+  body.innerHTML = '';
+  const msgs = window._pmStore[key] || [];
+  msgs.forEach(m=>{
+    const div = document.createElement('div');
+    div.className = 'message ' + (m.from === s.username ? 'me' : '');
+    div.innerHTML = `<div style="font-size:13px;font-weight:700">${m.display} <span class="small" style="font-weight:400;color:var(--muted)">${new Date().toLocaleTimeString()}</span></div>
+      <div style="margin-top:6px">${escapeHtml(m.text)}</div>`;
+    body.appendChild(div);
+  });
+  body.scrollTop = body.scrollHeight;
+}
+
+// ---------- ADMIN CLIENT ----------
+async function loadAdminPanel() {
+  const res = await fetch('/api/admin/users', {
+    headers: { 'x-admin-key': 'supersecretadminkey' }
+  });
+  const data = await res.json();
+  if (!data.ok) { alert("Admin access denied"); return; }
+
+  const tbody = $('adminTable').querySelector('tbody');
+  tbody.innerHTML = '';
+  data.users.forEach(u => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${u.username}</td>
+      <td>${u.email}</td>
+      <td>${u.role}</td>
+      <td>${u.online ? "🟢" : "⚪"}</td>
+      <td>${u.banned ? "🚫" : "✔"}</td>
+      <td>
+        <button class="small-btn" onclick="adminBan('${u.username}', ${!u.banned})">${u.banned ? "Unban" : "Ban"}</button>
+        <button class="small-btn" onclick="adminResetPass('${u.username}')">Reset PW</button>
+        <button class="small-btn" onclick="adminDelete('${u.username}')">Delete</button>
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+
+  show($('modalAdmin'));
+}
+
+async function adminBan(username, banned) {
+  await fetch('/api/admin/ban', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-key': 'supersecretadminkey' },
+    body: JSON.stringify({ username, banned })
+  });
+  loadAdminPanel();
+}
+
+async function adminResetPass(username) {
+  const newPass = prompt("Enter new password:");
+  if (!newPass) return;
+  await fetch('/api/admin/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-key': 'supersecretadminkey' },
+    body: JSON.stringify({ username, newPassword: newPass })
+  });
+  alert("Password reset");
+}
+
+async function adminDelete(username) {
+  if (!confirm("Delete this user?")) return;
+  await fetch('/api/admin/delete-user', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-key': 'supersecretadminkey' },
+    body: JSON.stringify({ username })
+  });
+  loadAdminPanel();
+}
+
+async function loadAnalytics() {
+  $('adminUsersView').style.display = 'none';
+  $('adminAnalyticsView').style.display = 'block';
+
+  const [statsRes, ipsRes] = await Promise.all([
+    fetch('/api/admin/stats', { headers: { 'x-admin-key': 'supersecretadminkey' } }),
+    fetch('/api/admin/top-ips', { headers: { 'x-admin-key': 'supersecretadminkey' } })
+  ]);
+
+  const stats = await statsRes.json();
+  const ips = await ipsRes.json();
+
+  if (!stats.ok || !ips.ok) {
+    $('statsSummary').textContent = 'Error loading analytics';
+    return;
+  }
+
+  $('statsSummary').textContent =
+    `Users: ${stats.totalUsers} | Online: ${stats.onlineUsers} | Banned: ${stats.bannedUsers} | Logs: ${stats.totalLogs}
+     | 24h logins: ${stats.last24h.logins24h}, fails: ${stats.last24h.fails24h}, regs: ${stats.last24h.regs24h}`;
+
+  const ul = $('topIpsList');
+  ul.innerHTML = '';
+  ips.ips.forEach(ip => {
+    const li = document.createElement('li');
+    li.textContent = `${ip._id} — ${ip.count} actions`;
+    ul.appendChild(li);
+  });
+}
+
+// ---------- MISC ----------
+function updateUIForSession(){
+  const s = getSession();
+  const label = $('chatUserLabel');
+  if(s){
+    label.textContent = s.display + ' • online';
+    $('btnLogin').textContent='Logout';
+    $('btnLogin').onclick = ()=>logout();
+  } else {
+    label.textContent = 'Not signed in';
+    $('btnLogin').textContent='Login';
+    $('btnLogin').onclick = ()=>show($('modalLogin'));
+  }
+}
+
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// init
+updateUIForSession();
+renderPublicFeed();
+</script>
+</body>
+</html>
