@@ -2,51 +2,219 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Cyber Wrestling Chatroom</title>
+<title>Male Cyber Fighters</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
-  :root{
-    --bg:#0b0f1a; --card:#0f1724; --accent:#ff3b6b; --muted:#9aa4b2; --glass: rgba(255,255,255,0.03);
-    --success:#2dd4bf; --danger:#ff6b6b; font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;
-  }
-  html,body{height:100%;margin:0;background:linear-gradient(180deg,#071021 0%, #0b1220 100%);color:#e6eef6}
-  .container{max-width:1100px;margin:36px auto;padding:28px;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
-  header{display:flex;align-items:center;justify-content:space-between;gap:16px}
-  .brand{display:flex;align-items:center;gap:12px}
-  .logo{width:56px;height:56px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#7c3aed);display:flex;align-items:center;justify-content:center;font-weight:700;color:white}
-  h1{margin:0;font-size:20px}
-  p.lead{margin:6px 0 0;color:var(--muted)}
-  .actions{display:flex;gap:10px;flex-wrap:wrap}
-  button{background:var(--accent);border:0;padding:10px 14px;border-radius:8px;color:white;font-weight:600;cursor:pointer}
-  button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
-  .grid{display:grid;grid-template-columns:1fr 320px;gap:18px;margin-top:22px}
-  .card{background:var(--card);padding:18px;border-radius:10px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.02)}
-  .hero{min-height:220px;display:flex;flex-direction:column;justify-content:center;gap:12px}
-  .cta-row{display:flex;gap:10px}
-  .muted{color:var(--muted);font-size:13px}
-  .roster-list{display:flex;flex-direction:column;gap:8px;max-height:420px;overflow:auto;padding-right:6px}
-  .user-row{display:flex;align-items:center;gap:12px;padding:8px;border-radius:8px;background:var(--glass)}
-  .avatar{width:44px;height:44px;border-radius:8px;background:linear-gradient(135deg,#1f2937,#111827);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
-  .status{width:10px;height:10px;border-radius:50%}
-  .status.online{background:var(--success)}
-  .status.offline{background:var(--muted)}
-  .small{font-size:13px;color:var(--muted)}
-  .chat-popup{position:fixed;right:28px;bottom:28px;width:420px;height:520px;background:linear-gradient(180deg,#071226,#071226);border-radius:12px;border:1px solid rgba(255,255,255,0.03);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(2,6,23,0.6)}
-  .chat-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,0.02)}
-  .chat-body{display:flex;flex:1;gap:10px;overflow:hidden}
-  .public-feed{flex:1;padding:12px;display:flex;flex-direction:column;gap:10px;overflow:auto}
-  .online-list{width:140px;border-left:1px solid rgba(255,255,255,0.02);padding:12px;display:flex;flex-direction:column;gap:8px;overflow:auto}
-  .message{padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.02);max-width:78%}
-  .message.me{background:linear-gradient(90deg, rgba(255,59,107,0.12), rgba(124,58,237,0.06));align-self:flex-end}
-  .chat-input{display:flex;padding:10px;border-top:1px solid rgba(255,255,255,0.02);gap:8px}
-  input[type="text"],input[type="email"],input[type="number"],input[type="password"],textarea,select{background:transparent;border:1px solid rgba(255,255,255,0.12);padding:8px;border-radius:8px;color:#e6eef6;flex:1}
-  .pm-window{position:fixed;right:460px;bottom:28px;width:320px;height:360px;background:linear-gradient(180deg,#071226,#071226);border-radius:10px;border:1px solid rgba(255,255,255,0.03);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(2,6,23,0.6)}
-  .pm-header{padding:10px;border-bottom:1px solid rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:space-between}
-  .pm-body{flex:1;padding:10px;display:flex;flex-direction:column;gap:8px;overflow:auto}
-  .pm-input{display:flex;padding:8px;border-top:1px solid rgba(255,255,255,0.02);gap:8px}
-  .small-btn{padding:6px 8px;border-radius:8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.12);color:var(--muted);cursor:pointer}
-  footer{margin-top:18px;color:var(--muted);font-size:13px;text-align:center}
-  @media(max-width:900px){.grid{grid-template-columns:1fr}.chat-popup{right:12px;left:12px;width:auto}}
+:root {
+  --bg: #020611;
+  --panel: rgba(0, 255, 255, 0.06);
+  --panel-border: rgba(0, 255, 255, 0.25);
+  --accent: #00eaff;
+  --accent-glow: 0 0 12px #00eaff, 0 0 24px #00eaff;
+  --text: #dffbff;
+  --muted: #7ac7d9;
+  --danger: #ff4d6d;
+  --success: #00ffa6;
+  --glass: rgba(0, 255, 255, 0.04);
+  font-family: 'Orbitron', 'Segoe UI', sans-serif;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  background: radial-gradient(circle at 50% 20%, #03101f 0%, #00040a 100%);
+  color: var(--text);
+  overflow-x: hidden;
+}
+
+/* Neon scanline overlay */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 255, 255, 0.03) 0px,
+    rgba(0, 255, 255, 0.03) 1px,
+    transparent 2px,
+    transparent 4px
+  );
+  opacity: 0.25;
+  z-index: 9999;
+}
+
+.container {
+  max-width: 1100px;
+  margin: 40px auto;
+  padding: 28px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.15);
+}
+
+/* Header */
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logo {
+  width: 60px;
+  height: 60px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #00eaff, #007bff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 22px;
+  color: black;
+  box-shadow: var(--accent-glow);
+}
+
+button {
+  background: transparent;
+  border: 1px solid var(--accent);
+  padding: 10px 16px;
+  border-radius: 8px;
+  color: var(--accent);
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.2s;
+  text-shadow: 0 0 8px var(--accent);
+}
+
+button:hover {
+  background: rgba(0, 255, 255, 0.12);
+  box-shadow: var(--accent-glow);
+}
+
+/* Cards */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 18px;
+  backdrop-filter: blur(10px);
+}
+
+/* Roster */
+.user-row {
+  background: var(--glass);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  transition: 0.2s;
+}
+
+.user-row:hover {
+  background: rgba(0, 255, 255, 0.12);
+  box-shadow: var(--accent-glow);
+}
+
+.avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: rgba(0, 255, 255, 0.15);
+  border: 1px solid var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  color: var(--accent);
+  text-shadow: var(--accent-glow);
+}
+
+/* Chat popup */
+.chat-popup {
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  width: 420px;
+  height: 520px;
+  background: rgba(0, 20, 30, 0.85);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  backdrop-filter: blur(14px);
+  box-shadow: var(--accent-glow);
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-header {
+  padding: 12px;
+  border-bottom: 1px solid var(--accent);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.public-feed {
+  flex: 1;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.message {
+  background: rgba(0, 255, 255, 0.08);
+  border: 1px solid var(--panel-border);
+  padding: 8px 10px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+
+.message.me {
+  background: rgba(0, 255, 255, 0.18);
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow);
+}
+
+/* PM windows */
+.pm-window {
+  position: fixed;
+  right: 460px;
+  bottom: 28px;
+  width: 320px;
+  height: 360px;
+  background: rgba(0, 20, 30, 0.85);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  backdrop-filter: blur(14px);
+  box-shadow: var(--accent-glow);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Admin Panel */
+#modalAdmin > div {
+  background: rgba(0, 20, 30, 0.9);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  box-shadow: var(--accent-glow);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table td, table th {
+  border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+  padding: 8px;
+}
+
+table tr:hover {
+  background: rgba(0, 255, 255, 0.08);
+}
+
 </style>
 </head>
 <body>
