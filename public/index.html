@@ -3,39 +3,56 @@
 <head>
 <meta charset="utf-8" />
 <title>Male Cyber Fighters</title>
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
+/* ROOT + GLOBAL ------------------------------------------------------------ */
 :root{
   --bg:#05070d;
   --card:#0a0e18;
-  --accent:#7fd8ff; /* icy neon blue */
-  --muted:#b8c7d9;  /* soft silver-blue */
+  --accent:#7fd8ff;
+  --muted:#b8c7d9;
   --glass: rgba(160,200,255,0.06);
-
-  --success:#6dffe7; 
+  --success:#6dffe7;
   --danger:#ff7aa8;
-
   font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;
 }
 
 html,body{
-  height:100%;
-  margin:0;
+  height:100%; margin:0;
   background:linear-gradient(180deg,#020611 0%, #07101c 100%);
   color:#e9f6ff;
 }
 
+/* PARTICLE BACKGROUND ------------------------------------------------------ */
+body::after {
+  content:"";
+  position:fixed; inset:0; pointer-events:none; z-index:-1;
+  background:
+    radial-gradient(circle, rgba(120,200,255,0.35) 0%, transparent 60%) 10% 20%,
+    radial-gradient(circle, rgba(120,200,255,0.25) 0%, transparent 60%) 80% 30%,
+    radial-gradient(circle, rgba(120,200,255,0.20) 0%, transparent 60%) 50% 70%,
+    radial-gradient(circle, rgba(120,200,255,0.30) 0%, transparent 60%) 30% 85%,
+    radial-gradient(circle, rgba(120,200,255,0.18) 0%, transparent 60%) 70% 60%;
+  background-size:180px 180px,140px 140px,200px 200px,160px 160px,120px 120px;
+  animation:holoParticles 22s linear infinite;
+  opacity:0.35; filter:blur(1px);
+}
+
+@keyframes holoParticles {
+  0%{background-position:10% 20%,80% 30%,50% 70%,30% 85%,70% 60%;}
+  50%{background-position:15% 25%,75% 35%,55% 65%,35% 80%,65% 55%;}
+  100%{background-position:10% 20%,80% 30%,50% 70%,30% 85%,70% 60%;}
+}
+
+/* LAYOUT ------------------------------------------------------------------- */
 .container{
-  max-width:1100px;
-  margin:36px auto;
-  padding:28px;
+  max-width:1100px; margin:36px auto; padding:28px;
   background:linear-gradient(180deg, rgba(160,200,255,0.05), transparent);
   border-radius:12px;
   box-shadow:0 8px 30px rgba(120,180,255,0.25);
 }
 
 header{display:flex;align-items:center;justify-content:space-between;gap:16px}
-
 .brand{display:flex;align-items:center;gap:12px}
 
 .logo{
@@ -45,10 +62,6 @@ header{display:flex;align-items:center;justify-content:space-between;gap:16px}
   font-weight:700;color:#00121f;
   box-shadow:0 0 12px #7fd8ff, 0 0 24px #7fd8ff;
 }
-
-h1{margin:0;font-size:20px}
-
-p.lead{margin:6px 0 0;color:var(--muted)}
 
 .actions{display:flex;gap:10px;flex-wrap:wrap}
 
@@ -75,147 +88,102 @@ button.ghost{
 
 .hero{min-height:220px;display:flex;flex-direction:column;justify-content:center;gap:12px}
 
+/* PROFILE CARD ------------------------------------------------------------- */
 .user-profile-card{
-  display:flex;
-  flex-direction:column;
-  gap:12px;
+  display:flex;flex-direction:column;gap:12px;
   padding:16px;
   background:linear-gradient(180deg, rgba(127,216,255,0.08), rgba(160,200,255,0.04));
   border:1px solid rgba(127,216,255,0.2);
   border-radius:10px;
-  align-items:center;
-  text-align:center;
+  align-items:center;text-align:center;
 }
 
 .user-profile-card.logged-in{
-  flex-direction:row;
-  align-items:flex-start;
-  text-align:left;
+  flex-direction:row;align-items:flex-start;text-align:left;
 }
 
 .profile-avatar{
-  width:56px;
-  height:56px;
-  border-radius:8px;
+  width:56px;height:56px;border-radius:8px;
   background:linear-gradient(135deg,#1a2233,#0d1320);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  color:#dff6ff;
-  font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  color:#dff6ff;font-weight:700;font-size:24px;
   border:1px solid rgba(160,200,255,0.25);
-  font-size:24px;
   flex-shrink:0;
 }
 
-.profile-info{
-  display:flex;
-  flex-direction:column;
-  gap:6px;
-  flex:1;
-}
-
-.profile-name{
-  font-weight:600;
-  font-size:16px;
-  color:#e9f6ff;
-  margin:0;
-}
-
-.profile-status{
-  font-size:12px;
-  color:var(--muted);
-  margin:0;
-}
+.profile-info{display:flex;flex-direction:column;gap:6px;flex:1}
+.profile-name{font-weight:600;font-size:16px;color:#e9f6ff;margin:0}
+.profile-status{font-size:12px;color:var(--muted);margin:0}
 
 .profile-details{
-  display:flex;
-  flex-direction:column;
-  gap:4px;
+  display:flex;flex-direction:column;gap:4px;
   padding:8px 0;
   border-top:1px solid rgba(127,216,255,0.1);
   border-bottom:1px solid rgba(127,216,255,0.1);
   margin-bottom:8px;
 }
 
-.profile-age{
-  font-size:12px;
-  color:var(--accent);
-  font-weight:500;
-}
+.profile-age{font-size:12px;color:var(--accent);font-weight:500}
+.profile-bio{font-size:11px;color:var(--muted);line-height:1.4;max-width:200px}
 
-.profile-bio{
-  font-size:11px;
-  color:var(--muted);
-  line-height:1.4;
-  max-width:200px;
-  word-wrap:break-word;
-}
-
-.profile-stats{
-  display:flex;
-  gap:16px;
-  font-size:12px;
-}
-
-.profile-stat{
-  display:flex;
-  flex-direction:column;
-  gap:2px;
-  align-items:center;
-}
-
-.profile-stat-value{
-  font-weight:600;
-  color:var(--accent);
-}
-
-.profile-stat-label{
-  color:var(--muted);
-  font-size:10px;
-}
+.profile-stats{display:flex;gap:16px;font-size:12px}
+.profile-stat{display:flex;flex-direction:column;gap:2px;align-items:center}
+.profile-stat-value{font-weight:600;color:var(--accent)}
+.profile-stat-label{color:var(--muted);font-size:10px}
 
 .profile-logout{
-  margin-left:auto;
-  margin-top:0;
-  padding:6px 12px;
-  font-size:12px;
-  display:none;
-  flex-shrink:0;
+  margin-left:auto;padding:6px 12px;font-size:12px;
+  display:none;flex-shrink:0;
+}
+.user-profile-card.logged-in .profile-logout{display:block}
+
+/* DM SIDEBAR --------------------------------------------------------------- */
+#dmSidebar{
+  position:fixed;
+  left:-260px; /* hidden by default */
+  top:80px;
+  width:240px;
+  height:420px;
+  background:rgba(160,200,255,0.06);
+  border:1px solid rgba(160,200,255,0.15);
+  border-radius:10px;
+  backdrop-filter:blur(10px);
+  padding:10px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  overflow-y:auto;
+  box-shadow:0 0 20px rgba(120,180,255,0.25);
+  transition:all 0.35s ease;
+  z-index:9999;
 }
 
-.user-profile-card.logged-in .profile-logout{
-  display:block;
+#dmSidebar.open{
+  left:20px;
 }
 
-.muted{color:var(--muted);font-size:13px}
-
-.roster-list{
-  display:flex;flex-direction:column;gap:8px;
-  max-height:420px;overflow:auto;padding-right:6px;
-}
-
-.user-row{
-  display:flex;align-items:center;gap:12px;
-  padding:8px;border-radius:8px;
-  background:var(--glass);
-  border:1px solid rgba(160,200,255,0.12);
-}
-
-.avatar{
-  width:44px;height:44px;border-radius:8px;
-  background:linear-gradient(135deg,#1a2233,#0d1320);
-  display:flex;align-items:center;justify-content:center;
-  color:#dff6ff;font-weight:700;
+.dm-search{
+  background:rgba(160,200,255,0.05);
   border:1px solid rgba(160,200,255,0.25);
+  padding:6px;border-radius:6px;
+  color:#e6f6ff;margin-bottom:8px;
 }
 
-.status{width:10px;height:10px;border-radius:50%}
-.status.online{background:var(--success)}
-.status.offline{background:var(--muted)}
+.dm-sidebar-item{
+  padding:8px;border-radius:8px;
+  background:rgba(160,200,255,0.08);
+  cursor:pointer;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.dm-sidebar-item:hover{background:rgba(160,200,255,0.15)}
 
-.small{font-size:13px;color:var(--muted)}
+.dm-unread-badge{
+  background:#7fd8ff;color:#00121f;
+  padding:2px 6px;border-radius:6px;
+  font-size:11px;font-weight:bold;
+}
 
+/* CHAT POPUP --------------------------------------------------------------- */
 .chat-popup{
   position:fixed;right:28px;bottom:28px;
   width:420px;height:520px;
@@ -252,10 +220,7 @@ button.ghost{
 }
 
 .message.me{
-  background:linear-gradient(90deg,
-    rgba(127,216,255,0.20),
-    rgba(176,196,255,0.12)
-  );
+  background:linear-gradient(90deg,rgba(127,216,255,0.20),rgba(176,196,255,0.12));
   align-self:flex-end;
   border-color:rgba(127,216,255,0.35);
 }
@@ -266,17 +231,7 @@ button.ghost{
   gap:8px;
 }
 
-input[type="text"],
-input[type="email"],
-input[type="number"],
-input[type="password"],
-textarea,select{
-  background:transparent;
-  border:1px solid rgba(160,200,255,0.25);
-  padding:8px;border-radius:8px;
-  color:#e6f6ff;flex:1;
-}
-
+/* PM WINDOWS --------------------------------------------------------------- */
 .pm-window{
   position:fixed;right:460px;bottom:28px;
   width:320px;height:360px;
@@ -303,6 +258,7 @@ textarea,select{
   gap:8px;
 }
 
+/* ADMIN PANEL -------------------------------------------------------------- */
 .small-btn{
   padding:6px 8px;border-radius:8px;
   background:rgba(160,200,255,0.06);
@@ -319,167 +275,135 @@ footer{
   .grid{grid-template-columns:1fr}
   .chat-popup{right:12px;left:12px;width:auto}
   .user-profile-card.logged-in{
-    flex-direction:column;
-    align-items:center;
+    flex-direction:column;align-items:center;
   }
-  .profile-logout{
-    margin-left:0;
-    margin-top:8px;
-  }
-}
-
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
-
-  background:
-    radial-gradient(circle, rgba(120,200,255,0.35) 0%, transparent 60%) 10% 20%,
-    radial-gradient(circle, rgba(120,200,255,0.25) 0%, transparent 60%) 80% 30%,
-    radial-gradient(circle, rgba(120,200,255,0.20) 0%, transparent 60%) 50% 70%,
-    radial-gradient(circle, rgba(120,200,255,0.30) 0%, transparent 60%) 30% 85%,
-    radial-gradient(circle, rgba(120,200,255,0.18) 0%, transparent 60%) 70% 60%;
-
-  background-size: 180px 180px, 140px 140px, 200px 200px, 160px 160px, 120px 120px;
-
-  animation: holoParticles 22s linear infinite;
-  opacity: 0.35;
-  filter: blur(1px);
-}
-
-@keyframes holoParticles {
-  0% {
-    background-position:
-      10% 20%,
-      80% 30%,
-      50% 70%,
-      30% 85%,
-      70% 60%;
-  }
-  50% {
-    background-position:
-      15% 25%,
-      75% 35%,
-      55% 65%,
-      35% 80%,
-      65% 55%;
-  }
-  100% {
-    background-position:
-      10% 20%,
-      80% 30%,
-      50% 70%,
-      30% 85%,
-      70% 60%;
-  }
+  .profile-logout{margin-left:0;margin-top:8px}
 }
 </style>
 </head>
+
+
 <body>
+
+<!-- DM SIDEBAR (hidden until toggled) -->
+<div id="dmSidebar"></div>
+
 <div class="container">
-  <header>
-    <div class="brand">
-      <div class="logo">MCF</div>
-      <div>
-        <h1>Male Cyber Fighters</h1>
-        <p class="lead">Enter the ring, find opponents, and trash talk in real time</p>
-      </div>
-    </div>
-    <div class="actions">
-      <button id="btnLogin">Login</button>
-      <button id="btnRegister" class="ghost">Register</button>
-      <button id="btnRoster" class="ghost">User Roster</button>
-      <button id="btnOpenChat">Open Chatroom</button>
-      <button id="btnAdmin" class="ghost">Admin Panel</button>
-    </div>
-  </header>
 
-  <div class="grid">
-    <div class="card hero">
-      <h2>Welcome to the Arena</h2>
-      <p class="muted">Create a profile, see who is online, and start public or private matches in the chatroom.</p>
-      <div class="user-profile-card" id="userProfileCard">
-        <div style="font-size:14px;color:var(--muted)">🔒 Not logged in</div>
-        <p style="margin:8px 0 0 0;color:var(--muted);font-size:12px">Login or register to see your profile</p>
-      </div>
-      <div style="margin-top:12px" class="muted">Demo stack: Node, MongoDB, Socket.IO, Admin, Analytics.</div>
+<header>
+  <div class="brand">
+    <div class="logo">MCF</div>
+    <div>
+      <h1>Male Cyber Fighters</h1>
+      <p class="lead">Enter the ring, find opponents, and trash talk in real time</p>
     </div>
-
-    <aside class="card">
-      <h3 style="margin-top:0">Quick Roster</h3>
-      <div id="quickRoster" class="roster-list"></div>
-    </aside>
   </div>
 
-  <footer>Male Cyber Fighters</footer>
+  <div class="actions">
+    <button id="btnLogin">Login</button>
+    <button id="btnRegister" class="ghost">Register</button>
+    <button id="btnRoster" class="ghost">User Roster</button>
+    <button id="btnOpenChat">Open Chatroom</button>
+
+    <!-- NEW DM SIDEBAR BUTTON -->
+    <button id="btnDMs" class="ghost">DMs</button>
+
+    <button id="btnAdmin" class="ghost">Admin Panel</button>
+  </div>
+</header>
+
+<div class="grid">
+  <div class="card hero">
+    <h2>Welcome to the Arena</h2>
+    <p class="muted">Create a profile, see who is online, and start public or private matches in the chatroom.</p>
+
+    <div class="user-profile-card" id="userProfileCard">
+      <div>🔒 Not logged in</div>
+      <p>Login or register to see your profile</p>
+    </div>
+
+    <div class="muted">Demo stack: Node, MongoDB, Socket.IO, Admin, Analytics.</div>
+  </div>
+
+  <aside class="card">
+    <h3>Quick Roster</h3>
+    <div id="quickRoster" class="roster-list"></div>
+  </aside>
 </div>
 
-<!-- LOGIN POPUP -->
-<div id="modalLogin" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);align-items:center;justify-content:center">
-  <div style="background:#111;padding:20px;border-radius:10px;width:360px">
+<footer>Male Cyber Fighters</footer>
+</div>
+
+<!-- LOGIN MODAL -->
+<div id="modalLogin" style="display:none;position:fixed;inset:0;">
+  <div>
     <h3>Login</h3>
-    <input id="loginUser" type="text" placeholder="Username" style="width:100%;margin-bottom:8px">
-    <input id="loginPass" type="password" placeholder="Password" style="width:100%;margin-bottom:8px">
-    <div id="loginError" style="color:#ff6b6b;display:none;margin-bottom:8px"></div>
-    <div style="display:flex;justify-content:flex-end;gap:8px">
+    <input id="loginUser" type="text" placeholder="Username">
+    <input id="loginPass" type="password" placeholder="Password">
+    <div id="loginError" style="display:none"></div>
+    <div>
       <button id="loginCancel" class="ghost">Cancel</button>
       <button id="loginSubmit">Login</button>
     </div>
   </div>
 </div>
 
-<!-- REGISTER POPUP -->
-<div id="modalRegister" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.6);align-items:center;justify-content:center">
-  <div style="background:#111;padding:18px;border-radius:10px;width:520px;max-height:90vh;overflow:auto">
-    <h3 style="margin:0 0 8px 0">Register</h3>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <div style="display:flex;gap:8px">
+<!-- REGISTER MODAL -->
+<div id="modalRegister" style="display:none;position:fixed;inset:0;">
+  <div>
+    <h3>Register</h3>
+    <div>
+
+      <div>
         <input id="regUser" type="text" placeholder="Username" />
         <input id="regEmail" type="email" placeholder="Email" />
       </div>
-      <div style="display:flex;gap:8px">
+
+      <div>
         <input id="regDisplay" type="text" placeholder="Display name" />
-        <input id="regAge" type="number" min="13" placeholder="Age" style="width:110px" />
+        <input id="regAge" type="number" min="13" placeholder="Age" />
       </div>
-      <div style="display:flex;gap:8px">
+
+      <div>
         <input id="regPass" type="password" placeholder="Password" />
-        <input id="regColor" type="color" title="Favorite color" />
+        <input id="regColor" type="color" />
       </div>
-      <div style="display:flex;gap:8px;align-items:center">
+
+      <div>
         <select id="regLanguage">
           <option value="en">English</option>
           <option value="es">Spanish</option>
           <option value="fr">French</option>
           <option value="de">German</option>
         </select>
-        <input id="regWins" type="number" placeholder="Wins" style="width:90px" />
-        <input id="regLosses" type="number" placeholder="Losses" style="width:90px" />
+        <input id="regWins" type="number" placeholder="Wins" />
+        <input id="regLosses" type="number" placeholder="Losses" />
       </div>
+
       <textarea id="regInfo" placeholder="Short bio / info" rows="3"></textarea>
 
-      <div style="display:flex;gap:8px;align-items:center">
+      <div>
         <input id="regImageFile" type="file" accept="image/*" />
         <button id="btnUploadImage" class="small-btn">Upload Image</button>
-        <div id="uploadStatus" class="small muted">No image uploaded</div>
+        <div id="uploadStatus">No image uploaded</div>
       </div>
 
-      <div style="display:flex;gap:8px;justify-content:flex-end">
+      <div>
         <button id="regCancel" class="ghost">Cancel</button>
         <button id="regSubmit">Create Account</button>
       </div>
-      <div id="regError" class="small" style="color:#ff6b6b;display:none"></div>
+
+      <div id="regError" style="display:none"></div>
     </div>
   </div>
 </div>
 
 <!-- ROSTER MODAL -->
-<div id="modalRoster" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.6);align-items:center;justify-content:center">
-  <div style="background:#111;padding:18px;border-radius:10px;width:760px;max-height:80vh;overflow:auto">
-    <h3 style="margin:0 0 8px 0">User Roster</h3>
+<div id="modalRoster" style="display:none;position:fixed;inset:0;">
+  <div>
+    <h3>User Roster</h3>
     <div id="rosterPage" class="roster-list"></div>
-    <div style="display:flex;justify-content:flex-end;margin-top:12px">
+    <div>
       <button id="rosterClose" class="ghost">Close</button>
     </div>
   </div>
@@ -488,47 +412,50 @@ body::after {
 <!-- CHAT POPUP -->
 <div id="chatPopup" class="chat-popup" style="display:none">
   <div class="chat-header">
-    <div style="display:flex;gap:10px;align-items:center">
-      <div style="width:44px;height:44px;border-radius:8px;background:linear-gradient(135deg,#ff3b6b,#7c3aed);display:flex;align-items:center;justify-content:center;font-weight:700">CW</div>
+    <div>
+      <div>CW</div>
       <div>
-        <div style="font-weight:700">Arena Chat</div>
-        <div class="small muted" id="chatUserLabel">Not signed in</div>
+        <div>Arena Chat</div>
+        <div id="chatUserLabel">Not signed in</div>
       </div>
     </div>
-    <div style="display:flex;gap:8px;align-items:center">
+    <div>
       <button id="btnMinimize" class="small-btn">_</button>
       <button id="btnCloseChat" class="small-btn">X</button>
     </div>
   </div>
+
   <div class="chat-body">
     <div class="public-feed" id="publicFeed"></div>
+
     <div class="online-list card">
-      <div style="font-weight:700;margin-bottom:8px">Online</div>
-      <div id="onlineList" style="display:flex;flex-direction:column;gap:8px"></div>
+      <div>Online</div>
+      <div id="onlineList"></div>
     </div>
   </div>
+
   <div class="chat-input">
     <input id="publicMessage" type="text" placeholder="Say something to the arena" />
     <button id="sendPublic">Send</button>
   </div>
 </div>
 
-<!-- PM CONTAINER -->
+<!-- PM WINDOWS CONTAINER -->
 <div id="pmContainer"></div>
 
 <!-- ADMIN PANEL -->
-<div id="modalAdmin" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);align-items:center;justify-content:center">
-  <div style="background:#111;padding:20px;border-radius:10px;width:800px;max-height:90vh;overflow:auto">
+<div id="modalAdmin" style="display:none;position:fixed;inset:0;">
+  <div>
     <h2>Admin Panel</h2>
 
-    <div style="margin-top:10px;margin-bottom:10px">
+    <div>
       <button id="tabUsers" class="small-btn">Users</button>
       <button id="tabAnalytics" class="small-btn">Analytics</button>
     </div>
 
     <div id="adminUsersView">
-      <input id="adminSearch" type="text" placeholder="Search users..." style="width:100%;margin-bottom:10px">
-      <table id="adminTable" style="width:100%;border-collapse:collapse;color:white;font-size:13px">
+      <input id="adminSearch" type="text" placeholder="Search users...">
+      <table id="adminTable">
         <thead>
           <tr>
             <th>Username</th>
@@ -543,18 +470,19 @@ body::after {
       </table>
     </div>
 
-    <div id="adminAnalyticsView" style="display:none;margin-top:12px">
+    <div id="adminAnalyticsView" style="display:none">
       <h3>Analytics</h3>
-      <div id="statsSummary" class="small" style="margin-bottom:8px"></div>
+      <div id="statsSummary"></div>
+
       <h4>Top IPs (24h)</h4>
-      <ul id="topIpsList" class="small"></ul>
+      <ul id="topIpsList"></ul>
     </div>
 
-    <button id="adminClose" class="ghost" style="margin-top:10px">Close</button>
+    <button id="adminClose" class="ghost">Close</button>
   </div>
 </div>
 
-<script src="/socket.io/socket.io.js"></script>
+<!-- JS FILES -->
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/utils.js"></script>
 <script src="/js/socket.js"></script>
@@ -564,7 +492,15 @@ body::after {
 <script src="/js/pm.js"></script>
 <script src="/js/admin.js"></script>
 <script src="/js/analytics.js"></script>
-<script src="/js/app.js"></script>
+
+<!-- DM SIDEBAR TOGGLE -->
+<script>
+document.getElementById("btnDMs").addEventListener("click", () => {
+  const sb = document.getElementById("dmSidebar");
+  sb.classList.toggle("open");
+  if (window.updateDMListSidebar) updateDMListSidebar();
+});
+</script>
 
 </body>
 </html>
