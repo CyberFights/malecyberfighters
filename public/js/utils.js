@@ -29,15 +29,21 @@ window.updateProfileCard = function(user) {
     card.classList.remove('logged-in');
   } else {
     const initials = (user.displayName || user.username).split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-    const wins = user.wins || 0;
-    const losses = user.losses || 0;
+    const wins = (user.stats && user.stats.wins) || 0;
+    const losses = (user.stats && user.stats.losses) || 0;
     const winRate = (wins + losses) > 0 ? ((wins / (wins + losses)) * 100).toFixed(0) : '0';
+    const age = user.age ? `${user.age} years old` : 'Age not set';
+    const bio = user.info || 'No bio';
     
     card.innerHTML = `
       <div class="profile-avatar">${initials}</div>
       <div class="profile-info">
         <div class="profile-name">${user.displayName || user.username}</div>
         <div class="profile-status">@${user.username}</div>
+        <div class="profile-details">
+          <div class="profile-age">${age}</div>
+          <div class="profile-bio">${bio}</div>
+        </div>
         <div class="profile-stats">
           <div class="profile-stat">
             <div class="profile-stat-value">${wins}</div>
