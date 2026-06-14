@@ -125,24 +125,33 @@ app.post('/api/upload-image', upload.single('image'), async (req, res) => {
 
   try {
     const base64 = req.file.buffer.toString('base64');
-    const form = new URLSearchParams();
-    form.append('key', IMGBB_KEY);
-    form.append('image', base64);
 
-    const resp = await fetch('https://api.imgbb.com/1/upload', {
-      method: 'POST',
+    const form = new FormData();
+    form.append("image", base64);
+
+    const resp = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, {
+      method: "POST",
       body: form
     });
+
     const data = await resp.json();
-    if (!data || !data.data || !data.data.url) {
+
+    if (!data || !data.success) {
       return res.status(500).json({ ok: false, error: 'upload_failed', details: data });
     }
-    return res.json({ ok: true, url: data.data.url });
+
+    return res.json({
+      ok: true,
+      url: data.data.url,          // direct image URL
+      viewer: data.data.url_viewer // optional
+    });
+
   } catch (e) {
-    console.error('upload error', e);
+    console.error("upload error", e);
     return res.status(500).json({ ok: false, error: 'upload_error' });
   }
 });
+
 
 // ---------- API: REGISTER ----------
 app.post('/api/register', async (req, res) => {
