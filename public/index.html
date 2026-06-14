@@ -5,6 +5,7 @@
 <title>Male Cyber Fighters</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
+/* ROOT + GLOBAL ------------------------------------------------------------ */
 :root{
   --bg:#05070d;
   --card:#0a0e18;
@@ -350,6 +351,66 @@ animation: holoParticles 22s linear infinite;
       30% 85%,
       70% 60%;
   }
+}
+/* Cards */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 18px;
+  backdrop-filter: blur(10px);
+}
+
+/* Roster */
+.user-row {
+  background: var(--glass);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  transition: 0.2s;
+}
+
+.user-row:hover {
+  background: rgba(0, 255, 255, 0.12);
+  box-shadow: var(--accent-glow);
+}
+
+.avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: rgba(0, 255, 255, 0.15);
+  border: 1px solid var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  color: var(--accent);
+  text-shadow: var(--accent-glow);
+}
+* Admin Panel */
+#modalAdmin > div {
+  background: rgba(0, 20, 30, 0.9);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  box-shadow: var(--accent-glow);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table td, table th {
+  border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+  padding: 8px;
+}
+
+table tr:hover {
+  background: rgba(0, 255, 255, 0.08);
 }
 
 </style>
