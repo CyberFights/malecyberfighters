@@ -152,6 +152,31 @@ app.post('/api/upload-image', upload.single('image'), async (req, res) => {
   }
 });
 
+app.post('/api/update-profile', async (req, res) => {
+  const { username, updates } = req.body;
+
+  if (!username) {
+    return res.status(400).json({ ok: false, error: 'missing_username' });
+  }
+
+  try {
+    const user = await User.findOneAndUpdate(
+      { username },
+      updates,
+      { new: true }
+    ).select('-passwordHash');
+
+    if (!user) {
+      return res.status(404).json({ ok: false, error: 'not_found' });
+    }
+
+    return res.json({ ok: true, user });
+
+  } catch (e) {
+    console.error('update-profile error', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
 
 // ---------- API: REGISTER ----------
 app.post('/api/register', async (req, res) => {
