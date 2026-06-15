@@ -87,40 +87,41 @@ window.updateProfileCard = function(user) {
   const age = user.age ? `${user.age} years old` : 'Age not set';
   const bio = user.info || 'No bio';
 
-  card.innerHTML = `
-    <div class="profile-avatar">${initials}</div>
+const avatarHtml = user.imageUrl
+  ? `<img src="${user.imageUrl}" alt="avatar" class="profile-avatar-img">`
+  : initials;
 
-    <div class="profile-info">
-      <div class="profile-name">${displayName}</div>
-      <div class="profile-status">@${user.username}</div>
+card.innerHTML = `
+  <div class="profile-avatar">${avatarHtml}</div>
 
-      <div class="profile-details">
-        <div class="profile-age">${age}</div>
-        <div class="profile-bio">${bio}</div>
-      </div>
+  <div class="profile-info">
+    <div class="profile-name">${displayName}</div>
+    <div class="profile-status">@${user.username}</div>
 
-      <div class="profile-stats">
-        <div class="profile-stat">
-          <div class="profile-stat-value">${wins}</div>
-          <div class="profile-stat-label">Wins</div>
-        </div>
-        <div class="profile-stat">
-          <div class="profile-stat-value">${losses}</div>
-          <div class="profile-stat-label">Losses</div>
-        </div>
-        <div class="profile-stat">
-          <div class="profile-stat-value">${winRate}%</div>
-          <div class="profile-stat-label">Win Rate</div>
-        </div>
-      </div>
+    <div class="profile-details">
+      <div class="profile-age">${age}</div>
+      <div class="profile-bio">${bio}</div>
     </div>
 
-    <!-- NEW: Edit Profile Button -->
-    <button id="btnEditProfile" class="ghost">Edit Profile</button>
+    <div class="profile-stats">
+      <div class="profile-stat">
+        <div class="profile-stat-value">${wins}</div>
+        <div class="profile-stat-label">Wins</div>
+      </div>
+      <div class="profile-stat">
+        <div class="profile-stat-value">${losses}</div>
+        <div class="profile-stat-label">Losses</div>
+      </div>
+      <div class="profile-stat">
+        <div class="profile-stat-value">${winRate}%</div>
+        <div class="profile-stat-label">Win Rate</div>
+      </div>
+    </div>
+  </div>
 
-    <!-- Logout Button -->
-    <button id="logoutBtn" class="profile-logout ghost">Logout</button>
-  `;
+  <button id="btnEditProfile" class="ghost">Edit Profile</button>
+  <button id="logoutBtn" class="profile-logout ghost">Logout</button>
+`;
 
   card.classList.add('logged-in');
 
