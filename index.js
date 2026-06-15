@@ -426,6 +426,28 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on("createRoom", async ({ name }) => {
+  const roomId = `room_${Date.now()}`;
+  socket.join(roomId);
+
+  // Save room membership
+  if (!socket.roomsJoined) socket.roomsJoined = [];
+  socket.roomsJoined.push({ id: roomId, name });
+
+  io.to(socket.id).emit("roomsUpdate", socket.roomsJoined);
+});
+
+socket.on("joinRoom", ({ room }) => {
+  socket.join(room);
+
+  if (!socket.roomsJoined) socket.roomsJoined = [];
+  if (!socket.roomsJoined.find(r => r.name === room)) {
+    socket.roomsJoined.push({ id: room, name: room });
+  }
+
+  io.to(socket.id).emit("roomsUpdate", socket.roomsJoined);
+});
+
   socket.on('disconnect', async () => {
     const u = await User.findOneAndUpdate(
       { socketId: socket.id },
