@@ -21,7 +21,55 @@ const MONGO_URI = process.env.MONGO_URI;
 const ADMIN_KEY = process.env.ADMIN_KEY;
 
 // ---------- MIDDLEWARE ----------
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+
+        // JS must be external only (your CSP requirement)
+        scriptSrc: ["'self'"],
+        scriptSrcAttr: ["'none'"],
+
+        // Allow your CSS + Google Fonts if needed
+        styleSrc: ["'self'", "'unsafe-inline'"],
+
+        // Allow images from your server + IMGBB
+        imgSrc: [
+          "'self'",
+          "data:",
+          "https://i.ibb.co",
+          "https://ibb.co"
+        ],
+
+        // Allow WebSocket + API calls
+        connectSrc: [
+          "'self'",
+          "ws:",
+          "wss:"
+        ],
+
+        // Allow fonts if needed
+        fontSrc: ["'self'", "data:"],
+
+        // No iframes unless you add domains
+        frameAncestors: ["'self'"],
+
+        // Disallow embedding your site elsewhere
+        frameSrc: ["'self'"],
+
+        // Allow media if needed
+        mediaSrc: ["'self'"],
+
+        // Disallow object embeds
+        objectSrc: ["'none'"],
+
+        // Prevent mixed content
+        upgradeInsecureRequests: []
+      }
+    }
+  })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
