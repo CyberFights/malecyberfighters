@@ -6,18 +6,41 @@ $('btnMinimize').addEventListener('click', () => {
 });
 
 $('sendPublic').addEventListener('click', sendPublicMessage);
-$('publicMessage').addEventListener('keydown', e => { if(e.key === 'Enter') sendPublicMessage(); });
+$('publicMessage').addEventListener('keydown', e => { 
+  if (e.key === 'Enter') sendPublicMessage(); 
+});
 
-function openChat(){
+/* -----------------------------------------------------------
+   AVATAR RENDERING (CSP-SAFE)
+----------------------------------------------------------- */
+function renderAvatar(u, size = 36) {
+  const initials = u.display
+    ? u.display.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)
+    : u.username[0].toUpperCase();
+
+  if (u.imageUrl) {
+    return `<img src="${u.imageUrl}" class="avatar-img" style="width:${size}px;height:${size}px" alt="avatar">`;
+  }
+
+  return `<div class="avatar-fallback" style="width:${size}px;height:${size}px">${initials}</div>`;
+}
+
+/* -----------------------------------------------------------
+   CHAT OPEN
+----------------------------------------------------------- */
+function openChat() {
   show($('chatPopup'));
   if (window.updateUIForSession) updateUIForSession();
   renderPublicFeed();
   renderOnlineList();
 }
 
-function sendPublicMessage(){
+/* -----------------------------------------------------------
+   PUBLIC MESSAGES
+----------------------------------------------------------- */
+function sendPublicMessage() {
   const txt = $('publicMessage').value.trim();
-  if(!txt) return;
+  if (!txt) return;
 
   const s = getSession();
   const msg = {
@@ -30,7 +53,7 @@ function sendPublicMessage(){
   $('publicMessage').value = '';
 }
 
-function renderPublicFeed(){
+function renderPublicFeed() {
   const feed = $('publicFeed');
   if (!feed) return;
   feed.innerHTML = '';
@@ -54,15 +77,19 @@ function renderPublicFeed(){
   feed.scrollTop = feed.scrollHeight;
 }
 
-function renderQuickRoster(){
+/* -----------------------------------------------------------
+   QUICK ROSTER
+----------------------------------------------------------- */
+function renderQuickRoster() {
   const el = $('quickRoster');
   if (!el) return;
   el.innerHTML = '';
-  (window.users || []).slice(0,6).forEach(u => {
+
+  (window.users || []).slice(0, 6).forEach(u => {
     const div = document.createElement('div');
     div.className = 'user-row';
     div.innerHTML = `
-      <div class="avatar">${u.display[0]}</div>
+      ${renderAvatar(u, 36)}
       <div style="flex:1">
         <div style="font-weight:700">${u.display}</div>
         <div class="small">${u.username}</div>
@@ -73,15 +100,19 @@ function renderQuickRoster(){
   });
 }
 
-function renderRosterPage(){
+/* -----------------------------------------------------------
+   FULL ROSTER PAGE
+----------------------------------------------------------- */
+function renderRosterPage() {
   const el = $('rosterPage');
   if (!el) return;
   el.innerHTML = '';
+
   (window.users || []).forEach(u => {
     const row = document.createElement('div');
     row.className = 'user-row';
     row.innerHTML = `
-      <div class="avatar">${u.display[0]}</div>
+      ${renderAvatar(u, 40)}
       <div style="flex:1">
         <div style="font-weight:700">${u.display}</div>
         <div class="small">${u.username}</div>
@@ -99,17 +130,22 @@ function renderRosterPage(){
   });
 }
 
-function renderOnlineList(){
+/* -----------------------------------------------------------
+   ONLINE LIST (CHAT SIDEBAR)
+----------------------------------------------------------- */
+function renderOnlineList() {
   const el = $('onlineList');
   if (!el) return;
   el.innerHTML = '';
+
   (window.users || []).forEach(u => {
     const row = document.createElement('div');
     row.style.display = 'flex';
     row.style.justifyContent = 'space-between';
+
     row.innerHTML = `
       <div style="display:flex;gap:8px;align-items:center">
-        <div class="avatar" style="width:36px;height:36px">${u.display[0]}</div>
+        ${renderAvatar(u, 36)}
         <div>
           <div style="font-weight:700">${u.display}</div>
           <div class="small">${u.username}</div>
@@ -117,6 +153,7 @@ function renderOnlineList(){
       </div>
       <button class="small-btn" data-user="${u.username}">PM</button>
     `;
+
     el.appendChild(row);
   });
 
