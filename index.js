@@ -1,5 +1,5 @@
 require('dotenv').config();
-
+const { FormData } = require('undici');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -136,14 +136,14 @@ app.post('/api/upload-image', upload.single('image'), async (req, res) => {
 
     const data = await resp.json();
 
-    if (!data || !data.success) {
+    if (!data.success) {
       return res.status(500).json({ ok: false, error: 'upload_failed', details: data });
     }
 
     return res.json({
       ok: true,
-      url: data.data.url,          // direct image URL
-      viewer: data.data.url_viewer // optional
+      url: data.data.url,
+      viewer: data.data.url_viewer
     });
 
   } catch (e) {
@@ -151,7 +151,6 @@ app.post('/api/upload-image', upload.single('image'), async (req, res) => {
     return res.status(500).json({ ok: false, error: 'upload_error' });
   }
 });
-
 app.post('/api/update-profile', async (req, res) => {
   const { username, updates } = req.body;
 
