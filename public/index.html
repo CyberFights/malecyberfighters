@@ -235,22 +235,35 @@ background:var(--glass);
 
 .small{font-size:13px;color:var(--muted)}
 /* CHAT POPUP --------------------------------------------------------------- */
-.chat-popup{
-  position:fixed;right:28px;bottom:28px;
-  width:420px;height:520px;
-  background:linear-gradient(180deg,#050a16,#0a1324);
-  border-radius:12px;
-  border:1px solid rgba(160,200,255,0.12);
-  display:flex;flex-direction:column;overflow:hidden;
-  box-shadow:0 20px 60px rgba(120,180,255,0.25);
+.chat-popup {
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  width: 550px;
+  height: 520px;
+  background: linear-gradient(180deg,#050a16,#0a1324);
+  border-radius: 12px;
+  border: 1px solid rgba(160,200,255,0.12);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(120,180,255,0.25);
+
+  /* ADD THIS */
+  cursor: default;
 }
 
 .chat-header{
   display:flex;align-items:center;justify-content:space-between;
   padding:12px 14px;
   border-bottom:1px solid rgba(160,200,255,0.12);
+  cursor: grab;
 }
 
+  .chat-header:active {
+  cursor: grabbing;
+}
+  
 .chat-body{display:flex;flex:1;gap:10px;overflow:hidden}
 
 .public-feed{
@@ -259,7 +272,7 @@ background:var(--glass);
 }
 
 .online-list{
-  width:140px;border-left:1px solid rgba(160,200,255,0.12);
+  width:160px;border-left:1px solid rgba(160,200,255,0.12);
   padding:12px;display:flex;flex-direction:column;gap:8px;overflow:auto;
 }
 
