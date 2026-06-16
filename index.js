@@ -345,13 +345,43 @@ io.on('connection', (socket) => {
     );
     if (!u) return;
 
-    onlineByUsername.set(u.username, socket.id);
-
     const onlineUsers = await User.find({ online: true })
       .select('username display imageUrl -_id')
       .lean();
 
     io.emit('presence', onlineUsers);
+  });
+
+  // USER CLOSED CHATROOM (disconnect from online but stay logged in)
+  socket.on("chatClosed", async ({ username }) => {
+    if (!username) return;
+
+    await User.findOneAndUpdate(
+      { username },
+      { online: false }
+    );
+
+    const onlineUsers = await User.find({ online: true })
+      .select("username display imageUrl -_id")
+      .lean();
+
+    io.emit("presence", onlineUsers);
+  });
+
+  // USER FORCE LOGOUT (browser close / refresh)
+  socket.on("forceLogout", async ({ username }) => {
+    if (!username) return;
+
+    await User.findOneAndUpdate(
+      { username },
+      { online: false, socketId: null }
+    );
+
+    const onlineUsers = await User.find({ online: true })
+      .select("username display imageUrl -_id")
+      .lean();
+
+    io.emit("presence", onlineUsers);
   });
 
   // PUBLIC MESSAGE
@@ -363,29 +393,13 @@ io.on('connection', (socket) => {
       time: new Date()
     };
 
-    // Save to MongoDB
     try {
       await PublicMessage.create(enriched);
     } catch (err) {
       console.error("Failed to save public message:", err);
     }
 
-    // Broadcast
     io.emit('publicMessage', enriched);
-
-    // Discord webhook
-    try {
-      const user = await User.findOne({ username: msg.from }).lean();
-      const avatarUrl = user?.imageUrl || null;
-
-      await sendDiscordWebhookMessage(
-        msg.display || msg.from,
-        msg.text,
-        avatarUrl
-      );
-    } catch (err) {
-      console.error("Discord webhook error:", err);
-    }
   });
 
   // ROOM JOIN
@@ -420,17 +434,14 @@ io.on('connection', (socket) => {
     io.to(msg.room).emit("roomMessage", enriched);
   });
 
-  // DISCONNECT
+  // DISCONNECT (fallback)
   socket.on('disconnect', async () => {
     const u = await User.findOneAndUpdate(
       { socketId: socket.id },
-      { online: false, socketId: null },
-      { new: true }
+      { online: false, socketId: null }
     );
 
     if (u) {
-      onlineByUsername.delete(u.username);
-
       const onlineUsers = await User.find({ online: true })
         .select('username display imageUrl -_id')
         .lean();
