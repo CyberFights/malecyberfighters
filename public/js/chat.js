@@ -6,9 +6,6 @@ window.$ = window.$ || function(id) {
 // -------------------------------------------------------------
 // ELEMENT HELPERS
 // -------------------------------------------------------------
-function $(id) {
-  return document.getElementById(id);
-}
 
 function show(el) {
   if (el) el.style.display = 'flex';
