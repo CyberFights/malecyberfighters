@@ -8,10 +8,6 @@ socket.on('presence', onlineUsers => {
   if (window.updateDMListSidebar) updateDMListSidebar();
 });
 
-socket.on('publicMessage', msg => {
-  appendPublicMessage(msg);
-});
-
 
 socket.on('privateMessage', pm => {
   const me = getSession();
