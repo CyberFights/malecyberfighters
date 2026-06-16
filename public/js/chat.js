@@ -292,10 +292,12 @@ function appendPublicMessage(msg){
   div.innerHTML = `
     <div class="message-avatar">${avatar}</div>
     <div class="message">
-      <div style="font-weight:700">
-        ${msg.display}
-        <span class="small">@${msg.from} • ${new Date(msg.time).toLocaleTimeString()}</span>
-      </div>
+     <div style="font-weight:700; color:${user?.color || '#7fd8ff'}">
+  ${msg.display}
+  <span class="small" style="color:${user?.color || '#7fd8ff'}">
+    @${msg.from} • ${new Date(msg.time).toLocaleTimeString()}
+  </span>
+</div>
       <div>${escapeHtml(msg.text)}</div>
     </div>
   `;
@@ -349,10 +351,12 @@ function appendRoomMessage(msg){
   div.innerHTML = `
     <div class="message-avatar">${avatar}</div>
     <div class="message">
-      <div style="font-weight:700">
-        ${msg.display}
-        <span class="small">@${msg.from} • ${new Date(msg.time).toLocaleTimeString()}</span>
-      </div>
+      <div style="font-weight:700; color:${user?.color || '#7fd8ff'}">
+  ${msg.display}
+  <span class="small" style="color:${user?.color || '#7fd8ff'}">
+    @${msg.from} • ${new Date(msg.time).toLocaleTimeString()}
+  </span>
+</div>
       <div>${escapeHtml(msg.text)}</div>
     </div>
   `;
