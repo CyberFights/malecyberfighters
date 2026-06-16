@@ -5,3 +5,7 @@ document.getElementById("btnDMs").addEventListener("click", () => {
   panel.classList.toggle("open");
   chat.classList.toggle("shifted");
 });
+document.getElementById("btnRooms").addEventListener("click", () => {
+  const panel = document.getElementById("roomsSidebar");
+  panel.classList.toggle("open");
+});
