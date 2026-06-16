@@ -5,13 +5,29 @@ function $(id) {
   return document.getElementById(id);
 }
 
+function show(el) {
+  if (el) el.style.display = 'flex';
+}
+
+function hide(el) {
+  if (el) el.style.display = 'none';
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 // -------------------------------------------------------------
-// AVATAR RENDERING (CSP-SAFE)
+// AVATAR RENDERING
 // -------------------------------------------------------------
 function renderMessageAvatar(username, display, imageUrl, size = 36) {
   const initials = display
-    ? display.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)
-    : username[0].toUpperCase();
+    ? display.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+    : (username || '?')[0].toUpperCase();
 
   if (imageUrl) {
     return `<img src="${imageUrl}" class="avatar-img" style="width:${size}px;height:${size}px" alt="avatar">`;
@@ -20,6 +36,22 @@ function renderMessageAvatar(username, display, imageUrl, size = 36) {
   return `<div class="avatar-fallback" style="width:${size}px;height:${size}px">${initials}</div>`;
 }
 
+// -------------------------------------------------------------
+// SESSION HELPER (ASSUMES YOU ALREADY HAVE THIS GLOBALLY)
+// -------------------------------------------------------------
+function getSession() {
+  try {
+    const raw = localStorage.getItem('session');
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+// -------------------------------------------------------------
+// QUICK ROSTER (TOP USERS PREVIEW)
+// -------------------------------------------------------------
 function renderQuickRoster() {
   const el = $('quickRoster');
   if (!el) return;
@@ -31,7 +63,7 @@ function renderQuickRoster() {
       u.username,
       u.display,
       u.imageUrl,
-      40 // slightly larger for roster
+      40
     );
 
     const div = document.createElement('div');
@@ -50,116 +82,43 @@ function renderQuickRoster() {
 }
 
 // -------------------------------------------------------------
-// CHAT OPEN
+// FULL ROSTER PAGE
 // -------------------------------------------------------------
-$('btnOpenChat').addEventListener('click', openChat);
-$('btnCloseChat').addEventListener('click', () => hide($('chatPopup')));
-$('btnMinimize').addEventListener('click', () => {
-  const c = $('chatPopup');
-  c.style.display = c.style.display === 'none' ? 'flex' : 'none';
-});
+function renderRosterPage() {
+  const el = $('rosterPage');
+  if (!el) return;
 
-$('sendPublic').addEventListener('click', sendPublicMessage);
-$('publicMessage').addEventListener('keydown', e => {
-  if (e.key === 'Enter') sendPublicMessage();
-});
+  el.innerHTML = '';
 
-function openChat() {
-  show($('chatPopup'));
-  if (window.updateUIForSession) updateUIForSession();
-  loadPublicMessages();
-  renderOnlineList();
-}
+  (window.users || []).forEach(u => {
+    const avatarHtml = renderMessageAvatar(
+      u.username,
+      u.display,
+      u.imageUrl,
+      44
+    );
 
-// -------------------------------------------------------------
-// PUBLIC CHAT — LOAD HISTORY FROM SERVER
-// -------------------------------------------------------------
-async function loadPublicMessages() {
-  const feed = $('publicFeed');
-  if (!feed) return;
-
-  feed.innerHTML = '';
-
-  const res = await fetch("/api/public-messages");
-  const data = await res.json();
-  if (!data.ok) return;
-
-  const messages = data.messages;
-  const s = getSession();
-
-  messages.forEach(m => {
-    const user = window.users?.find(u => u.username === m.from);
-    const avatarHtml = renderMessageAvatar(m.from, m.display, user?.imageUrl);
-
-    const div = document.createElement('div');
-    div.className = 'message-row ' + (s && m.from === s.username ? 'me' : '');
-
-    div.innerHTML = `
-      <div class="message-avatar">${avatarHtml}</div>
-      <div class="message">
-        <div style="font-size:13px;font-weight:700">
-          ${m.display}
-          <span class="small">@${m.from} • ${new Date(m.time).toLocaleTimeString()}</span>
-        </div>
-        <div style="margin-top:6px">${escapeHtml(m.text)}</div>
+    const row = document.createElement('div');
+    row.className = 'user-row';
+    row.innerHTML = `
+      ${avatarHtml}
+      <div style="flex:1">
+        <div style="font-weight:700">${u.display}</div>
+        <div class="small">${u.username}</div>
       </div>
+      <button class="small-btn" data-user="${u.username}">Message</button>
     `;
 
-    feed.appendChild(div);
+    el.appendChild(row);
   });
 
-  feed.scrollTop = feed.scrollHeight;
+  el.querySelectorAll('.small-btn').forEach(b => {
+    b.addEventListener('click', e => openPrivateWindow(e.target.dataset.user));
+  });
 }
 
 // -------------------------------------------------------------
-// PUBLIC CHAT — SEND MESSAGE
-// -------------------------------------------------------------
-function sendPublicMessage() {
-  const txt = $('publicMessage').value.trim();
-  if (!txt) return;
-
-  const s = getSession();
-  const msg = {
-    from: s.username,
-    display: s.display || s.username,
-    text: txt
-  };
-
-  socket.emit('publicMessage', msg);
-  $('publicMessage').value = '';
-}
-
-// -------------------------------------------------------------
-// SOCKET — RECEIVE PUBLIC MESSAGE
-// -------------------------------------------------------------
-socket.on("publicMessage", (msg) => {
-  const feed = $('publicFeed');
-  if (!feed) return;
-
-  const s = getSession();
-  const user = window.users?.find(u => u.username === msg.from);
-  const avatarHtml = renderMessageAvatar(msg.from, msg.display, user?.imageUrl);
-
-  const div = document.createElement('div');
-  div.className = 'message-row ' + (s && msg.from === s.username ? 'me' : '');
-
-  div.innerHTML = `
-    <div class="message-avatar">${avatarHtml}</div>
-    <div class="message">
-      <div style="font-size:13px;font-weight:700">
-        ${msg.display}
-        <span class="small">@${msg.from} • ${new Date(msg.time).toLocaleTimeString()}</span>
-      </div>
-      <div style="margin-top:6px">${escapeHtml(msg.text)}</div>
-    </div>
-  `;
-
-  feed.appendChild(div);
-  feed.scrollTop = feed.scrollHeight;
-});
-
-// -------------------------------------------------------------
-// ONLINE LIST
+// ONLINE LIST (RIGHT SIDEBAR IN CHAT)
 // -------------------------------------------------------------
 function renderOnlineList() {
   const el = $('onlineList');
@@ -191,18 +150,192 @@ function renderOnlineList() {
 }
 
 // -------------------------------------------------------------
-// ROOMS — JOIN ROOM
+// OPTIONAL: DM SIDEBAR LIST UPDATER HOOK
 // -------------------------------------------------------------
-function joinRoom(roomName) {
-  socket.emit("joinRoom", { room: roomName });
+function updateDMListSidebar() {
+  const sidebar = $('dmSidebar');
+  if (!sidebar) return;
+
+  const list = sidebar.querySelector('.dm-list');
+  if (!list) return;
+
+  list.innerHTML = '';
+
+  (window.users || []).forEach(u => {
+    const avatarHtml = renderMessageAvatar(
+      u.username,
+      u.display,
+      u.imageUrl,
+      32
+    );
+
+    const div = document.createElement('div');
+    div.className = 'dm-sidebar-item';
+    div.innerHTML = `
+      <div style="display:flex;gap:8px;align-items:center">
+        ${avatarHtml}
+        <div>
+          <div style="font-weight:700">${u.display}</div>
+          <div class="small">${u.username}</div>
+        </div>
+      </div>
+    `;
+
+    div.addEventListener('click', () => openPrivateWindow(u.username));
+    list.appendChild(div);
+  });
 }
 
 // -------------------------------------------------------------
-// ROOMS — SEND MESSAGE
+// SOCKET.IO PRESENCE HANDLER
 // -------------------------------------------------------------
+socket.on('presence', onlineUsers => {
+  window.users = onlineUsers;
+  renderQuickRoster();
+  renderRosterPage();
+  renderOnlineList();
+  if (window.updateDMListSidebar) updateDMListSidebar();
+});
+
+// -------------------------------------------------------------
+// CHAT POPUP OPEN/CLOSE
+// -------------------------------------------------------------
+$('btnOpenChat')?.addEventListener('click', openChat);
+$('btnCloseChat')?.addEventListener('click', () => hide($('chatPopup')));
+$('btnMinimize')?.addEventListener('click', () => {
+  const c = $('chatPopup');
+  if (!c) return;
+  c.style.display = c.style.display === 'none' ? 'flex' : 'none';
+});
+
+function openChat() {
+  show($('chatPopup'));
+  if (window.updateUIForSession) updateUIForSession();
+  loadPublicMessages();
+  renderOnlineList();
+}
+
+// -------------------------------------------------------------
+// PUBLIC CHAT — LOAD HISTORY FROM SERVER
+// -------------------------------------------------------------
+async function loadPublicMessages() {
+  const feed = $('publicFeed');
+  if (!feed) return;
+
+  feed.innerHTML = '';
+
+  try {
+    const res = await fetch('/api/public-messages');
+    const data = await res.json();
+    if (!data.ok) return;
+
+    const messages = data.messages;
+    const s = getSession();
+
+    messages.forEach(m => {
+      const user = (window.users || []).find(u => u.username === m.from);
+      const avatarHtml = renderMessageAvatar(
+        m.from,
+        m.display,
+        user?.imageUrl
+      );
+
+      const div = document.createElement('div');
+      div.className = 'message-row ' + (s && m.from === s.username ? 'me' : '');
+
+      div.innerHTML = `
+        <div class="message-avatar">${avatarHtml}</div>
+        <div class="message">
+          <div style="font-size:13px;font-weight:700">
+            ${m.display}
+            <span class="small">@${m.from} • ${new Date(m.time).toLocaleTimeString()}</span>
+          </div>
+          <div style="margin-top:6px">${escapeHtml(m.text)}</div>
+        </div>
+      `;
+
+      feed.appendChild(div);
+    });
+
+    feed.scrollTop = feed.scrollHeight;
+  } catch (e) {
+    console.error('loadPublicMessages error', e);
+  }
+}
+
+// -------------------------------------------------------------
+// PUBLIC CHAT — SEND MESSAGE
+// -------------------------------------------------------------
+$('sendPublic')?.addEventListener('click', sendPublicMessage);
+$('publicMessage')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') sendPublicMessage();
+});
+
+function sendPublicMessage() {
+  const input = $('publicMessage');
+  if (!input) return;
+
+  const txt = input.value.trim();
+  if (!txt) return;
+
+  const s = getSession();
+  if (!s) return;
+
+  const msg = {
+    from: s.username,
+    display: s.display || s.username,
+    text: txt
+  };
+
+  socket.emit('publicMessage', msg);
+  input.value = '';
+}
+
+// -------------------------------------------------------------
+// SOCKET — RECEIVE PUBLIC MESSAGE
+// -------------------------------------------------------------
+socket.on('publicMessage', msg => {
+  const feed = $('publicFeed');
+  if (!feed) return;
+
+  const s = getSession();
+  const user = (window.users || []).find(u => u.username === msg.from);
+  const avatarHtml = renderMessageAvatar(
+    msg.from,
+    msg.display,
+    user?.imageUrl
+  );
+
+  const div = document.createElement('div');
+  div.className = 'message-row ' + (s && msg.from === s.username ? 'me' : '');
+
+  div.innerHTML = `
+    <div class="message-avatar">${avatarHtml}</div>
+    <div class="message">
+      <div style="font-size:13px;font-weight:700">
+        ${msg.display}
+        <span class="small">@${msg.from} • ${new Date(msg.time).toLocaleTimeString()}</span>
+      </div>
+      <div style="margin-top:6px">${escapeHtml(msg.text)}</div>
+    </div>
+  `;
+
+  feed.appendChild(div);
+  feed.scrollTop = feed.scrollHeight;
+});
+
+// -------------------------------------------------------------
+// ROOMS — JOIN / SEND / RECEIVE
+// -------------------------------------------------------------
+function joinRoom(roomName) {
+  socket.emit('joinRoom', { room: roomName });
+}
+
 function sendRoomMessage(room, text) {
   const s = getSession();
-  socket.emit("roomMessage", {
+  if (!s) return;
+
+  socket.emit('roomMessage', {
     room,
     from: s.username,
     display: s.display || s.username,
@@ -210,26 +343,29 @@ function sendRoomMessage(room, text) {
   });
 }
 
-// -------------------------------------------------------------
-// ROOMS — RECEIVE HISTORY
-// -------------------------------------------------------------
-socket.on("roomHistory", ({ room, history }) => {
+// ROOM HISTORY
+socket.on('roomHistory', ({ room, history }) => {
   const feed = $('roomFeed');
   if (!feed) return;
 
-  feed.innerHTML = "";
+  feed.innerHTML = '';
 
   history.forEach(m => {
-    const user = window.users?.find(u => u.username === m.from);
-    const avatarHtml = renderMessageAvatar(m.from, m.display, user?.imageUrl);
+    const user = (window.users || []).find(u => u.username === m.from);
+    const avatarHtml = renderMessageAvatar(
+      m.from,
+      m.display,
+      user?.imageUrl
+    );
 
-    const div = document.createElement("div");
-    div.className = "message-row";
+    const div = document.createElement('div');
+    div.className = 'message-row';
 
     div.innerHTML = `
       <div class="message-avatar">${avatarHtml}</div>
       <div class="message">
-        <div style="font-weight:700">${m.display}
+        <div style="font-weight:700">
+          ${m.display}
           <span class="small">@${m.from} • ${new Date(m.time).toLocaleTimeString()}</span>
         </div>
         <div>${escapeHtml(m.text)}</div>
@@ -242,23 +378,26 @@ socket.on("roomHistory", ({ room, history }) => {
   feed.scrollTop = feed.scrollHeight;
 });
 
-// -------------------------------------------------------------
-// ROOMS — RECEIVE NEW MESSAGE
-// -------------------------------------------------------------
-socket.on("roomMessage", (msg) => {
+// NEW ROOM MESSAGE
+socket.on('roomMessage', msg => {
   const feed = $('roomFeed');
   if (!feed) return;
 
-  const user = window.users?.find(u => u.username === msg.from);
-  const avatarHtml = renderMessageAvatar(msg.from, msg.display, user?.imageUrl);
+  const user = (window.users || []).find(u => u.username === msg.from);
+  const avatarHtml = renderMessageAvatar(
+    msg.from,
+    msg.display,
+    user?.imageUrl
+  );
 
-  const div = document.createElement("div");
-  div.className = "message-row";
+  const div = document.createElement('div');
+  div.className = 'message-row';
 
   div.innerHTML = `
     <div class="message-avatar">${avatarHtml}</div>
     <div class="message">
-      <div style="font-weight:700">${msg.display}
+      <div style="font-weight:700">
+        ${msg.display}
         <span class="small">@${msg.from} • ${new Date(msg.time).toLocaleTimeString()}</span>
       </div>
       <div>${escapeHtml(msg.text)}</div>
@@ -268,3 +407,11 @@ socket.on("roomMessage", (msg) => {
   feed.appendChild(div);
   feed.scrollTop = feed.scrollHeight;
 });
+
+// -------------------------------------------------------------
+// PLACEHOLDER: PRIVATE MESSAGING WINDOW (IF YOU ALREADY HAVE IT)
+// -------------------------------------------------------------
+function openPrivateWindow(username) {
+  // Hook into your existing PM window logic
+  console.log('Open PM with', username);
+}
