@@ -190,11 +190,29 @@ $('btnOpenChat')?.addEventListener('click', () => {
   loadPublicMessages();
   renderOnlineList();
 });
+/* CLOSE CHATROOM → disconnect from online (but stay logged in) */
+$('btnCloseChat')?.addEventListener('click', () => {
+  const s = getSession();
+  if (s) socket.emit("chatClosed", { username: s.username });
+  hide($('chatPopup'));
+});
 
-$('btnCloseChat')?.addEventListener('click', () => hide($('chatPopup')));
 $('btnMinimize')?.addEventListener('click', () => {
   const c = $('chatPopup');
   c.style.display = c.style.display === 'none' ? 'flex' : 'none';
+});
+
+/* ============================================================
+   LOGOUT ON BROWSER CLOSE / REFRESH
+============================================================ */
+window.addEventListener("beforeunload", () => {
+  const s = getSession();
+  if (!s) return;
+
+  socket.emit("forceLogout", { username: s.username });
+
+  localStorage.removeItem("cw_session_v1");
+  localStorage.removeItem("currentUser");
 });
 
 /* ============================================================
