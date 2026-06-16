@@ -250,8 +250,11 @@ function sendPublicMessage(){
    PUBLIC CHAT — RECEIVE
 ============================================================ */
 socket.on('publicMessage', msg => {
+  const s = getSession();
+  if (msg.from === s.username) return; // prevent double render
   appendPublicMessage(msg);
 });
+
 
 /* ============================================================
    PUBLIC CHAT — RENDER MESSAGE
