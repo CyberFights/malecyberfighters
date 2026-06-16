@@ -550,6 +550,41 @@ table tr:hover {
   justify-content: center;
 }
 
+  /* Shared panel header */
+.side-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(160,200,255,0.15);
+}
+
+/* Close button */
+.side-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.side-close-btn:hover {
+  color: var(--accent);
+}
+
+/* Shrink DM panel */
+.dm-panel {
+  width: 220px !important;
+  max-width: 220px;
+}
+
+/* Shrink Rooms panel */
+.rooms-panel {
+  width: 220px !important;
+  max-width: 220px;
+}
 </style>
 </head>
 
@@ -784,8 +819,17 @@ table tr:hover {
   </div>
 </div>
 
-<!-- PM WINDOWS CONTAINER -->
-<div id="pmContainer"></div>
+<div id="pmContainer" class="dm-panel">
+  <div class="side-panel-header">
+    <span>Direct Messages</span>
+    <button id="closeDmSidebar" class="side-close-btn">✕</button>
+  </div>
+
+  <input id="dmSearch" class="dm-search" placeholder="Search DMs">
+
+  <div id="dmSidebarList" class="dm-list"></div>
+</div>
+
 
 <!-- ADMIN PANEL -->
 
@@ -827,14 +871,17 @@ table tr:hover {
     <button id="adminClose" class="ghost">Close</button>
   </div>
 </div>
-<div id="roomsSidebar">
-  <div class="rooms-header">
-    <h3>Your Rooms</h3>
-    <button id="btnCreateRoom" class="small-btn">+ Create Room</button>
+<div id="roomsSidebar" class="rooms-panel">
+  <div class="side-panel-header">
+    <span>Rooms</span>
+    <button id="closeRoomsSidebar" class="side-close-btn">✕</button>
   </div>
 
   <div id="roomsList" class="rooms-list"></div>
+
+  <button id="createRoomBtn" class="small-btn">Create Room</button>
 </div>
+
 
 <!-- JS FILES -->
 <script src="/socket.io/socket.io.js"></script>
