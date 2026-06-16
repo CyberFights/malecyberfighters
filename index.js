@@ -330,6 +330,44 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+// ---------- API: EXTERNAL PUBLIC CHAT MESSAGE ----------
+app.post("/api/chatMessage", async (req, res) => {
+  try {
+    const { username, message, timestamp, avatar } = req.body;
+
+    if (!username || !message) {
+      return res.status(400).json({ error: "Username and message are required" });
+    }
+
+    const msgTimestamp = timestamp ? new Date(timestamp) : new Date();
+
+    // Save to MongoDB using your existing PublicMessage model
+    const enriched = {
+      from: username,
+      display: username,
+      text: message,
+      time: msgTimestamp
+    };
+
+    await PublicMessage.create(enriched);
+
+    // Broadcast to ALL clients (public chat only)
+    io.emit("externalPublicMessage", {
+      from: username,
+      display: username,
+      text: message,
+      avatar: avatar || null,
+      time: msgTimestamp.toISOString()
+    });
+
+    return res.json({ success: true, message: "Message saved and broadcasted" });
+
+  } catch (err) {
+    console.error("Error saving chat message:", err);
+    return res.status(500).json({ error: "Failed to save message" });
+  }
+});
+
 // ---------- SOCKET.IO ----------
 const onlineByUsername = new Map();
 
