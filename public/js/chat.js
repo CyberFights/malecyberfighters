@@ -1,3 +1,8 @@
+// SAFE GLOBAL SELECTOR
+window.$ = window.$ || function(id) {
+  return document.getElementById(id);
+};
+
 // -------------------------------------------------------------
 // ELEMENT HELPERS
 // -------------------------------------------------------------
