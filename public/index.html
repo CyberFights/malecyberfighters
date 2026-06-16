@@ -522,6 +522,28 @@ table tr:hover {
   background: rgba(127,216,255,0.15);
 }
 
+  .message-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.message-avatar {
+  flex-shrink: 0;
+}
+
+.message-row.me {
+  justify-content: flex-end;
+}
+
+.message-row.me .message-avatar {
+  order: 2;
+}
+
+.message-row.me .message {
+  order: 1;
+}
+
 </style>
 </head>
 
