@@ -20,56 +20,31 @@ const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI;
 const ADMIN_KEY = process.env.ADMIN_KEY;
 
+const DISCORD_WEBHOOK_URL = process.env.Discord_webhook || null;
+const DISCORD_SUPPORT_URL = process.env.Discord_Support || null;
+
 // ---------- MIDDLEWARE ----------
 app.use(
   helmet({
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-
-        // JS must be external only (your CSP requirement)
         scriptSrc: ["'self'"],
         scriptSrcAttr: ["'none'"],
-
-        // Allow your CSS + Google Fonts if needed
         styleSrc: ["'self'", "'unsafe-inline'"],
-
-        // Allow images from your server + IMGBB
-        imgSrc: [
-          "'self'",
-          "data:",
-          "https://i.ibb.co",
-          "https://ibb.co"
-        ],
-
-        // Allow WebSocket + API calls
-        connectSrc: [
-          "'self'",
-          "ws:",
-          "wss:"
-        ],
-
-        // Allow fonts if needed
+        imgSrc: ["'self'", "data:", "https://i.ibb.co", "https://ibb.co"],
+        connectSrc: ["'self'", "ws:", "wss:"],
         fontSrc: ["'self'", "data:"],
-
-        // No iframes unless you add domains
         frameAncestors: ["'self'"],
-
-        // Disallow embedding your site elsewhere
         frameSrc: ["'self'"],
-
-        // Allow media if needed
         mediaSrc: ["'self'"],
-
-        // Disallow object embeds
         objectSrc: ["'none'"],
-
-        // Prevent mixed content
         upgradeInsecureRequests: []
       }
     }
   })
 );
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -100,9 +75,24 @@ const userSchema = new mongoose.Schema({
   imageUrl: { type: String },
   online:   { type: Boolean, default: false },
   socketId: { type: String, default: null },
-  role:     { type: String, default: 'user' }, // "user" | "admin"
+  role:     { type: String, default: 'user' },
   banned:   { type: Boolean, default: false }
 }, { timestamps: true });
+
+const publicMessageSchema = new mongoose.Schema({
+  from: String,
+  display: String,
+  text: String,
+  time: { type: Date, default: Date.now }
+});
+
+const roomMessageSchema = new mongoose.Schema({
+  room: { type: String, required: true },
+  from: String,
+  display: String,
+  text: String,
+  time: { type: Date, default: Date.now }
+});
 
 const ipLogSchema = new mongoose.Schema({
   ip: String,
@@ -112,50 +102,13 @@ const ipLogSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-const publicMessageSchema = new mongoose.Schema({
-  from: String,
-  display: String,
-  text: String,
-  time: { type: Date, default: Date.now }
-});
-
-const PublicMessage = mongoose.model("PublicMessage", publicMessageSchema);
-
 const User = mongoose.model('User', userSchema);
+const PublicMessage = mongoose.model("PublicMessage", publicMessageSchema);
+const RoomMessage = mongoose.model("RoomMessage", roomMessageSchema);
 const IpLog = mongoose.model('IpLog', ipLogSchema);
 
 // ---------- HELPERS ----------
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
-
-const DISCORD_WEBHOOK_URL = process.env.Discord_webhook || null;
-const DISCORD_SUPPORT_URL = process.env.Discord_Support || null;
-
-async function sendDiscordWebhookMessage(username, message, avatarUrl) {
-  if (!DISCORD_WEBHOOK_URL) {
-    console.warn("Discord webhook URL not configured.");
-    return;
-  }
-
-  const payload = {
-    username: username || "Chat Message",
-    content: message,
-    avatar_url: avatarUrl || "",
-  };
-
-  try {
-    const response = await fetch(DISCORD_WEBHOOK_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      console.error("Failed to send webhook:", response.statusText);
-    }
-  } catch (err) {
-    console.error("Error sending webhook:", err);
-  }
-}
 
 function getIp(req) {
   return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress;
@@ -174,37 +127,47 @@ async function logIp(req, { action, username }) {
   }
 }
 
-function requireAdmin(req, res, next) {
-  const key = req.headers['x-admin-key'];
-  if (!key || key !== ADMIN_KEY) {
-    return res.status(403).json({ ok: false, error: 'forbidden' });
+async function sendDiscordWebhookMessage(username, message, avatarUrl) {
+  if (!DISCORD_WEBHOOK_URL) return;
+
+  const payload = {
+    username: username || "Chat Message",
+    content: message,
+    avatar_url: avatarUrl || ""
+  };
+
+  try {
+    const response = await fetch(DISCORD_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      console.error("Failed to send webhook:", response.statusText);
+    }
+  } catch (err) {
+    console.error("Error sending webhook:", err);
   }
-  next();
 }
 
-// ---------- API: AVAILABILITY ----------
-app.get('/api/check-availability', async (req, res) => {
-  const { username, email } = req.query;
+// ---------- API: PUBLIC CHAT HISTORY ----------
+app.get("/api/public-messages", async (req, res) => {
   try {
-    const queries = [];
-    if (username) queries.push({ username });
-    if (email) queries.push({ email });
-    if (!queries.length) return res.json({ ok: true });
+    const messages = await PublicMessage
+      .find({})
+      .sort({ time: 1 })
+      .limit(200)
+      .lean();
 
-    const existing = await User.findOne({ $or: queries }).select('username email -_id').lean();
-    if (!existing) return res.json({ ok: true });
-
-    const conflict = {};
-    if (username && existing.username === username) conflict.username = true;
-    if (email && existing.email === email) conflict.email = true;
-    return res.json({ ok: false, conflict });
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ ok: false, error: 'server_error' });
+    res.json({ ok: true, messages });
+  } catch (err) {
+    console.error("load public messages error:", err);
+    res.status(500).json({ ok: false });
   }
 });
 
-// ---------- API: IMAGE UPLOAD (IMGBB) ----------
+// ---------- API: IMAGE UPLOAD ----------
 app.post('/api/upload-image', upload.single('image'), async (req, res) => {
   const IMGBB_KEY = process.env.IMGBB_API_KEY;
   if (!IMGBB_KEY) return res.status(500).json({ ok: false, error: 'no_imgbb_key' });
@@ -239,6 +202,8 @@ app.post('/api/upload-image', upload.single('image'), async (req, res) => {
     return res.status(500).json({ ok: false, error: 'upload_error' });
   }
 });
+
+// ---------- API: UPDATE PROFILE ----------
 app.post('/api/update-profile', async (req, res) => {
   const { username, updates } = req.body;
 
@@ -365,96 +330,13 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// ---------- ADMIN API ----------
-app.get('/api/admin/users', requireAdmin, async (req, res) => {
-  const users = await User.find().select('-passwordHash').lean();
-  res.json({ ok: true, users });
-});
-
-app.post('/api/admin/update-user', requireAdmin, async (req, res) => {
-  const { username, updates } = req.body;
-  const user = await User.findOneAndUpdate({ username }, updates, { new: true }).select('-passwordHash');
-  res.json({ ok: true, user });
-});
-
-app.post('/api/admin/ban', requireAdmin, async (req, res) => {
-  const { username, banned } = req.body;
-  const user = await User.findOneAndUpdate({ username }, { banned }, { new: true }).select('-passwordHash');
-  res.json({ ok: true, user });
-});
-
-app.post('/api/admin/reset-password', requireAdmin, async (req, res) => {
-  const { username, newPassword } = req.body;
-  const hash = await bcrypt.hash(newPassword, 10);
-  await User.findOneAndUpdate({ username }, { passwordHash: hash });
-  res.json({ ok: true });
-});
-
-app.post('/api/admin/delete-user', requireAdmin, async (req, res) => {
-  const { username } = req.body;
-  await User.deleteOne({ username });
-  res.json({ ok: true });
-});
-
-app.get("/api/public-messages", async (req, res) => {
-  try {
-    const messages = await PublicMessage
-      .find({})
-      .sort({ time: 1 }) // oldest → newest
-      .limit(200)        // prevent overload
-      .lean();
-
-    res.json({ ok: true, messages });
-  } catch (err) {
-    console.error("load public messages error:", err);
-    res.status(500).json({ ok: false });
-  }
-});
-
-
-// ---------- ADMIN ANALYTICS ----------
-app.get('/api/admin/stats', requireAdmin, async (req, res) => {
-  const [totalUsers, onlineUsers, bannedUsers, totalLogs] = await Promise.all([
-    User.countDocuments({}),
-    User.countDocuments({ online: true }),
-    User.countDocuments({ banned: true }),
-    IpLog.countDocuments({})
-  ]);
-
-  const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const [logins24h, fails24h, regs24h] = await Promise.all([
-    IpLog.countDocuments({ action: 'login_success', createdAt: { $gte: last24h } }),
-    IpLog.countDocuments({ action: 'login_fail', createdAt: { $gte: last24h } }),
-    IpLog.countDocuments({ action: 'register', createdAt: { $gte: last24h } })
-  ]);
-
-  res.json({
-    ok: true,
-    totalUsers,
-    onlineUsers,
-    bannedUsers,
-    totalLogs,
-    last24h: { logins24h, fails24h, regs24h }
-  });
-});
-
-app.get('/api/admin/top-ips', requireAdmin, async (req, res) => {
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const agg = await IpLog.aggregate([
-    { $match: { createdAt: { $gte: since } } },
-    { $group: { _id: '$ip', count: { $sum: 1 } } },
-    { $sort: { count: -1 } },
-    { $limit: 20 }
-  ]);
-  res.json({ ok: true, ips: agg });
-});
-
 // ---------- SOCKET.IO ----------
 const onlineByUsername = new Map();
 
 io.on('connection', (socket) => {
   console.log('socket connected', socket.id);
 
+  // USER LOGIN
   socket.on('login', async (user) => {
     const u = await User.findOneAndUpdate(
       { username: user.username },
@@ -462,89 +344,100 @@ io.on('connection', (socket) => {
       { new: true }
     );
     if (!u) return;
+
     onlineByUsername.set(u.username, socket.id);
-    const onlineUsers = await User.find({ online: true }).select('username display imageUrl -_id').lean();
+
+    const onlineUsers = await User.find({ online: true })
+      .select('username display imageUrl -_id')
+      .lean();
+
     io.emit('presence', onlineUsers);
   });
 
-socket.on('publicMessage', async (msg) => {
-  const enriched = {
-    from: msg.from,
-    display: msg.display,
-    text: msg.text,
-    time: new Date()
-  };
+  // PUBLIC MESSAGE
+  socket.on('publicMessage', async (msg) => {
+    const enriched = {
+      from: msg.from,
+      display: msg.display,
+      text: msg.text,
+      time: new Date()
+    };
 
-  // Save to MongoDB
-  try {
-    await PublicMessage.create(enriched);
-  } catch (err) {
-    console.error("Failed to save public message:", err);
-  }
+    // Save to MongoDB
+    try {
+      await PublicMessage.create(enriched);
+    } catch (err) {
+      console.error("Failed to save public message:", err);
+    }
 
-  // Broadcast to all clients
-  io.emit('publicMessage', enriched);
+    // Broadcast
+    io.emit('publicMessage', enriched);
 
-  // Send to Discord webhook
-  try {
-    const user = await User.findOne({ username: msg.from }).lean();
-    const avatarUrl = user?.imageUrl || null;
+    // Discord webhook
+    try {
+      const user = await User.findOne({ username: msg.from }).lean();
+      const avatarUrl = user?.imageUrl || null;
 
-    await sendDiscordWebhookMessage(
-      msg.display || msg.from,
-      msg.text,
-      avatarUrl
-    );
-  } catch (err) {
-    console.error("Discord webhook error:", err);
-  }
-});
-
-
-
-  socket.on('privateMessage', async (pm) => {
-    const targetSocket = onlineByUsername.get(pm.to);
-    if (targetSocket) {
-      io.to(targetSocket).emit('privateMessage', pm);
-      io.to(socket.id).emit('privateMessage', pm);
-    } else {
-      io.to(socket.id).emit('pmError', { to: pm.to, reason: 'User offline' });
+      await sendDiscordWebhookMessage(
+        msg.display || msg.from,
+        msg.text,
+        avatarUrl
+      );
+    } catch (err) {
+      console.error("Discord webhook error:", err);
     }
   });
 
-  socket.on("createRoom", async ({ name }) => {
-  const roomId = `room_${Date.now()}`;
-  socket.join(roomId);
+  // ROOM JOIN
+  socket.on("joinRoom", async ({ room }) => {
+    socket.join(room);
 
-  // Save room membership
-  if (!socket.roomsJoined) socket.roomsJoined = [];
-  socket.roomsJoined.push({ id: roomId, name });
+    const history = await RoomMessage
+      .find({ room })
+      .sort({ time: 1 })
+      .limit(200)
+      .lean();
 
-  io.to(socket.id).emit("roomsUpdate", socket.roomsJoined);
-});
+    io.to(socket.id).emit("roomHistory", { room, history });
+  });
 
-socket.on("joinRoom", ({ room }) => {
-  socket.join(room);
+  // ROOM MESSAGE
+  socket.on("roomMessage", async (msg) => {
+    const enriched = {
+      room: msg.room,
+      from: msg.from,
+      display: msg.display,
+      text: msg.text,
+      time: new Date()
+    };
 
-  if (!socket.roomsJoined) socket.roomsJoined = [];
-  if (!socket.roomsJoined.find(r => r.name === room)) {
-    socket.roomsJoined.push({ id: room, name: room });
-  }
+    try {
+      await RoomMessage.create(enriched);
+    } catch (err) {
+      console.error("Failed to save room message:", err);
+    }
 
-  io.to(socket.id).emit("roomsUpdate", socket.roomsJoined);
-});
+    io.to(msg.room).emit("roomMessage", enriched);
+  });
 
+  // DISCONNECT
   socket.on('disconnect', async () => {
     const u = await User.findOneAndUpdate(
       { socketId: socket.id },
       { online: false, socketId: null },
       { new: true }
     );
+
     if (u) {
       onlineByUsername.delete(u.username);
-      const onlineUsers = await User.find({ online: true }).select('username display imageUrl -_id').lean();
+
+      const onlineUsers = await User.find({ online: true })
+        .select('username display imageUrl -_id')
+        .lean();
+
       io.emit('presence', onlineUsers);
     }
+
     console.log('socket disconnected', socket.id);
   });
 });
