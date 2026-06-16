@@ -43,7 +43,7 @@ function renderMessageAvatar(username, display, imageUrl, size = 36) {
 // -------------------------------------------------------------
 function getSession() {
   try {
-    const raw = localStorage.getItem('session');
+    const raw = localStorage.getItem('cw_session_v1');
     if (!raw) return null;
     return JSON.parse(raw);
   } catch {
