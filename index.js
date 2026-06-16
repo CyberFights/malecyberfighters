@@ -112,6 +112,15 @@ const ipLogSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+const publicMessageSchema = new mongoose.Schema({
+  from: String,
+  display: String,
+  text: String,
+  time: { type: Date, default: Date.now }
+});
+
+const PublicMessage = mongoose.model("PublicMessage", publicMessageSchema);
+
 const User = mongoose.model('User', userSchema);
 const IpLog = mongoose.model('IpLog', ipLogSchema);
 
@@ -387,6 +396,22 @@ app.post('/api/admin/delete-user', requireAdmin, async (req, res) => {
   res.json({ ok: true });
 });
 
+app.get("/api/public-messages", async (req, res) => {
+  try {
+    const messages = await PublicMessage
+      .find({})
+      .sort({ time: 1 }) // oldest → newest
+      .limit(200)        // prevent overload
+      .lean();
+
+    res.json({ ok: true, messages });
+  } catch (err) {
+    console.error("load public messages error:", err);
+    res.status(500).json({ ok: false });
+  }
+});
+
+
 // ---------- ADMIN ANALYTICS ----------
 app.get('/api/admin/stats', requireAdmin, async (req, res) => {
   const [totalUsers, onlineUsers, bannedUsers, totalLogs] = await Promise.all([
@@ -443,17 +468,28 @@ io.on('connection', (socket) => {
   });
 
 socket.on('publicMessage', async (msg) => {
-  const enriched = { ...msg, time: new Date().toISOString() };
+  const enriched = {
+    from: msg.from,
+    display: msg.display,
+    text: msg.text,
+    time: new Date()
+  };
+
+  // Save to MongoDB
+  try {
+    await PublicMessage.create(enriched);
+  } catch (err) {
+    console.error("Failed to save public message:", err);
+  }
 
   // Broadcast to all clients
   io.emit('publicMessage', enriched);
 
-  // Lookup avatar for Discord webhook
+  // Send to Discord webhook
   try {
     const user = await User.findOne({ username: msg.from }).lean();
     const avatarUrl = user?.imageUrl || null;
 
-    // Send to Discord
     await sendDiscordWebhookMessage(
       msg.display || msg.from,
       msg.text,
@@ -463,6 +499,7 @@ socket.on('publicMessage', async (msg) => {
     console.error("Discord webhook error:", err);
   }
 });
+
 
 
   socket.on('privateMessage', async (pm) => {
