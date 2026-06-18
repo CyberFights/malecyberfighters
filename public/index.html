@@ -573,6 +573,39 @@ table tr:hover {
 .side-close-btn:hover {
   color: var(--accent);
 }
+.roster-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(160,200,255,0.06);
+  border: 1px solid rgba(160,200,255,0.15);
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.roster-user:hover {
+  background: rgba(127,216,255,0.15);
+}
+
+.roster-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid rgba(160,200,255,0.25);
+}
+
+.roster-name {
+  font-weight: 700;
+  color: #e9f6ff;
+}
+
+.roster-username {
+  font-size: 12px;
+  color: var(--muted);
+}
 
 </style>
 </head>
@@ -766,16 +799,35 @@ table tr:hover {
 </div>
 
 <!-- ROSTER MODAL -->
-<div id="modalRoster" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.6);align-items:center;justify-content:center">
-  <div>
+<!-- USER ROSTER POPUP -->
+<div id="modalRoster" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.6);align-items:center;justify-content:center;z-index:9999">
+  <div style="background:#111;padding:18px;border-radius:10px;width:760px;max-height:80vh;overflow:auto">
 
-    <h3>User Roster</h3>
+    <h3 style="margin:0 0 12px 0">User Roster</h3>
+
+    <!-- SEARCH BAR -->
+    <input 
+      id="rosterSearch" 
+      type="text" 
+      placeholder="Search users..." 
+      style="width:100%;margin-bottom:12px"
+    >
+
+    <!-- USER LIST -->
     <div id="rosterPage" class="roster-list"></div>
-    <div>
+
+    <div style="display:flex;justify-content:flex-end;margin-top:12px">
       <button id="rosterClose" class="ghost">Close</button>
     </div>
+<div id="rosterPagination" style="display:flex;justify-content:center;gap:10px;margin-top:12px">
+  <button id="rosterPrev" class="small-btn">Prev</button>
+  <span id="rosterPageNumber" class="small muted"></span>
+  <button id="rosterNext" class="small-btn">Next</button>
+</div>
+
   </div>
 </div>
+
 
 <!-- CHAT POPUP -->
 <div id="chatPopup" class="chat-popup" style="display:none">
