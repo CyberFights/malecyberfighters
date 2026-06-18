@@ -155,12 +155,32 @@ function renderRosterPopup() {
 
 // OPEN PROFILE (hook into your existing profile modal)
 function openUserProfile(username) {
-  console.log("Open profile:", username);
-  // You already have a profile modal — call it here
-  if (window.openProfileModal) {
-    openProfileModal(username);
+  const user = (window.users || []).find(u => u.username === username);
+  if (!user) return;
+
+  $('vpName').textContent = user.display;
+  $('vpUsername').textContent = user.username;
+  $('vpBio').textContent = user.info || "No bio provided";
+  $('vpWins').textContent = user.wins ?? 0;
+  $('vpLosses').textContent = user.losses ?? 0;
+  $('vpLang').textContent = user.language || "Unknown";
+  $('vpAge').textContent = user.age || "Unknown";
+
+  $('vpColorBox').style.background = user.color || "#7fd8ff";
+
+  if (user.imageUrl) {
+    $('vpAvatar').src = user.imageUrl;
+  } else {
+    $('vpAvatar').src = "https://via.placeholder.com/120?text=No+Image";
   }
+
+  $('modalViewProfile').style.display = "flex";
 }
+
+$('vpClose').addEventListener('click', () => {
+  $('modalViewProfile').style.display = "none";
+});
+
 // PAGINATION SETTINGS
 let rosterPage = 1;
 const rosterPerPage = 12;
