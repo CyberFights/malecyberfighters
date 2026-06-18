@@ -548,3 +548,29 @@ function appendRoomMessage(msg){
 function openPrivateWindow(username){
   console.log("PM:", username);
 }
+
+makeDraggable($('chatPopup'));
+
+function makeDraggable(el) {
+  let offsetX = 0, offsetY = 0, isDown = false;
+
+  el.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.message') || e.target.closest('input') || e.target.closest('textarea')) return;
+
+    isDown = true;
+    offsetX = e.clientX - el.offsetLeft;
+    offsetY = e.clientY - el.offsetTop;
+    el.style.transition = "none";
+  });
+
+  document.addEventListener('mouseup', () => {
+    isDown = false;
+    el.style.transition = "";
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isDown) return;
+    el.style.left = (e.clientX - offsetX) + "px";
+    el.style.top = (e.clientY - offsetY) + "px";
+  });
+}
