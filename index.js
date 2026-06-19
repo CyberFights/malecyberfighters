@@ -379,6 +379,19 @@ app.post("/api/chatMessage", async (req, res) => {
   }
 });
 
+app.get("/api/allUsers", async (req, res) => {
+  try {
+    const users = await User.find()
+      .select("username display imageUrl info wins losses color language age createdAt")
+      .lean();
+
+    res.json({ success: true, users });
+  } catch (err) {
+    console.error("Error fetching all users:", err);
+    res.status(500).json({ success: false });
+  }
+});
+
 // ---------- SOCKET.IO ----------
 const onlineByUsername = new Map();
 
