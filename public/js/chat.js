@@ -246,65 +246,7 @@ $('rosterNext')?.addEventListener('click', () => {
   renderRosterPopup();
 });
 
-// MAIN ROSTER RENDERER
-function renderRosterPopup() {
-  const list = $('rosterPage');
-  const search = $('rosterSearch').value.toLowerCase();
-  const pageLabel = $('rosterPageNumber');
 
-  list.innerHTML = '';
-
-  // SORT NEWEST FIRST (based on MongoDB _id timestamp)
-  let sorted = [...(window.users || [])].sort((a, b) => {
-    return new Date(b.createdAt || b._id?.toString().slice(0, 8) * 1000) -
-           new Date(a.createdAt || a._id?.toString().slice(0, 8) * 1000);
-  });
-
-  // FILTER BY SEARCH
-  sorted = sorted.filter(u =>
-    u.username.toLowerCase().includes(search) ||
-    u.display.toLowerCase().includes(search)
-  );
-
-  // PAGINATION
-  const total = sorted.length;
-  const totalPages = Math.max(1, Math.ceil(total / rosterPerPage));
-
-  if (rosterPage > totalPages) rosterPage = totalPages;
-
-  const start = (rosterPage - 1) * rosterPerPage;
-  const end = start + rosterPerPage;
-
-  const pageItems = sorted.slice(start, end);
-
-  // RENDER USERS
-  pageItems.forEach(u => {
-    const div = document.createElement('div');
-    div.className = 'roster-user';
-
-    const avatar = u.imageUrl
-      ? `<img src="${u.imageUrl}" class="roster-avatar">`
-      : `<div class="avatar-fallback roster-avatar">${u.display[0]}</div>`;
-
-    div.innerHTML = `
-      ${avatar}
-      <div>
-        <div class="roster-name">${u.display}</div>
-        <div class="roster-username">@${u.username}</div>
-      </div>
-    `;
-
-    div.addEventListener('click', () => openUserProfile(u.username));
-    list.appendChild(div);
-  });
-
-  // UPDATE PAGE LABEL
-  pageLabel.textContent = `Page ${rosterPage} / ${totalPages}`;
-
-  // ENABLE/DISABLE BUTTONS
-  $('rosterPrev').disabled = rosterPage <= 1;
-  $('rosterNext').disabled = rosterPage >= totalPages;
-}
 
 
 /* ============================================================
