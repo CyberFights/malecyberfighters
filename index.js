@@ -162,6 +162,28 @@ async function sendDiscordWebhookMessage(username, message, avatarUrl) {
   }
 }
 
+app.post("/api/check-availability", async (req, res) => {
+  try {
+    const { username, email } = req.body;
+
+    const exists = await User.findOne({
+      $or: [
+        { username: username?.toLowerCase() },
+        { email: email?.toLowerCase() }
+      ]
+    });
+
+    res.json({
+      available: !exists
+    });
+
+  } catch (err) {
+    console.error("Availability check error:", err);
+    res.status(500).json({ available: false });
+  }
+});
+
+
 // ---------- API: PUBLIC CHAT HISTORY ----------
 app.get("/api/public-messages", async (req, res) => {
   try {
