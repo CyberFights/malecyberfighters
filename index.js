@@ -95,6 +95,13 @@ const roomMessageSchema = new mongoose.Schema({
   time: { type: Date, default: Date.now }
 });
 
+const RoomSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  private: { type: Boolean, default: false },
+  owner: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now }
+});
+
 const ipLogSchema = new mongoose.Schema({
   ip: String,
   username: String,
