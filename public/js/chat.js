@@ -591,6 +591,7 @@ socket.on("roomsList", rooms => {
   window.rooms = rooms;
   renderRoomsSidebar();
 });
+
 function renderRoomsSidebar() {
   const list = $('roomsList');
   const sort = $('roomSort').value;
@@ -601,7 +602,7 @@ function renderRoomsSidebar() {
   // FILTER OUT PRIVATE ROOMS YOU DON'T OWN
  rooms = rooms.filter(r => {
   if (!r.private) return true; // public room
-  if (r.owner === window.username) return true; // owner
+ if (r.owner?.toLowerCase() === window.username?.toLowerCase()) return true;
   if (r.invitedUsers?.includes(window.username)) return true; // invited
   return false; // hide from everyone else
 });
