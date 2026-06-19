@@ -576,11 +576,17 @@ function makeDraggable(el) {
 }
 
 $('createRoomBtn')?.addEventListener('click', () => {
-  const name = prompt("Enter a name for the new room:");
+  const name = prompt("Enter room name:");
   if (!name) return;
 
-  socket.emit("createRoom", { name });
+  const isPrivate = confirm("Make this a PRIVATE room?");
+
+  socket.emit("createRoom", {
+    name,
+    private: isPrivate
+  });
 });
+
 socket.on("roomsList", rooms => {
   window.rooms = rooms;
   renderRoomsSidebar();
