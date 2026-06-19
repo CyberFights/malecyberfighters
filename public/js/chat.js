@@ -574,3 +574,30 @@ function makeDraggable(el) {
     el.style.top = (e.clientY - offsetY) + "px";
   });
 }
+
+$('createRoomBtn')?.addEventListener('click', () => {
+  const name = prompt("Enter a name for the new room:");
+  if (!name) return;
+
+  socket.emit("createRoom", { name });
+});
+socket.on("roomsList", rooms => {
+  window.rooms = rooms;
+  renderRoomsSidebar();
+});
+function renderRoomsSidebar() {
+  const list = $('roomsList');
+  list.innerHTML = "";
+
+  (window.rooms || []).forEach(room => {
+    const div = document.createElement("div");
+    div.className = "room-item";
+    div.textContent = room.name;
+
+    div.addEventListener("click", () => {
+      joinRoom(room._id);
+    });
+
+    list.appendChild(div);
+  });
+}
