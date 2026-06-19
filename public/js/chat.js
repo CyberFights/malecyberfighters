@@ -593,12 +593,36 @@ socket.on("roomsList", rooms => {
 });
 function renderRoomsSidebar() {
   const list = $('roomsList');
+  const sort = $('roomSort').value;
   list.innerHTML = "";
 
-  (window.rooms || []).forEach(room => {
+  let rooms = [...(window.rooms || [])];
+
+  // FILTER OUT PRIVATE ROOMS YOU DON'T OWN
+  rooms = rooms.filter(r => !r.private || r.owner === window.username);
+
+  // SORTING
+  if (sort === "newest") {
+    rooms.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }
+  if (sort === "oldest") {
+    rooms.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  }
+  if (sort === "az") {
+    rooms.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  if (sort === "za") {
+    rooms.sort((a, b) => b.name.localeCompare(a.name));
+  }
+
+  // RENDER
+  rooms.forEach(room => {
     const div = document.createElement("div");
     div.className = "room-item";
-    div.textContent = room.name;
+
+    div.innerHTML = `
+      ${room.private ? "🔒 " : ""}${room.name}
+    `;
 
     div.addEventListener("click", () => {
       joinRoom(room._id);
@@ -607,3 +631,4 @@ function renderRoomsSidebar() {
     list.appendChild(div);
   });
 }
+
