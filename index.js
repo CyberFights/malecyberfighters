@@ -99,8 +99,10 @@ const RoomSchema = new mongoose.Schema({
   name: { type: String, required: true },
   private: { type: Boolean, default: false },
   owner: { type: String, required: true },
+  invitedUsers: { type: [String], default: [] },
   createdAt: { type: Date, default: Date.now }
 });
+
 
 const ipLogSchema = new mongoose.Schema({
   ip: String,
@@ -507,6 +509,35 @@ io.on('connection', (socket) => {
   socket.join(room._id.toString());
 
   // Send updated room list to all users
+  const rooms = await Room.find().lean();
+  io.emit("roomsList", rooms);
+});
+
+  socket.on("inviteToRoom", async ({ roomId, username }) => {
+  const room = await Room.findById(roomId);
+  if (!room) return;
+
+  // Only owner can invite
+  if (room.owner !== socket.username) return;
+
+  // Add user if not already invited
+  if (!room.invitedUsers.includes(username)) {
+    room.invitedUsers.push(username);
+    await room.save();
+  }
+
+  // Notify the invited user if online
+  const targetSocket = [...io.sockets.sockets.values()]
+    .find(s => s.username === username);
+
+  if (targetSocket) {
+    targetSocket.emit("roomInvited", {
+      roomId,
+      roomName: room.name
+    });
+  }
+
+  // Update room list for everyone
   const rooms = await Room.find().lean();
   io.emit("roomsList", rooms);
 });
