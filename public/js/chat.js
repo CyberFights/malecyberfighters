@@ -103,10 +103,20 @@ function renderRosterPage(){
   });
 }
 // OPEN ROSTER POPUP
-$('btnRoster')?.addEventListener('click', () => {
+$('btnRoster')?.addEventListener('click', async () => {
   $('modalRoster').style.display = 'flex';
-  renderRosterPopup();
+
+  // Fetch ALL users from MongoDB
+  const res = await fetch("/api/allUsers");
+  const data = await res.json();
+
+  if (data.success) {
+    window.allUsers = data.users;
+    rosterPage = 1;
+    renderRosterPopup();
+  }
 });
+
 
 // CLOSE ROSTER POPUP
 $('rosterClose')?.addEventListener('click', () => {
@@ -122,40 +132,60 @@ $('rosterSearch')?.addEventListener('input', () => {
 function renderRosterPopup() {
   const list = $('rosterPage');
   const search = $('rosterSearch').value.toLowerCase();
+  const pageLabel = $('rosterPageNumber');
 
   list.innerHTML = '';
 
-  (window.users || [])
-    .filter(u =>
-      u.username.toLowerCase().includes(search) ||
-      u.display.toLowerCase().includes(search)
-    )
-    .forEach(u => {
-      const div = document.createElement('div');
-      div.className = 'roster-user';
+  let sorted = [...(window.allUsers || [])];
 
-      const avatar = u.imageUrl
-        ? `<img src="${u.imageUrl}" class="roster-avatar">`
-        : `<div class="avatar-fallback roster-avatar">${u.display[0]}</div>`;
+  // SORT NEWEST FIRST
+  sorted.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-      div.innerHTML = `
-        ${avatar}
-        <div>
-          <div class="roster-name">${u.display}</div>
-          <div class="roster-username">@${u.username}</div>
-        </div>
-      `;
+  // SEARCH FILTER
+  sorted = sorted.filter(u =>
+    u.username.toLowerCase().includes(search) ||
+    u.display.toLowerCase().includes(search)
+  );
 
-      // CLICK → OPEN PROFILE
-      div.addEventListener('click', () => openUserProfile(u.username));
+  // PAGINATION
+  const total = sorted.length;
+  const totalPages = Math.max(1, Math.ceil(total / rosterPerPage));
 
-      list.appendChild(div);
-    });
+  if (rosterPage > totalPages) rosterPage = totalPages;
+
+  const start = (rosterPage - 1) * rosterPerPage;
+  const end = start + rosterPerPage;
+
+  const pageItems = sorted.slice(start, end);
+
+  // RENDER USERS
+  pageItems.forEach(u => {
+    const div = document.createElement('div');
+    div.className = 'roster-user';
+
+    const avatar = u.imageUrl
+      ? `<img src="${u.imageUrl}" class="roster-avatar">`
+      : `<div class="avatar-fallback roster-avatar">${u.display[0]}</div>`;
+
+    div.innerHTML = `
+      ${avatar}
+      <div>
+        <div class="roster-name">${u.display}</div>
+        <div class="roster-username">@${u.username}</div>
+      </div>
+    `;
+
+    div.addEventListener('click', () => openUserProfile(u.username));
+    list.appendChild(div);
+  });
+
+  pageLabel.textContent = `Page ${rosterPage} / ${totalPages}`;
 }
+
 
 // OPEN PROFILE (hook into your existing profile modal)
 function openUserProfile(username) {
-  const user = (window.users || []).find(u => u.username === username);
+  const user = (window.allUsers || []).find(u => u.username === username);
   if (!user) return;
 
   $('vpName').textContent = user.display;
