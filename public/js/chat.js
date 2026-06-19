@@ -631,4 +631,5 @@ function renderRoomsSidebar() {
     list.appendChild(div);
   });
 }
+$('roomSort')?.addEventListener('change', renderRoomsSidebar);
 
