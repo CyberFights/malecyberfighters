@@ -599,7 +599,13 @@ function renderRoomsSidebar() {
   let rooms = [...(window.rooms || [])];
 
   // FILTER OUT PRIVATE ROOMS YOU DON'T OWN
-  rooms = rooms.filter(r => !r.private || r.owner === window.username);
+ rooms = rooms.filter(r => {
+  if (!r.private) return true; // public room
+  if (r.owner === window.username) return true; // owner
+  if (r.invitedUsers?.includes(window.username)) return true; // invited
+  return false; // hide from everyone else
+});
+
 
   // SORTING
   if (sort === "newest") {
@@ -627,9 +633,30 @@ function renderRoomsSidebar() {
     div.addEventListener("click", () => {
       joinRoom(room._id);
     });
+if (room.owner === window.username) {
+  const inviteBtn = document.createElement("button");
+  inviteBtn.className = "ghost small-btn";
+  inviteBtn.textContent = "Invite User";
+
+  inviteBtn.addEventListener("click", () => {
+    const username = prompt("Enter username to invite:");
+    if (!username) return;
+
+    socket.emit("inviteToRoom", {
+      roomId: room._id,
+      username
+    });
+  });
+
+  div.appendChild(inviteBtn);
+}
 
     list.appendChild(div);
   });
 }
 $('roomSort')?.addEventListener('change', renderRoomsSidebar);
+socket.on("roomInvited", ({ roomId, roomName }) => {
+  alert(`You have been invited to join the private room: ${roomName}`);
+});
+
 
