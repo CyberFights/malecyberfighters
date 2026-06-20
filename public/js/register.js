@@ -3,24 +3,18 @@ $('regCancel').addEventListener('click', () => hide($('modalRegister')));
 
 let uploadedImageUrl = '';
 
-app.post("/api/check-availability", async (req, res) => {
-  try {
-    const { username, email } = req.body;
-
-    const exists = await User.findOne({
-      $or: [
-        { username: username?.toLowerCase() },
-        { email: email?.toLowerCase() }
-      ]
-    });
-
-    res.json({ available: !exists });
-
-  } catch (err) {
-    console.error("Availability check error:", err);
-    res.status(500).json({ available: false });
-  }
+async function checkAvailability(username, email){
+  const params = new URLSearchParams();
+  if(username) params.append('username', username);
+  if(email) params.append('email', email);
+const res = await fetch("/api/check-availability", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ username, email })
 });
+  return res.json();
+}
+
 
 
 $('btnUploadImage').addEventListener('click', async () => {
