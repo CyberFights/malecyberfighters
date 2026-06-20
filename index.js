@@ -449,6 +449,7 @@ io.on('connection', (socket) => {
 
   // USER LOGIN
   socket.on('login', async (user) => {
+    socket.username = user.username;
     const u = await User.findOneAndUpdate(
       { username: user.username },
       { online: true, socketId: socket.id },
@@ -572,7 +573,6 @@ io.on('connection', (socket) => {
 
   socket.join(room._id.toString());
 
-  // ⭐ SEND UPDATED ROOM LIST TO ALL USERS
   const rooms = await Room.find().lean();
   io.emit("roomsList", rooms);
 });
