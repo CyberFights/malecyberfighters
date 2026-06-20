@@ -146,8 +146,18 @@ function updateDMListSidebar() {
     sidebar.innerHTML = '<div class="small" style="color:var(--muted)">Login to see DMs</div>';
     return;
   }
+const unread = getUnreadMap();
+const total = Object.values(unread).reduce((a,b) => a + b, 0);
 
-  const unread = getUnreadMap();
+const badge = $('dmBadge');
+if (badge) {
+  if (total > 0) {
+    badge.textContent = total;
+    badge.style.display = 'inline-block';
+  } else {
+    badge.style.display = 'none';
+  }
+}
   const keys = Object.keys(localStorage)
     .filter(k => k.startsWith(STORAGE_DM_PREFIX))
     .map(k => k.replace(STORAGE_DM_PREFIX, ''));
