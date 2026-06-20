@@ -564,6 +564,7 @@ socket.on("roomsList", rooms => {
   renderRoomsSidebar();
 });
 
+
 function renderRoomsSidebar() {
   const list = $('roomsList');
   const sort = $('roomSort').value;
@@ -572,11 +573,16 @@ function renderRoomsSidebar() {
   let rooms = [...(window.rooms || [])];
 
   // FILTER OUT PRIVATE ROOMS YOU DON'T OWN
- rooms = rooms.filter(r => {
-  if (!r.private) return true; // public room
- if (r.owner?.toLowerCase() === window.username?.toLowerCase()) return true;
-  if (r.invitedUsers?.includes(window.username)) return true; // invited
-  return false; // hide from everyone else
+const s = getSession();
+rooms = rooms.filter(r => {
+  if (!r.private) return true;
+  if (r.owner?.toLowerCase() === s?.username?.toLowerCase()) return true;
+  if (r.invitedUsers?.includes(s?.username)) return true;
+  return false;
+});
+
+div.addEventListener("click", () => {
+  openRoomPopup(room._id, room.name);
 });
 
 
