@@ -484,8 +484,17 @@ socket.on('roomHistory', ({ room, history }) => {
 });
 
 socket.on('roomMessage', msg => {
+  const currentRoom = $('roomChatPopup').dataset.room;
+
+  if (msg.room !== currentRoom) {
+    incrementRoomUnread(msg.room);
+    updateRoomsSidebarBadges();
+    return;
+  }
+
   appendRoomMessage(msg);
 });
+
 
 function appendRoomMessage(msg){
   const feed = $('roomFeed');
@@ -601,9 +610,19 @@ rooms = rooms.filter(r => {
     const div = document.createElement("div");
     div.className = "room-item";
 
-    div.innerHTML = `
-      ${room.private ? "🔒 " : ""}${room.name}
-    `;
+   div.innerHTML = `
+  ${room.private ? "🔒 " : ""}${room.name}
+  <span class="room-badge" id="roomBadge_${room._id}" style="
+    background:#7fd8ff;
+    color:#00121f;
+    padding:2px 6px;
+    border-radius:6px;
+    font-size:11px;
+    font-weight:bold;
+    float:right;
+    display:none;
+  "></span>
+`;
 
     div.addEventListener("click", () => {
   openRoomPopup(room._id, room.name);
@@ -628,6 +647,8 @@ if (room.owner === window.username) {
 
     list.appendChild(div);
   });
+   updateRoomsSidebarBadges();
+
 }
 $('roomSort')?.addEventListener('change', renderRoomsSidebar);
 socket.on("roomInvited", ({ roomId, roomName }) => {
@@ -647,6 +668,26 @@ $('closeTOS')?.addEventListener('click', () => {
 $('btnPrivacy')?.addEventListener('click', () => {
   $('modalPrivacy').style.display = 'flex';
 });
+function updateRoomsSidebarBadges() {
+  const unread = getRoomUnread();
+
+  Object.keys(unread).forEach(roomId => {
+    const badge = $('roomBadge_' + roomId);
+    if (badge) {
+      badge.textContent = unread[roomId];
+      badge.style.display = 'inline-block';
+    }
+  });
+
+  // hide badges for cleared rooms
+  (window.rooms || []).forEach(r => {
+    if (!unread[r._id]) {
+      const badge = $('roomBadge_' + r._id);
+      if (badge) badge.style.display = 'none';
+    }
+  });
+}
+
 
 // CLOSE PRIVACY
 $('closePrivacy')?.addEventListener('click', () => {
@@ -659,8 +700,12 @@ function openRoomPopup(roomId, roomName) {
   popup.dataset.room = roomId;
   popup.style.display = 'flex';
 
+  clearRoomUnread(roomId);
+  updateRoomsSidebarBadges();
+
   socket.emit("joinRoom", { room: roomId });
 }
+
 
 $('roomSendBtn').addEventListener('click', () => {
   const room = $('roomChatPopup').dataset.room;
