@@ -444,8 +444,12 @@ app.get("/api/allUsers", async (req, res) => {
 // ---------- SOCKET.IO ----------
 const onlineByUsername = new Map();
 
-io.on('connection', (socket) => {
-  console.log('socket connected', socket.id);
+io.on("connection", async (socket) => {
+  console.log("socket connected", socket.id);
+
+  // ⭐ SEND ALL ROOMS ON CONNECT
+  const rooms = await Room.find().lean();
+  socket.emit("roomsList", rooms);
 
   // USER LOGIN
   socket.on('login', async (user) => {
