@@ -163,3 +163,25 @@ window.addEventListener('load', () => {
   const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
   updateProfileCard(currentUser);
 });
+
+const STORAGE_ROOM_UNREAD = 'cw_room_unread';
+
+function getRoomUnread() {
+  return JSON.parse(localStorage.getItem(STORAGE_ROOM_UNREAD) || '{}');
+}
+
+function saveRoomUnread(map) {
+  localStorage.setItem(STORAGE_ROOM_UNREAD, JSON.stringify(map));
+}
+
+function incrementRoomUnread(roomId) {
+  const map = getRoomUnread();
+  map[roomId] = (map[roomId] || 0) + 1;
+  saveRoomUnread(map);
+}
+
+function clearRoomUnread(roomId) {
+  const map = getRoomUnread();
+  delete map[roomId];
+  saveRoomUnread(map);
+}
