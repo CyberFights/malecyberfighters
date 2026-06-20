@@ -168,7 +168,7 @@ app.get("/api/admin/users", async (req, res) => {
       .select("username display email imageUrl info wins losses color language age role banned createdAt")
       .lean();
 
-    res.json({ success: true, users });
+   res.json({ ok: true, users });
   } catch (err) {
     console.error("Admin user fetch error:", err);
     res.status(500).json({ success: false });
