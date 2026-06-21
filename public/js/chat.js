@@ -577,79 +577,63 @@ socket.on("roomsList", rooms => {
 function renderRoomsSidebar() {
   const list = $('roomsList');
   const sort = $('roomSort').value;
+  const s = getSession();
   list.innerHTML = "";
 
   let rooms = [...(window.rooms || [])];
 
-  // FILTER OUT PRIVATE ROOMS YOU DON'T OWN
-const s = getSession();
-rooms = rooms.filter(r => {
-  if (!r.private) return true;
-  if (r.owner?.toLowerCase() === s?.username?.toLowerCase()) return true;
-  if (r.invitedUsers?.includes(s?.username)) return true;
-  return false;
-});
-
+  // FILTER PRIVATE ROOMS
+  rooms = rooms.filter(r => {
+    if (!r.private) return true;
+    if (r.owner?.toLowerCase() === s?.username?.toLowerCase()) return true;
+    if (r.invitedUsers?.includes(s?.username)) return true;
+    return false;
+  });
 
   // SORTING
-  if (sort === "newest") {
-    rooms.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  }
-  if (sort === "oldest") {
-    rooms.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-  }
-  if (sort === "az") {
-    rooms.sort((a, b) => a.name.localeCompare(b.name));
-  }
-  if (sort === "za") {
-    rooms.sort((a, b) => b.name.localeCompare(a.name));
-  }
+  if (sort === "newest") rooms.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  if (sort === "oldest") rooms.sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt));
+  if (sort === "az") rooms.sort((a,b)=>a.name.localeCompare(b.name));
+  if (sort === "za") rooms.sort((a,b)=>b.name.localeCompare(a.name));
 
-  // RENDER
+  // RENDER ROOMS
   rooms.forEach(room => {
     const div = document.createElement("div");
     div.className = "room-item";
 
-   div.innerHTML = `
-  ${room.private ? "🔒 " : ""}${room.name}
-  <span class="room-badge" id="roomBadge_${room._id}" style="
-    background:#7fd8ff;
-    color:#00121f;
-    padding:2px 6px;
-    border-radius:6px;
-    font-size:11px;
-    font-weight:bold;
-    float:right;
-    display:none;
-  "></span>
-`;
+    div.innerHTML = `
+      ${room.private ? "🔒 " : ""}${room.name}
+    `;
 
+    // CLICK TO OPEN ROOM CHAT
     div.addEventListener("click", () => {
-  openRoomPopup(room._id, room.name);
-});
-if (room.owner === window.username) {
-  const inviteBtn = document.createElement("button");
-  inviteBtn.className = "ghost small-btn";
-  inviteBtn.textContent = "Invite User";
-
-  inviteBtn.addEventListener("click", () => {
-    const username = prompt("Enter username to invite:");
-    if (!username) return;
-
-    socket.emit("inviteToRoom", {
-      roomId: room._id,
-      username
+      openRoomPopup(room._id, room.name);
     });
-  });
 
-  div.appendChild(inviteBtn);
-}
+    // ⭐ INVITE BUTTON FOR OWNER ONLY
+    if (room.owner?.toLowerCase() === s?.username?.toLowerCase()) {
+      const inviteBtn = document.createElement("button");
+      inviteBtn.className = "ghost small-btn";
+      inviteBtn.textContent = "Invite";
+
+      inviteBtn.addEventListener("click", (e) => {
+        e.stopPropagation(); // prevent joinRoom()
+        const username = prompt("Enter username to invite:");
+        if (!username) return;
+
+        socket.emit("inviteToRoom", {
+          roomId: room._id,
+          username
+        });
+      });
+
+      div.appendChild(inviteBtn);
+    }
 
     list.appendChild(div);
   });
-   updateRoomsSidebarBadges();
-
 }
+
 $('roomSort')?.addEventListener('change', renderRoomsSidebar);
 socket.on("roomInvited", ({ roomId, roomName }) => {
   alert(`You have been invited to join the private room: ${roomName}`);
