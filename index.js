@@ -138,6 +138,20 @@ async function logIp(req, { action, username }) {
   }
 }
 
+async function translateText(text, targetLang) {
+  try {
+    const resp = await fetch(
+      `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`
+    );
+
+    const data = await resp.json();
+    return data[0][0][0]; // translated text
+  } catch (err) {
+    console.error("Translation error:", err);
+    return text; // fallback
+  }
+}
+
 async function sendDiscordWebhookMessage(username, message, avatarUrl) {
   if (!DISCORD_WEBHOOK_URL) return;
 
@@ -514,7 +528,16 @@ io.on("connection", async (socket) => {
     await PublicMessage.create(enriched);
 
     // Broadcast to all clients
-    io.emit('publicMessage', enriched);
+   const onlineUsers = await User.find({ online: true }).lean();
+
+onlineUsers.forEach(async u => {
+  const translated = await translateText(enriched.text, u.language || "en");
+
+  io.to(u.socketId).emit("publicMessage", {
+    ...enriched,
+    text: translated
+  });
+});
 
     // ⭐ SEND TO DISCORD WEBHOOK ⭐
     const user = await User.findOne({ username: msg.from }).lean();
@@ -531,6 +554,26 @@ io.on("connection", async (socket) => {
   }
 });
 
+socket.on("privateMessage", async pm => {
+  const sender = await User.findOne({ username: pm.from }).lean();
+  const receiver = await User.findOne({ username: pm.to }).lean();
+
+  if (!receiver || !receiver.socketId) {
+    socket.emit("pmError", { reason: "User offline" });
+    return;
+  }
+
+  // Translate for receiver
+  const translated = await translateText(pm.text, receiver.language || "en");
+
+  io.to(receiver.socketId).emit("privateMessage", {
+    ...pm,
+    text: translated
+  });
+
+  // Sender sees original text
+  io.to(sender.socketId).emit("privateMessage", pm);
+});
 
   // ROOM JOIN
   socket.on("joinRoom", async ({ room }) => {
@@ -561,7 +604,17 @@ io.on("connection", async (socket) => {
       console.error("Failed to save room message:", err);
     }
 
-    io.to(msg.room).emit("roomMessage", enriched);
+   const members = await User.find({ socketId: { $ne: null } }).lean();
+
+members.forEach(async u => {
+  const translated = await translateText(enriched.text, u.language || "en");
+
+  io.to(u.socketId).emit("roomMessage", {
+    ...enriched,
+    text: translated
+  });
+});
+
   });
 
  socket.on("createRoom", async ({ name, private }) => {
