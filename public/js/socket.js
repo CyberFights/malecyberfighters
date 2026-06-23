@@ -13,22 +13,23 @@ socket.on('privateMessage', pm => {
   const me = getSession();
   if (!me) return;
 
-  const key = pmKey(pm.from, pm.to);
-  let arr = loadDM(pm.from, pm.to);
-  arr.push(pm);
-  saveDM(pm.from, pm.to, arr);
-
+  // Determine the other user in the DM
   const other = pm.from === me.username ? pm.to : pm.from;
 
-  if (pm.from !== me.username) {
-    incrementUnread(pm.from);
+  // Check if the DM window is open
+  const body = document.getElementById("pmBody_" + other);
+
+  if (body) {
+    // Append to in‑memory history
+    const existing = body._history || [];
+    const updated = [...existing, pm];
+    body._history = updated;
+
+    // Render updated history
+    renderPMHistory(other, updated);
+  } else {
+    // DM window closed → unread++
+    incrementUnread(other);
+    if (window.updateDMListSidebar) updateDMListSidebar();
   }
-
-  window._pmStore = window._pmStore || {};
-  window._pmStore[key] = arr;
-
-  renderPM(other);
-  if (window.updateDMListSidebar) updateDMListSidebar();
 });
-
-socket.on('pmError', e => alert('PM error: ' + e.reason));
