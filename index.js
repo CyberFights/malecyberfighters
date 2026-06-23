@@ -111,7 +111,15 @@ const ipLogSchema = new mongoose.Schema({
   userAgent: String,
   createdAt: { type: Date, default: Date.now }
 });
+const dmSchema = new mongoose.Schema({
+  from: { type: String, required: true },
+  to: { type: String, required: true },
+  text: { type: String, required: true },
+  originalText: { type: String, required: true },
+  time: { type: Date, default: Date.now }
+});
 
+const DM = mongoose.model("DM", dmSchema);
 const User = mongoose.model('User', userSchema);
 const PublicMessage = mongoose.model("PublicMessage", publicMessageSchema);
 const RoomMessage = mongoose.model("RoomMessage", roomMessageSchema);
@@ -442,6 +450,22 @@ app.post("/api/chatMessage", async (req, res) => {
   }
 });
 
+ app.post("/api/dm/history", async (req, res) => {
+  const { a, b } = req.body; // usernames
+
+  const messages = await DM.find({
+    $or: [
+      { from: a, to: b },
+      { from: b, to: a }
+    ]
+  })
+  .sort({ time: 1 })
+  .lean();
+
+  res.json({ ok: true, messages });
+});
+
+
 app.get("/api/allUsers", async (req, res) => {
   try {
     const users = await User.find()
@@ -558,22 +582,43 @@ socket.on("privateMessage", async pm => {
   const sender = await User.findOne({ username: pm.from }).lean();
   const receiver = await User.findOne({ username: pm.to }).lean();
 
-  if (!receiver || !receiver.socketId) {
-    socket.emit("pmError", { reason: "User offline" });
+  if (!receiver) {
+    socket.emit("pmError", { reason: "User not found" });
     return;
   }
 
   // Translate for receiver
   const translated = await translateText(pm.text, receiver.language || "en");
 
-  io.to(receiver.socketId).emit("privateMessage", {
-    ...pm,
+  // Save to MongoDB
+  const saved = await DM.create({
+    from: pm.from,
+    to: pm.to,
+    originalText: pm.text,
     text: translated
   });
 
-  // Sender sees original text
-  io.to(sender.socketId).emit("privateMessage", pm);
+  // Receiver gets translated
+  if (receiver.socketId) {
+    io.to(receiver.socketId).emit("privateMessage", {
+      from: pm.from,
+      to: pm.to,
+      text: translated,
+      time: saved.time
+    });
+  }
+
+  // Sender gets original (ONLY ONCE)
+  if (sender.socketId) {
+    io.to(sender.socketId).emit("privateMessage", {
+      from: pm.from,
+      to: pm.to,
+      text: pm.text,
+      time: saved.time
+    });
+  }
 });
+
 
   // ROOM JOIN
   socket.on("joinRoom", async ({ room }) => {
