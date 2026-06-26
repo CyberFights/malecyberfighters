@@ -25,43 +25,19 @@ function openPrivateWindow(targetUsername) {
   }
 
   // If window already exists → bring it forward + clear unread
-  if (document.getElementById("pmWindow_" + targetUsername)) {
+  const existing = document.getElementById("pmWindow_" + targetUsername);
+  if (existing) {
     clearUnread(targetUsername);
     if (window.updateDMListSidebar) updateDMListSidebar();
     return;
   }
-const typing = document.createElement("div");
-typing.id = "pmTyping_" + targetUsername;
-typing.className = "small muted";
-typing.style.display = "none";
-typing.textContent = `${targetUsername} is typing...`;
 
-pm.querySelector(".pm-body").appendChild(typing);
+  // CREATE WINDOW
+  const pmWindow = document.createElement("div");
+  pmWindow.className = "pm-window";
+  pmWindow.id = "pmWindow_" + targetUsername;
 
-   let typingTimeout;
-
-document
-  .getElementById("pmInput_" + targetUsername)
-  .addEventListener("input", () => {
-    socket.emit("typingDM", {
-      from: s.username,
-      to: targetUsername
-    });
-
-    clearTimeout(typingTimeout);
-    typingTimeout = setTimeout(() => {
-      socket.emit("stopTypingDM", {
-        from: s.username,
-        to: targetUsername
-      });
-    }, 1200);
-  });
-
-  const pm = document.createElement("div");
-  pm.className = "pm-window";
-  pm.id = "pmWindow_" + targetUsername;
-
-  pm.innerHTML = `
+  pmWindow.innerHTML = `
     <div class="pm-header">
       <div style="display:flex;gap:8px;align-items:center">
         <div class="avatar" style="width:36px;height:36px">${targetUsername[0].toUpperCase()}</div>
@@ -84,15 +60,23 @@ document
     </div>
   `;
 
-  document.body.appendChild(pm);
+  document.body.appendChild(pmWindow);
 
-  // Close window
-  pm.querySelector(".pm-close").addEventListener("click", () => {
-    pm.remove();
+  // TYPING INDICATOR
+  const typing = document.createElement("div");
+  typing.id = "pmTyping_" + targetUsername;
+  typing.className = "small muted";
+  typing.style.display = "none";
+  typing.textContent = `${targetUsername} is typing...`;
+  pmWindow.querySelector(".pm-body").appendChild(typing);
+
+  // CLOSE WINDOW
+  pmWindow.querySelector(".pm-close").addEventListener("click", () => {
+    pmWindow.remove();
   });
 
-  // Clear history (server + UI)
-  pm.querySelector(".pm-clear").addEventListener("click", async () => {
+  // CLEAR HISTORY (server + UI)
+  pmWindow.querySelector(".pm-clear").addEventListener("click", async () => {
     if (!confirm("Clear this DM history?")) return;
 
     await fetch("/api/dm/clear", {
@@ -103,10 +87,32 @@ document
 
     clearUnread(targetUsername);
     renderPMHistory(targetUsername, []);
+    const body = document.getElementById("pmBody_" + targetUsername);
+    if (body) body._history = [];
     if (window.updateDMListSidebar) updateDMListSidebar();
   });
 
-  // Send message
+  // TYPING EVENTS
+  let typingTimeout;
+
+  document
+    .getElementById("pmInput_" + targetUsername)
+    .addEventListener("input", () => {
+      socket.emit("typingDM", {
+        from: s.username,
+        to: targetUsername
+      });
+
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => {
+        socket.emit("stopTypingDM", {
+          from: s.username,
+          to: targetUsername
+        });
+      }, 1200);
+    });
+
+  // SEND MESSAGE
   document
     .getElementById("pmSend_" + targetUsername)
     .addEventListener("click", () => sendPM(targetUsername));
@@ -117,8 +123,10 @@ document
       if (e.key === "Enter") sendPM(targetUsername);
     });
 
-  // Load history from server
+  // LOAD HISTORY FROM SERVER
   loadDMHistory(s.username, targetUsername).then(history => {
+    const body = document.getElementById("pmBody_" + targetUsername);
+    if (body) body._history = history;
     renderPMHistory(targetUsername, history);
   });
 
@@ -131,6 +139,8 @@ function sendPM(targetUsername) {
   if (!s) return;
 
   const input = document.getElementById("pmInput_" + targetUsername);
+  if (!input) return;
+
   const text = input.value.trim();
   if (!text) return;
 
@@ -141,7 +151,6 @@ function sendPM(targetUsername) {
   };
 
   socket.emit("privateMessage", message);
-
   input.value = "";
 }
 
@@ -173,20 +182,32 @@ socket.on("privateMessage", pm => {
   if (!me) return;
 
   const other = pm.from === me.username ? pm.to : pm.from;
-
-  // If window is open → append message
   const body = document.getElementById("pmBody_" + other);
+
   if (body) {
-    renderPMHistory(other, [...body._history || [], pm]);
+    const existing = body._history || [];
+    const updated = [...existing, pm];
+    body._history = updated;
+    renderPMHistory(other, updated);
   } else {
-    // Window closed → unread++
     incrementUnread(other);
     if (window.updateDMListSidebar) updateDMListSidebar();
   }
 });
 
+/* TYPING INDICATOR RECEIVE */
+socket.on("typingDM", ({ from }) => {
+  const el = document.getElementById("pmTyping_" + from);
+  if (el) el.style.display = "block";
+});
+
+socket.on("stopTypingDM", ({ from }) => {
+  const el = document.getElementById("pmTyping_" + from);
+  if (el) el.style.display = "none";
+});
+
 /* ============================================================
-   DM SIDEBAR (unchanged except unread logic)
+   DM SIDEBAR
 ============================================================ */
 function updateDMListSidebar() {
   const sidebar = document.getElementById("dmSidebar");
@@ -200,7 +221,6 @@ function updateDMListSidebar() {
 
   const unread = getUnreadMap();
 
-  // Fetch DM partners from server
   fetch("/api/dm/partners", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
