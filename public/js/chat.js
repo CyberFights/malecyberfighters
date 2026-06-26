@@ -708,9 +708,10 @@ $('roomSendBtn').addEventListener('click', () => {
   sendRoomMessage(room, text);
   $('roomMessageInput').value = '';
 });
-$('roomChatClose').addEventListener('click', () => {
+$('closeRoomChat').addEventListener('click', () => {
   $('roomChatPopup').style.display = 'none';
 });
+
 
 let roomTypingTimeout;
 
