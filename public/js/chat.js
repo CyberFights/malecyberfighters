@@ -767,6 +767,7 @@ function renderRoomMembers(members) {
     list.appendChild(div);
   });
 }
+
 socket.on("roomMembers", members => {
   renderRoomMembers(members);
 });
