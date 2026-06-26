@@ -635,6 +635,43 @@ table tr:hover {
   overflow-y: auto;
   padding-right: 10px;
 }
+.room-members-panel {
+  width: 180px;
+  border-left: 1px solid rgba(160,200,255,0.15);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  background: rgba(160,200,255,0.06);
+}
+
+.room-member {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 6px;
+  background: rgba(160,200,255,0.08);
+}
+
+.room-member:hover {
+  background: rgba(127,216,255,0.15);
+}
+
+.room-member-status {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.room-member-status.online {
+  background: #6dffe7;
+}
+
+.room-member-status.offline {
+  background: #b8c7d9;
+}
 
 </style>
 </head>
@@ -1053,7 +1090,11 @@ table tr:hover {
   </div>
 
   <div class="chat-body">
-    <div class="public-feed" id="roomFeed"></div>
+  <div class="public-feed" id="roomFeed"></div>
+
+  <div id="roomMembers" class="room-members-panel">
+    <div class="side-panel-header">Members</div>
+    <div id="roomMembersList"></div>
   </div>
 <div id="roomTyping" class="small muted" style="display:none;margin-left:10px"></div>
 
@@ -1062,7 +1103,7 @@ table tr:hover {
     <button id="roomSendBtn">Send</button>
   </div>
 </div>
-
+  </div>
 <!-- TERMS OF SERVICE POPUP -->
 <div id="modalTOS" class="modal-overlay" style="display:none">
   <div class="modal-box">
