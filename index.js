@@ -544,6 +544,9 @@ app.get("/api/allUsers", async (req, res) => {
   }
 });
 
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "landing.html"));
+});
 // ---------- SOCKET.IO ----------
 const onlineByUsername = new Map();
 
