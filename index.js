@@ -50,7 +50,9 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 
 app.use(express.static(path.join(__dirname, 'public')));
-
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "landing.html"));
+});
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
@@ -544,9 +546,7 @@ app.get("/api/allUsers", async (req, res) => {
   }
 });
 
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "landing.html"));
-});
+
 // ---------- SOCKET.IO ----------
 const onlineByUsername = new Map();
 
