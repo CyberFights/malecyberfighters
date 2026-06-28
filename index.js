@@ -93,8 +93,10 @@ const roomMessageSchema = new mongoose.Schema({
   from: String,
   display: String,
   text: String,
+  imageUrl: String,
   time: { type: Date, default: Date.now }
 });
+
 
 const RoomSchema = new mongoose.Schema({
   name: { type: String, required: true },
@@ -121,7 +123,8 @@ const dmSchema = new mongoose.Schema({
   text: { type: String },
 
   // original text (sender’s language)
-  originalText: { type: String },
+ originalText: { type: String, required: false }
+
 
   // image message
   imageUrl: { type: String },
@@ -302,10 +305,10 @@ app.post('/api/upload-image', upload.single('image'), async (req, res) => {
     }
 
     return res.json({
-      ok: true,
-      url: data.data.url,
-      viewer: data.data.url_viewer
-    });
+  ok: true,
+  imageUrl: data.data.url,
+  viewer: data.data.url_viewer
+});
 
   } catch (e) {
     console.error("upload error", e);
@@ -655,10 +658,42 @@ socket.on("privateMessage", async pm => {
     return;
   }
 
-  // Translate for receiver
+  // ⭐ IMAGE MESSAGE
+  if (pm.imageUrl) {
+    const saved = await DM.create({
+      from: pm.from,
+      to: pm.to,
+      imageUrl: pm.imageUrl,
+      text: null,
+      originalText: null
+    });
+
+    // Receiver
+    if (receiver.socketId) {
+      io.to(receiver.socketId).emit("privateMessage", {
+        from: pm.from,
+        to: pm.to,
+        imageUrl: pm.imageUrl,
+        time: saved.time
+      });
+    }
+
+    // Sender
+    if (sender.socketId) {
+      io.to(sender.socketId).emit("privateMessage", {
+        from: pm.from,
+        to: pm.to,
+        imageUrl: pm.imageUrl,
+        time: saved.time
+      });
+    }
+
+    return;
+  }
+
+  // ⭐ TEXT MESSAGE
   const translated = await translateText(pm.text, receiver.language || "en");
 
-  // Save to MongoDB
   const saved = await DM.create({
     from: pm.from,
     to: pm.to,
@@ -666,7 +701,6 @@ socket.on("privateMessage", async pm => {
     text: translated
   });
 
-  // Receiver gets translated
   if (receiver.socketId) {
     io.to(receiver.socketId).emit("privateMessage", {
       from: pm.from,
@@ -676,7 +710,6 @@ socket.on("privateMessage", async pm => {
     });
   }
 
-  // Sender gets original (ONLY ONCE)
   if (sender.socketId) {
     io.to(sender.socketId).emit("privateMessage", {
       from: pm.from,
@@ -703,31 +736,43 @@ socket.on("privateMessage", async pm => {
   });
 
   // ROOM MESSAGE
-  socket.on("roomMessage", async (msg) => {
-    const enriched = {
-      room: msg.room,
-      from: msg.from,
-      display: msg.display,
-      text: msg.text,
-      time: new Date()
-    };
+ socket.on("roomMessage", async (msg) => {
+  const enriched = {
+    room: msg.room,
+    from: msg.from,
+    display: msg.display,
+    text: msg.text || null,
+    imageUrl: msg.imageUrl || null,
+    time: new Date()
+  };
 
-    try {
-      await RoomMessage.create(enriched);
-    } catch (err) {
-      console.error("Failed to save room message:", err);
-    }
+  try {
+    await RoomMessage.create(enriched);
+  } catch (err) {
+    console.error("Failed to save room message:", err);
+  }
 
-   const members = await User.find({ socketId: { $ne: null } }).lean();
+  const members = await User.find({ socketId: { $ne: null } }).lean();
 
-members.forEach(async u => {
-  const translated = await translateText(enriched.text, u.language || "en");
+  // ⭐ IMAGE MESSAGE (no translation)
+  if (msg.imageUrl) {
+    members.forEach(u => {
+      io.to(u.socketId).emit("roomMessage", enriched);
+    });
+    return;
+  }
 
-  io.to(u.socketId).emit("roomMessage", {
-    ...enriched,
-    text: translated
+  // ⭐ TEXT MESSAGE (translate)
+  members.forEach(async u => {
+    const translated = await translateText(enriched.text, u.language || "en");
+
+    io.to(u.socketId).emit("roomMessage", {
+      ...enriched,
+      text: translated
+    });
   });
 });
+
 
   });
 // USER STARTED TYPING (DM)
