@@ -97,7 +97,6 @@ const roomMessageSchema = new mongoose.Schema({
   time: { type: Date, default: Date.now }
 });
 
-
 const RoomSchema = new mongoose.Schema({
   name: { type: String, required: true },
   private: { type: Boolean, default: false },
@@ -105,7 +104,6 @@ const RoomSchema = new mongoose.Schema({
   invitedUsers: { type: [String], default: [] },
   createdAt: { type: Date, default: Date.now }
 });
-
 
 const ipLogSchema = new mongoose.Schema({
   ip: String,
@@ -123,15 +121,13 @@ const dmSchema = new mongoose.Schema({
   text: { type: String },
 
   // original text (sender’s language)
- originalText: { type: String, required: false }
-
+  originalText: { type: String, required: false },
 
   // image message
   imageUrl: { type: String },
 
   time: { type: Date, default: Date.now }
 });
-
 
 const DM = mongoose.model("DM", dmSchema);
 const User = mongoose.model('User', userSchema);
@@ -197,6 +193,7 @@ async function sendDiscordWebhookMessage(username, message, avatarUrl) {
     console.error("Error sending webhook:", err);
   }
 }
+
 async function updateRoomMembers(roomId) {
   const sockets = await io.in(roomId).fetchSockets();
 
@@ -221,7 +218,7 @@ app.get("/api/admin/users", async (req, res) => {
       .select("username display email imageUrl info wins losses color language age role banned createdAt")
       .lean();
 
-   res.json({ ok: true, users });
+    res.json({ ok: true, users });
   } catch (err) {
     console.error("Admin user fetch error:", err);
     res.status(500).json({ success: false });
@@ -262,7 +259,6 @@ app.post("/api/check-availability", async (req, res) => {
     });
   }
 });
-
 
 // ---------- API: PUBLIC CHAT HISTORY ----------
 app.get("/api/public-messages", async (req, res) => {
@@ -305,10 +301,10 @@ app.post('/api/upload-image', upload.single('image'), async (req, res) => {
     }
 
     return res.json({
-  ok: true,
-  imageUrl: data.data.url,
-  viewer: data.data.url_viewer
-});
+      ok: true,
+      imageUrl: data.data.url,
+      viewer: data.data.url_viewer
+    });
 
   } catch (e) {
     console.error("upload error", e);
@@ -454,7 +450,6 @@ app.post("/api/chatMessage", async (req, res) => {
 
     const msgTimestamp = timestamp ? new Date(timestamp) : new Date();
 
-    // Save to MongoDB using your existing PublicMessage model
     const enriched = {
       from: username,
       display: username,
@@ -464,7 +459,6 @@ app.post("/api/chatMessage", async (req, res) => {
 
     await PublicMessage.create(enriched);
 
-    // Broadcast to ALL clients (public chat only)
     io.emit("externalPublicMessage", {
       from: username,
       display: username,
@@ -481,8 +475,8 @@ app.post("/api/chatMessage", async (req, res) => {
   }
 });
 
- app.post("/api/dm/history", async (req, res) => {
-  const { a, b } = req.body; // usernames
+app.post("/api/dm/history", async (req, res) => {
+  const { a, b } = req.body;
 
   const messages = await DM.find({
     $or: [
@@ -556,11 +550,9 @@ const onlineByUsername = new Map();
 io.on("connection", async (socket) => {
   console.log("socket connected", socket.id);
 
-  // ⭐ SEND ALL ROOMS ON CONNECT
   const rooms = await Room.find().lean();
   socket.emit("roomsList", rooms);
 
-  // USER LOGIN
   socket.on('login', async (user) => {
     socket.username = user.username;
     const u = await User.findOneAndUpdate(
@@ -577,7 +569,6 @@ io.on("connection", async (socket) => {
     io.emit('presence', onlineUsers);
   });
 
-  // USER CLOSED CHATROOM (disconnect from online but stay logged in)
   socket.on("chatClosed", async ({ username }) => {
     if (!username) return;
 
@@ -593,7 +584,6 @@ io.on("connection", async (socket) => {
     io.emit("presence", onlineUsers);
   });
 
-  // USER FORCE LOGOUT (browser close / refresh)
   socket.on("forceLogout", async ({ username }) => {
     if (!username) return;
 
@@ -609,244 +599,220 @@ io.on("connection", async (socket) => {
     io.emit("presence", onlineUsers);
   });
 
-  // PUBLIC MESSAGE
- socket.on('publicMessage', async (msg) => {
-  try {
-    const enriched = {
-      from: msg.from,
-      display: msg.display,
-      text: msg.text,
-      time: new Date()
-    };
+  socket.on('publicMessage', async (msg) => {
+    try {
+      const enriched = {
+        from: msg.from,
+        display: msg.display,
+        text: msg.text,
+        time: new Date()
+      };
 
-    // Save to MongoDB
-    await PublicMessage.create(enriched);
+      await PublicMessage.create(enriched);
 
-    // Broadcast to all clients
-   const onlineUsers = await User.find({ online: true }).lean();
+      const onlineUsers = await User.find({ online: true }).lean();
 
-onlineUsers.forEach(async u => {
-  const translated = await translateText(enriched.text, u.language || "en");
+      onlineUsers.forEach(async u => {
+        const translated = await translateText(enriched.text, u.language || "en");
 
-  io.to(u.socketId).emit("publicMessage", {
-    ...enriched,
-    text: translated
+        io.to(u.socketId).emit("publicMessage", {
+          ...enriched,
+          text: translated
+        });
+      });
+
+      const user = await User.findOne({ username: msg.from }).lean();
+      const avatarUrl = user?.imageUrl || null;
+
+      await sendDiscordWebhookMessage(
+        msg.display || msg.from,
+        msg.text,
+        avatarUrl
+      );
+
+    } catch (err) {
+      console.error("Error in publicMessage:", err);
+    }
   });
-});
 
-    // ⭐ SEND TO DISCORD WEBHOOK ⭐
-    const user = await User.findOne({ username: msg.from }).lean();
-    const avatarUrl = user?.imageUrl || null;
+  socket.on("privateMessage", async pm => {
+    const sender = await User.findOne({ username: pm.from }).lean();
+    const receiver = await User.findOne({ username: pm.to }).lean();
 
-    await sendDiscordWebhookMessage(
-      msg.display || msg.from,
-      msg.text,
-      avatarUrl
-    );
+    if (!receiver) {
+      socket.emit("pmError", { reason: "User not found" });
+      return;
+    }
 
-  } catch (err) {
-    console.error("Error in publicMessage:", err);
-  }
-});
+    // IMAGE MESSAGE
+    if (pm.imageUrl) {
+      const saved = await DM.create({
+        from: pm.from,
+        to: pm.to,
+        imageUrl: pm.imageUrl,
+        text: null,
+        originalText: null
+      });
 
-socket.on("privateMessage", async pm => {
-  const sender = await User.findOne({ username: pm.from }).lean();
-  const receiver = await User.findOne({ username: pm.to }).lean();
+      if (receiver.socketId) {
+        io.to(receiver.socketId).emit("privateMessage", {
+          from: pm.from,
+          to: pm.to,
+          imageUrl: pm.imageUrl,
+          time: saved.time
+        });
+      }
 
-  if (!receiver) {
-    socket.emit("pmError", { reason: "User not found" });
-    return;
-  }
+      if (sender.socketId) {
+        io.to(sender.socketId).emit("privateMessage", {
+          from: pm.from,
+          to: pm.to,
+          imageUrl: pm.imageUrl,
+          time: saved.time
+        });
+      }
 
-  // ⭐ IMAGE MESSAGE
-  if (pm.imageUrl) {
+      return;
+    }
+
+    // TEXT MESSAGE
+    const translated = await translateText(pm.text, receiver.language || "en");
+
     const saved = await DM.create({
       from: pm.from,
       to: pm.to,
-      imageUrl: pm.imageUrl,
-      text: null,
-      originalText: null
+      originalText: pm.text,
+      text: translated
     });
 
-    // Receiver
     if (receiver.socketId) {
       io.to(receiver.socketId).emit("privateMessage", {
         from: pm.from,
         to: pm.to,
-        imageUrl: pm.imageUrl,
+        text: translated,
         time: saved.time
       });
     }
 
-    // Sender
     if (sender.socketId) {
       io.to(sender.socketId).emit("privateMessage", {
         from: pm.from,
         to: pm.to,
-        imageUrl: pm.imageUrl,
+        text: pm.text,
         time: saved.time
       });
     }
-
-    return;
-  }
-
-  // ⭐ TEXT MESSAGE
-  const translated = await translateText(pm.text, receiver.language || "en");
-
-  const saved = await DM.create({
-    from: pm.from,
-    to: pm.to,
-    originalText: pm.text,
-    text: translated
   });
 
-  if (receiver.socketId) {
-    io.to(receiver.socketId).emit("privateMessage", {
-      from: pm.from,
-      to: pm.to,
-      text: translated,
-      time: saved.time
-    });
-  }
-
-  if (sender.socketId) {
-    io.to(sender.socketId).emit("privateMessage", {
-      from: pm.from,
-      to: pm.to,
-      text: pm.text,
-      time: saved.time
-    });
-  }
-});
-
-
-  // ROOM JOIN
   socket.on("joinRoom", async ({ room }) => {
     socket.join(room);
-
     socket.currentRoom = room;
 
-  // Send history
-  const history = await RoomMessage.find({ room }).sort({ time: 1 }).limit(200).lean();
-  io.to(socket.id).emit("roomHistory", { room, history });
+    const history = await RoomMessage.find({ room }).sort({ time: 1 }).limit(200).lean();
+    io.to(socket.id).emit("roomHistory", { room, history });
 
-  // Update member list
-  updateRoomMembers(room);
+    updateRoomMembers(room);
   });
 
-  // ROOM MESSAGE
- socket.on("roomMessage", async (msg) => {
-  const enriched = {
-    room: msg.room,
-    from: msg.from,
-    display: msg.display,
-    text: msg.text || null,
-    imageUrl: msg.imageUrl || null,
-    time: new Date()
-  };
+  socket.on("roomMessage", async (msg) => {
+    const enriched = {
+      room: msg.room,
+      from: msg.from,
+      display: msg.display,
+      text: msg.text || null,
+      imageUrl: msg.imageUrl || null,
+      time: new Date()
+    };
 
-  try {
-    await RoomMessage.create(enriched);
-  } catch (err) {
-    console.error("Failed to save room message:", err);
-  }
+    try {
+      await RoomMessage.create(enriched);
+    } catch (err) {
+      console.error("Failed to save room message:", err);
+    }
 
-  const members = await User.find({ socketId: { $ne: null } }).lean();
+    const members = await User.find({ socketId: { $ne: null } }).lean();
 
-  // ⭐ IMAGE MESSAGE (no translation)
-  if (msg.imageUrl) {
-    members.forEach(u => {
-      io.to(u.socketId).emit("roomMessage", enriched);
-    });
-    return;
-  }
+    if (msg.imageUrl) {
+      members.forEach(u => {
+        io.to(u.socketId).emit("roomMessage", enriched);
+      });
+      return;
+    }
 
-  // ⭐ TEXT MESSAGE (translate)
-  members.forEach(async u => {
-    const translated = await translateText(enriched.text, u.language || "en");
+    members.forEach(async u => {
+      const translated = await translateText(enriched.text, u.language || "en");
 
-    io.to(u.socketId).emit("roomMessage", {
-      ...enriched,
-      text: translated
+      io.to(u.socketId).emit("roomMessage", {
+        ...enriched,
+        text: translated
+      });
     });
   });
-});
 
-
-  });
-// USER STARTED TYPING (DM)
-socket.on("typingDM", ({ from, to }) => {
-  const target = [...io.sockets.sockets.values()].find(s => s.username === to);
-  if (target) {
-    io.to(target.id).emit("typingDM", { from });
-  }
-});
-
-// USER STOPPED TYPING (DM)
-socket.on("stopTypingDM", ({ from, to }) => {
-  const target = [...io.sockets.sockets.values()].find(s => s.username === to);
-  if (target) {
-    io.to(target.id).emit("stopTypingDM", { from });
-  }
-});
-
-// ROOM TYPING
-socket.on("typingRoom", ({ room, from }) => {
-  socket.to(room).emit("typingRoom", { from, room });
-});
-
-socket.on("stopTypingRoom", ({ room, from }) => {
-  socket.to(room).emit("stopTypingRoom", { from, room });
-});
-
- socket.on("createRoom", async ({ name, private }) => {
-  if (!name) return;
-
-  const room = await Room.create({
-    name,
-    private: !!private,
-    owner: socket.username,
-    invitedUsers: [],
-    createdAt: new Date()
+  socket.on("typingDM", ({ from, to }) => {
+    const target = [...io.sockets.sockets.values()].find(s => s.username === to);
+    if (target) {
+      io.to(target.id).emit("typingDM", { from });
+    }
   });
 
-  socket.join(room._id.toString());
+  socket.on("stopTypingDM", ({ from, to }) => {
+    const target = [...io.sockets.sockets.values()].find(s => s.username === to);
+    if (target) {
+      io.to(target.id).emit("stopTypingDM", { from });
+    }
+  });
 
-  const rooms = await Room.find().lean();
-  io.emit("roomsList", rooms);
-});
+  socket.on("typingRoom", ({ room, from }) => {
+    socket.to(room).emit("typingRoom", { from, room });
+  });
+
+  socket.on("stopTypingRoom", ({ room, from }) => {
+    socket.to(room).emit("stopTypingRoom", { from, room });
+  });
+
+  socket.on("createRoom", async ({ name, private }) => {
+    if (!name) return;
+
+    const room = await Room.create({
+      name,
+      private: !!private,
+      owner: socket.username,
+      invitedUsers: [],
+      createdAt: new Date()
+    });
+
+    socket.join(room._id.toString());
+
+    const rooms = await Room.find().lean();
+    io.emit("roomsList", rooms);
+  });
 
   socket.on("inviteToRoom", async ({ roomId, username }) => {
-  const room = await Room.findById(roomId);
-  if (!room) return;
+    const room = await Room.findById(roomId);
+    if (!room) return;
 
-  // Only owner can invite
-  if (room.owner !== socket.username) return;
+    if (room.owner !== socket.username) return;
 
-  // Add user if not already invited
-  if (!room.invitedUsers.includes(username)) {
-    room.invitedUsers.push(username);
-    await room.save();
-  }
+    if (!room.invitedUsers.includes(username)) {
+      room.invitedUsers.push(username);
+      await room.save();
+    }
 
-  // Notify the invited user if online
-  const targetSocket = [...io.sockets.sockets.values()]
-    .find(s => s.username === username);
+    const targetSocket = [...io.sockets.sockets.values()]
+      .find(s => s.username === username);
 
-  if (targetSocket) {
-    targetSocket.emit("roomInvited", {
-      roomId,
-      roomName: room.name
-    });
-  }
+    if (targetSocket) {
+      targetSocket.emit("roomInvited", {
+        roomId,
+        roomName: room.name
+      });
+    }
 
-  // Update room list for everyone
-  const rooms = await Room.find().lean();
-  io.emit("roomsList", rooms);
-});
+    const rooms = await Room.find().lean();
+    io.emit("roomsList", rooms);
+  });
 
-  // DISCONNECT (fallback)
   socket.on('disconnect', async () => {
     const u = await User.findOneAndUpdate(
       { socketId: socket.id },
@@ -860,12 +826,13 @@ socket.on("stopTypingRoom", ({ room, from }) => {
 
       io.emit('presence', onlineUsers);
     }
- if (socket.currentRoom) {
-    updateRoomMembers(socket.currentRoom);
-  }
+
+    if (socket.currentRoom) {
+      updateRoomMembers(socket.currentRoom);
+    }
+
     console.log('socket disconnected', socket.id);
   });
-   
 });
 
 // ---------- START ----------
