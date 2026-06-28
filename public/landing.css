@@ -1,0 +1,45 @@
+body {
+  margin: 0;
+  background: #000;
+  overflow: hidden;
+}
+
+#ageGate {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.9);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+  transition: opacity 1.2s ease;
+}
+
+#ageBox {
+  background: #111;
+  padding: 40px;
+  border-radius: 10px;
+  text-align: center;
+  color: #fff;
+  font-family: Arial, sans-serif;
+}
+
+#confirmBtn {
+  margin-top: 20px;
+  padding: 12px 24px;
+  background: #e60000;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+#introGif {
+  position: fixed;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+}
