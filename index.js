@@ -112,13 +112,23 @@ const ipLogSchema = new mongoose.Schema({
   userAgent: String,
   createdAt: { type: Date, default: Date.now }
 });
+
 const dmSchema = new mongoose.Schema({
   from: { type: String, required: true },
   to: { type: String, required: true },
-  text: { type: String, required: true },
-  originalText: { type: String, required: true },
+
+  // text message (translated)
+  text: { type: String },
+
+  // original text (sender’s language)
+  originalText: { type: String },
+
+  // image message
+  imageUrl: { type: String },
+
   time: { type: Date, default: Date.now }
 });
+
 
 const DM = mongoose.model("DM", dmSchema);
 const User = mongoose.model('User', userSchema);
