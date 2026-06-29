@@ -24,7 +24,11 @@ const ADMIN_KEY = process.env.ADMIN_KEY;
 const DISCORD_WEBHOOK_URL = process.env.Discord_webhook || null;
 const DISCORD_SUPPORT_URL = process.env.Discord_Support || null;
 
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ limit: "10mb", extended: true }));
+
 app.use(express.static(path.join(__dirname, 'public')));
+
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "landing.html"));
 });
@@ -51,10 +55,6 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ limit: "10mb", extended: true }));
-
-app.use(express.static(path.join(__dirname, 'public')));
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
