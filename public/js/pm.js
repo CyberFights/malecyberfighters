@@ -38,7 +38,7 @@ async function uploadDMImage(targetUsername, file) {
   socket.emit("privateMessage", {
     from: getSession().username,
     to: targetUsername,
-    imageUrl: data.url
+    imageUrl: data.imageUrl
   });
 }
 
