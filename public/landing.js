@@ -10,5 +10,5 @@ document.getElementById("confirmBtn").addEventListener("click", () => {
 
   setTimeout(() => {
     window.location.href = "/index.html"; // your main chat page
-  }, 1500);
+  }, 9000);
 });
