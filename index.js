@@ -53,7 +53,7 @@ app.use(express.urlencoded({ limit: "10mb", extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get("/", (req, res) => {
-  res.redirect("/landing.html"));
+  res.redirect("/landing.html");
 });
 
 const authLimiter = rateLimit({
