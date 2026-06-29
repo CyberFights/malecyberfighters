@@ -563,7 +563,7 @@ document.getElementById("roomImageInput").addEventListener("change", e => {
 async function uploadRoomImage(file) {
   const data = await uploadImageToServer(file);
 
-  if (!data.success) {
+  if (!data.ok) {
     alert("Image upload failed");
     return;
   }
@@ -571,7 +571,7 @@ async function uploadRoomImage(file) {
   socket.emit("roomMessage", {
     room: document.getElementById("roomChatPopup").dataset.room,
     from: getSession().username,
-    imageUrl: data.url
+    imageUrl: data.imageUrl
   });
 }
 
