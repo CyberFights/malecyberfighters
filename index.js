@@ -130,6 +130,14 @@ const dmSchema = new mongoose.Schema({
   time: { type: Date, default: Date.now }
 });
 
+const storySchema = new mongoose.Schema({
+  owner: { type: String, required: true },
+  partner: { type: String, required: true },
+  story: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const Story = mongoose.model("Story", storySchema);
 const DM = mongoose.model("DM", dmSchema);
 const User = mongoose.model('User', userSchema);
 const PublicMessage = mongoose.model("PublicMessage", publicMessageSchema);
@@ -224,6 +232,40 @@ app.get("/api/admin/users", async (req, res) => {
     console.error("Admin user fetch error:", err);
     res.status(500).json({ success: false });
   }
+});
+
+app.post("/api/story/load", async (req, res) => {
+  const { a, b, fromDate } = req.body;
+
+  const messages = await DM.find({
+    $or: [
+      { from: a, to: b },
+      { from: b, to: a }
+    ],
+    time: { $gte: new Date(fromDate) }
+  }).sort({ time: 1 }).lean();
+
+  res.json({ ok: true, messages });
+});
+
+app.post("/api/story/save", async (req, res) => {
+  const { owner, partner, story } = req.body;
+
+  const saved = await Story.create({
+    owner,
+    partner,
+    story
+  });
+
+  res.json({ ok: true, storyId: saved._id });
+});
+
+app.get("/api/story/list", async (req, res) => {
+  const { username } = req.query;
+
+  const stories = await Story.find({ owner: username }).sort({ createdAt: -1 }).lean();
+
+  res.json({ ok: true, stories });
 });
 
 app.post("/api/check-availability", async (req, res) => {
