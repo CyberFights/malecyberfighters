@@ -87,6 +87,8 @@ window.updateProfileCard = function(user) {
   const age = user.age ? `${user.age} years old` : 'Age not set';
   const bio = user.info || 'No bio';
 
+loadStories(user.username);
+
 const avatarHtml = user.imageUrl
   ? `<img src="${user.imageUrl}" alt="avatar" class="profile-avatar-img">`
   : initials;
@@ -118,6 +120,7 @@ card.innerHTML = `
       </div>
     </div>
   </div>
+<div id="profileStories"></div>
 
   <button id="btnEditProfile" class="ghost">Edit Profile</button>
   <button id="logoutBtn" class="profile-logout ghost">Logout</button>
@@ -151,6 +154,23 @@ card.innerHTML = `
     });
   }
 };
+
+async function loadStories(username) {
+  const res = await fetch("/api/story/list?username=" + username);
+  const data = await res.json();
+
+  const box = document.getElementById("profileStories");
+  box.innerHTML = "<h3>Stories</h3>";
+
+  data.stories.forEach(s => {
+    const div = document.createElement("div");
+    div.className = "story-item";
+    div.textContent = `${s.partner} — ${new Date(s.createdAt).toLocaleDateString()}`;
+    div.onclick = () => alert(s.story);
+    box.appendChild(div);
+  });
+}
+
 
 /* SESSION UI SYNC ---------------------------------------------------- */
 window.updateUIForSession = function() {
