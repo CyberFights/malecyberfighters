@@ -1757,6 +1757,21 @@ Don't hesitate to contact us if you have any questions.
   </div>
 </div>
 
+<div id="storyPopup" class="modal">
+  <div class="modal-content">
+    <h2>Create Story</h2>
+
+    <label>Select start date:</label>
+    <input type="date" id="storyDate">
+
+    <button id="storyLoadBtn" class="small-btn">Load Messages</button>
+
+    <textarea id="storyEditor" placeholder="Your story will appear here..." style="height:300px;margin-top:20px;"></textarea>
+
+    <button id="storySaveBtn" class="small-btn">Save Story</button>
+    <button id="storyCloseBtn" class="small-btn ghost">Close</button>
+  </div>
+</div>
 
 <!-- JS FILES -->
 <script src="/socket.io/socket.io.js"></script>
