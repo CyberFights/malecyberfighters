@@ -216,6 +216,17 @@ function renderPMHistory(targetUsername, messages) {
       <div style="font-size:13px;font-weight:700">${m.from}</div>
       <div style="margin-top:6px">${escapeHtml(m.text || "")}</div>
     `;
+if (m.type === "storyApproval") {
+  div.className = "message system";
+  div.innerHTML = `
+    <div class="system-msg">
+      ${escapeHtml(m.text)}
+      <button class="small-btn approveStoryBtn" data-id="${m.storyId}">
+        Approve
+      </button>
+    </div>
+  `;
+}
 
     if (m.imageUrl) {
       div.innerHTML += `
@@ -228,6 +239,23 @@ function renderPMHistory(targetUsername, messages) {
 
   body.scrollTop = body.scrollHeight;
 }
+document.addEventListener("click", async (e) => {
+  if (e.target.classList.contains("approveStoryBtn")) {
+    const storyId = e.target.dataset.id;
+
+    const res = await fetch("/api/story/approve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ storyId })
+    });
+
+    const data = await res.json();
+    if (data.ok) {
+      alert("Story approved");
+      e.target.parentElement.innerHTML = "Approved";
+    }
+  }
+});
 
 function openStoryPopup(targetUsername) {
   const popup = document.getElementById("storyPopup");
