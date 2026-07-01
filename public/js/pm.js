@@ -76,9 +76,10 @@ function openPrivateWindow(targetUsername) {
         </div>
       </div>
       <div style="display:flex;gap:6px;align-items:center">
-        <button class="small-btn pm-clear">Clear</button>
-        <button class="small-btn pm-close">X</button>
-      </div>
+  <button class="small-btn pm-story">Story</button>
+  <button class="small-btn pm-clear">Clear</button>
+  <button class="small-btn pm-close">X</button>
+</div>
     </div>
 
     <div class="pm-body" id="pmBody_${targetUsername}"></div>
@@ -148,6 +149,9 @@ function openPrivateWindow(targetUsername) {
     .addEventListener("keydown", e => {
       if (e.key === "Enter") sendPM(targetUsername);
     });
+pmWindow.querySelector(".pm-story").addEventListener("click", () => {
+  openStoryPopup(targetUsername);
+});
 
   /* ---------- DM Image Upload Buttons (now correct) ---------- */
 
@@ -223,6 +227,63 @@ function renderPMHistory(targetUsername, messages) {
   });
 
   body.scrollTop = body.scrollHeight;
+}
+
+function openStoryPopup(targetUsername) {
+  const popup = document.getElementById("storyPopup");
+  popup.style.display = "flex";
+
+  document.getElementById("storyEditor").value = "";
+  document.getElementById("storyDate").value = "";
+
+  document.getElementById("storyLoadBtn").onclick = async () => {
+    const date = document.getElementById("storyDate").value;
+    if (!date) return alert("Choose a date first");
+
+    const res = await fetch("/api/story/load", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        a: getSession().username,
+        b: targetUsername,
+        fromDate: date
+      })
+    });
+
+    const data = await res.json();
+    if (!data.ok) return alert("Failed to load messages");
+
+    const text = data.messages
+      .map(m => `[${new Date(m.time).toLocaleString()}] ${m.from}: ${m.text || "(image)"}`)
+      .join("\n");
+
+    document.getElementById("storyEditor").value = text;
+  };
+
+  document.getElementById("storySaveBtn").onclick = async () => {
+    const storyText = document.getElementById("storyEditor").value.trim();
+    if (!storyText) return alert("Story is empty");
+
+    const res = await fetch("/api/story/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        owner: getSession().username,
+        partner: targetUsername,
+        story: storyText
+      })
+    });
+
+    const data = await res.json();
+    if (!data.ok) return alert("Failed to save story");
+
+    alert("Story saved!");
+    popup.style.display = "none";
+  };
+
+  document.getElementById("storyCloseBtn").onclick = () => {
+    popup.style.display = "none";
+  };
 }
 
 /* ============================================================
