@@ -162,6 +162,11 @@ async function loadStories(username) {
   const box = document.getElementById("profileStories");
   box.innerHTML = "<h3>Stories</h3>";
 
+  if (!data.stories.length) {
+    box.innerHTML += "<div class='small muted'>No approved stories yet</div>";
+    return;
+  }
+
   data.stories.forEach(s => {
     const div = document.createElement("div");
     div.className = "story-item";
