@@ -268,6 +268,34 @@ app.post("/api/story/approve", async (req, res) => {
   res.json({ ok: true, approved: story.approved });
 });
 
+app.get("/api/story/pending", async (req, res) => {
+  const { username } = req.query;
+
+  const stories = await Story.find({
+    owner: username,
+    approved: false
+  }).sort({ createdAt: -1 }).lean();
+
+  res.json({ ok: true, stories });
+});
+
+app.post("/api/story/resend", async (req, res) => {
+  const { storyId } = req.body;
+
+  const story = await Story.findById(storyId);
+  if (!story) return res.json({ ok: false });
+
+  const partnerUser = await User.findOne({ username: story.partner }).lean();
+  if (partnerUser?.socketId) {
+    io.to(partnerUser.socketId).emit("storyApprovalRequest", {
+      storyId,
+      from: story.owner
+    });
+  }
+
+  res.json({ ok: true });
+});
+
 app.get("/api/admin/users", async (req, res) => {
   try {
     const users = await User.find()
