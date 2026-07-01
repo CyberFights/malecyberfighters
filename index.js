@@ -134,6 +134,12 @@ const storySchema = new mongoose.Schema({
   owner: { type: String, required: true },
   partner: { type: String, required: true },
   story: { type: String, required: true },
+
+  approvalOwner: { type: Boolean, default: true },
+  approvalPartner: { type: Boolean, default: false },
+
+  approved: { type: Boolean, default: false },
+
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -221,6 +227,47 @@ async function updateRoomMembers(roomId) {
   io.to(roomId).emit("roomMembers", members);
 }
 
+app.post("/api/story/save", async (req, res) => {
+  const { owner, partner, story } = req.body;
+
+  const saved = await Story.create({
+    owner,
+    partner,
+    story,
+    approvalOwner: true,
+    approvalPartner: false,
+    approved: false
+  });
+
+  // Notify partner if online
+  const partnerUser = await User.findOne({ username: partner }).lean();
+  if (partnerUser?.socketId) {
+    io.to(partnerUser.socketId).emit("storyApprovalRequest", {
+      storyId: saved._id,
+      from: owner
+    });
+  }
+
+  res.json({ ok: true, storyId: saved._id });
+});
+
+app.post("/api/story/approve", async (req, res) => {
+  const { storyId } = req.body;
+
+  const story = await Story.findById(storyId);
+  if (!story) return res.json({ ok: false });
+
+  story.approvalPartner = true;
+
+  if (story.approvalOwner && story.approvalPartner) {
+    story.approved = true;
+  }
+
+  await story.save();
+
+  res.json({ ok: true, approved: story.approved });
+});
+
 app.get("/api/admin/users", async (req, res) => {
   try {
     const users = await User.find()
@@ -248,25 +295,18 @@ app.post("/api/story/load", async (req, res) => {
   res.json({ ok: true, messages });
 });
 
-app.post("/api/story/save", async (req, res) => {
-  const { owner, partner, story } = req.body;
-
-  const saved = await Story.create({
-    owner,
-    partner,
-    story
-  });
-
-  res.json({ ok: true, storyId: saved._id });
-});
 
 app.get("/api/story/list", async (req, res) => {
   const { username } = req.query;
 
-  const stories = await Story.find({ owner: username }).sort({ createdAt: -1 }).lean();
+  const stories = await Story.find({
+    owner: username,
+    approved: true
+  }).sort({ createdAt: -1 }).lean();
 
   res.json({ ok: true, stories });
 });
+
 
 app.post("/api/check-availability", async (req, res) => {
   try {
