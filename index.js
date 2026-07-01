@@ -152,6 +152,22 @@ const storySchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+const relationshipSchema = new mongoose.Schema({
+  requester: { type: String, required: true },
+  target: { type: String, required: true },
+
+  type: { type: String, required: true }, 
+  // rival, friend, opponent, tagteam, dating, married, sibling, parent, owner
+
+  approvedRequester: { type: Boolean, default: true },
+  approvedTarget: { type: Boolean, default: false },
+
+  approved: { type: Boolean, default: false },
+
+  createdAt: { type: Date, default: Date.now }
+});
+
+const Relationship = mongoose.model("Relationship", relationshipSchema);
 const Story = mongoose.model("Story", storySchema);
 const DM = mongoose.model("DM", dmSchema);
 const User = mongoose.model('User', userSchema);
@@ -315,6 +331,82 @@ app.post("/api/story/resend", async (req, res) => {
 
   res.json({ ok: true });
 });
+
+app.post("/api/relationship/request", async (req, res) => {
+  const { requester, target, type } = req.body;
+
+  const rel = await Relationship.create({
+    requester,
+    target,
+    type,
+    approvedRequester: true,
+    approvedTarget: false,
+    approved: false
+  });
+
+  const targetUser = await User.findOne({ username: target }).lean();
+
+  if (targetUser?.socketId) {
+    io.to(targetUser.socketId).emit("relationshipApprovalRequest", {
+      relationshipId: rel._id,
+      from: requester,
+      type
+    });
+  } else {
+    await DM.create({
+      from: "SYSTEM",
+      to: target,
+      text: `${requester} wants to add a relationship: ${type}.`,
+      type: "relationshipApproval",
+      time: new Date()
+    });
+  }
+
+  res.json({ ok: true });
+});
+
+app.post("/api/relationship/approve", async (req, res) => {
+  const { relationshipId } = req.body;
+
+  const rel = await Relationship.findById(relationshipId);
+  if (!rel) return res.json({ ok: false });
+
+  rel.approvedTarget = true;
+
+  if (rel.approvedRequester && rel.approvedTarget) {
+    rel.approved = true;
+  }
+
+  await rel.save();
+
+  res.json({ ok: true, approved: rel.approved });
+});
+
+app.get("/api/relationship/list", async (req, res) => {
+  const { username } = req.query;
+
+  const rels = await Relationship.find({
+    approved: true,
+    $or: [
+      { requester: username },
+      { target: username }
+    ]
+  }).lean();
+
+  res.json({ ok: true, relationships: rels });
+});
+
+app.get("/api/relationship/pending", async (req, res) => {
+  const { username } = req.query;
+
+  const rels = await Relationship.find({
+    requester: username,
+    approved: false
+  }).lean();
+
+  res.json({ ok: true, relationships: rels });
+});
+
 
 app.get("/api/admin/users", async (req, res) => {
   try {
@@ -944,6 +1036,34 @@ io.on("connection", async (socket) => {
     const rooms = await Room.find().lean();
     io.emit("roomsList", rooms);
   });
+  
+  socket.on("relationshipApprovalRequest", data => {
+  const { relationshipId, from, type } = data;
+
+  const popup = document.createElement("div");
+  popup.className = "modal";
+  popup.innerHTML = `
+    <div class="modal-content">
+      <h2>Relationship Request</h2>
+      <p>${from} wants to add: <strong>${type}</strong></p>
+      <button id="approveRelBtn">Approve</button>
+      <button id="denyRelBtn">Deny</button>
+    </div>
+  `;
+  document.body.appendChild(popup);
+
+  document.getElementById("approveRelBtn").onclick = async () => {
+    await fetch("/api/relationship/approve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ relationshipId })
+    });
+    popup.remove();
+  };
+
+  document.getElementById("denyRelBtn").onclick = () => popup.remove();
+});
+
 
   socket.on('disconnect', async () => {
     const u = await User.findOneAndUpdate(
