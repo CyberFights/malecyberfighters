@@ -354,12 +354,14 @@ app.post("/api/relationship/request", async (req, res) => {
     });
   } else {
     await DM.create({
-      from: "SYSTEM",
-      to: target,
-      text: `${requester} wants to add a relationship: ${type}.`,
-      type: "relationshipApproval",
-      time: new Date()
-    });
+  from: "SYSTEM",
+  to: target,
+  text: `${requester} wants to add a relationship: ${type}.`,
+  type: "relationshipApproval",
+  relationshipId: rel._id,
+  time: new Date()
+});
+
   }
 
   res.json({ ok: true });
