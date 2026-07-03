@@ -227,6 +227,22 @@ if (m.type === "storyApproval") {
     </div>
   `;
 }
+if (m.type === "relationshipApproval") {
+  const div = document.createElement("div");
+  div.className = "message system";
+
+  div.innerHTML = `
+    <div class="system-msg">
+      ${escapeHtml(m.text)}
+      <button class="small-btn approveRelBtn" data-id="${m.relationshipId}">
+        Approve
+      </button>
+    </div>
+  `;
+
+  pmHistory.appendChild(div);
+  continue;
+}
 
     if (m.imageUrl) {
       div.innerHTML += `
@@ -239,6 +255,25 @@ if (m.type === "storyApproval") {
 
   body.scrollTop = body.scrollHeight;
 }
+document.addEventListener("click", async (e) => {
+  if (e.target.classList.contains("approveRelBtn")) {
+    const relationshipId = e.target.dataset.id;
+
+    const res = await fetch("/api/relationship/approve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ relationshipId })
+    });
+
+    const data = await res.json();
+    if (data.ok) {
+      e.target.parentElement.innerHTML = `
+        <div class="tiny">Relationship approved</div>
+      `;
+    }
+  }
+});
+
 document.addEventListener("click", async (e) => {
   if (e.target.classList.contains("approveStoryBtn")) {
     const storyId = e.target.dataset.id;
