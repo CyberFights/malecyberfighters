@@ -179,9 +179,11 @@ async function loadStories(username) {
   const data = await res.json();
 
   const box = document.getElementById("profileStories");
+  if (!box) return;
+  
   box.innerHTML = "<h3>Stories</h3>";
 
-  if (!data.stories.length) {
+  if (!data.stories || !data.stories.length) {
     box.innerHTML += "<div class='small muted'>No approved stories yet</div>";
     return;
   }
@@ -200,9 +202,11 @@ async function loadPendingStories(username) {
   const data = await res.json();
 
   const box = document.getElementById("profilePendingStories");
+  if (!box) return;
+  
   box.innerHTML = "<h3>Pending Approval</h3>";
 
-  if (!data.stories.length) {
+  if (!data.stories || !data.stories.length) {
     box.innerHTML += "<div class='small muted'>No pending stories</div>";
     return;
   }
@@ -226,11 +230,13 @@ async function loadRelationships(username) {
   const res = await fetch("/api/relationship/list?username=" + username);
   const data = await res.json();
 
-  const box = document.getElementById("profileRelationships");
-  box.innerHTML = "<h3>Relationships</h3>";
+  const box = document.getElementById("vpRelationships");
+  if (!box) return;
+  
+  box.innerHTML = "";
 
-  if (!data.relationships.length) {
-    box.innerHTML += "<div class='small muted'>No relationships</div>";
+  if (!data.relationships || !data.relationships.length) {
+    box.innerHTML = '<div class="small muted">No relationships</div>';
     return;
   }
 
@@ -250,11 +256,13 @@ async function loadPendingRelationships(username) {
   const res = await fetch("/api/relationship/pending?username=" + username);
   const data = await res.json();
 
-  const box = document.getElementById("profilePendingRelationships");
-  box.innerHTML = "<h3>Pending Approval</h3>";
+  const box = document.getElementById("vpPendingRelationships");
+  if (!box) return;
+  
+  box.innerHTML = "";
 
-  if (!data.relationships.length) {
-    box.innerHTML += "<div class='small muted'>None pending</div>";
+  if (!data.relationships || !data.relationships.length) {
+    box.innerHTML = '<div class="small muted">None pending</div>';
     return;
   }
 
@@ -264,6 +272,31 @@ async function loadPendingRelationships(username) {
     div.innerHTML = `
       <strong>${r.type}</strong> with ${r.target}
       <div class="tiny muted">Waiting for ${r.target} to approve…</div>
+    `;
+    box.appendChild(div);
+  });
+}
+
+async function loadRelationshipTimeline(username) {
+  const res = await fetch("/api/relationship/timeline?username=" + username);
+  const data = await res.json();
+
+  const box = document.getElementById("vpTimeline");
+  if (!box) return;
+  
+  box.innerHTML = "";
+
+  if (!data.timeline || !data.timeline.length) {
+    box.innerHTML = '<div class="small muted">No timeline events</div>';
+    return;
+  }
+
+  data.timeline.forEach(event => {
+    const div = document.createElement("div");
+    div.className = "timeline-item";
+    div.innerHTML = `
+      <div class="tiny muted">${new Date(event.createdAt).toLocaleDateString()}</div>
+      <div>${event.description || event.type}</div>
     `;
     box.appendChild(div);
   });
