@@ -1262,13 +1262,34 @@ table tr:hover {
       <div class="muted">Age</div>
       <div id="vpAge"></div>
     </div>
+    </div>
 <div id="profileStories"></div>
 
 <div id="profileRelationships"></div>
 
 <div id="profileTimeline"></div>
+<div id="vpRelationshipSection">
+  <h3>Add Relationship</h3>
 
-  </div>
+  <select id="vpRelationshipSelect">
+    <option value="">Select relationship…</option>
+    <option value="rival">Rival of</option>
+    <option value="friend">Friend of</option>
+    <option value="opponent">Opponent of</option>
+    <option value="tagteam">Tag team partners with</option>
+    <option value="dating">Dating</option>
+    <option value="married">Married to</option>
+    <option value="sibling">Sibling of</option>
+    <option value="parent">Parent of</option>
+    <option value="owner">Owner of</option>
+  </select>
+
+  <button id="vpRelationshipSend" class="small-btn">
+    Send Request
+  </button>
+</div>
+
+  
 </div>
 
 <!-- CHAT POPUP -->
