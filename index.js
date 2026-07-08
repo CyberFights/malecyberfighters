@@ -127,6 +127,7 @@ const dmSchema = new mongoose.Schema({
   // image message
   imageUrl: { type: String },
 
+  relationshipId: { type: String },
   // system / approval / normal
   type: { type: String, default: "normal" }, 
   // values:
