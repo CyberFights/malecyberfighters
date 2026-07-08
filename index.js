@@ -704,14 +704,16 @@ app.post("/api/chatMessage", async (req, res) => {
 app.post("/api/dm/history", async (req, res) => {
   const { a, b } = req.body;
 
-  const messages = await DM.find({
-    $or: [
-      { from: a, to: b },
-      { from: b, to: a }
-    ]
-  })
-  .sort({ time: 1 })
-  .lean();
+ const messages = await DM.find({
+  $or: [
+    { from: a, to: b },
+    { from: b, to: a },
+    { from: "SYSTEM", to: a },
+    { from: "SYSTEM", to: b }
+  ]
+})
+.sort({ time: 1 })
+.lean();
 
   res.json({ ok: true, messages });
 });
