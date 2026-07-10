@@ -30,9 +30,9 @@ $('btnUploadImage').addEventListener('click', async () => {
   const data = await resp.json();
 
   if(data.ok){
-    uploadedImageUrl = data.url;
-    status.textContent = 'Uploaded';
-  } else {
+  uploadedImageUrl = data.imageUrl;
+  status.textContent = 'Uploaded';
+} else {
     status.textContent = 'Upload failed';
   }
 });
