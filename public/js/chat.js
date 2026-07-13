@@ -233,6 +233,30 @@ function openUserProfile(username) {
   $('vpColorBox').style.background = user.color || "#7fd8ff";
   $('vpAvatar').src = user.imageUrl || "https://via.placeholder.com/120?text=No+Image";
 
+document.getElementById("vpBlockButton").onclick = async () => {
+  const me = getSession();
+  if (!me) return;
+
+  if (!confirm("Block this user? They will not be able to DM you.")) return;
+
+  const res = await fetch("/api/block-user", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username: me.username,
+      target: username
+    })
+  });
+
+  const data = await res.json();
+
+  if (data.ok) {
+    alert("User blocked.");
+  } else {
+    alert("Failed to block user.");
+  }
+};
+
   // Load stories + relationships + timeline
   loadStories(username);
   
