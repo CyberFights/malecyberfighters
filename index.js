@@ -412,6 +412,47 @@ app.get("/api/relationship/pending", async (req, res) => {
   res.json({ ok: true, relationships: rels });
 });
 
+// ---------- API: RELATIONSHIP TIMELINE ----------
+app.get("/api/relationship/timeline", async (req, res) => {
+  const { username } = req.query;
+
+  if (!username) {
+    return res.json({ ok: false, error: "missing_username" });
+  }
+
+  try {
+    const rels = await Relationship.find({
+      approved: true,
+      $or: [
+        { requester: username },
+        { target: username }
+      ]
+    })
+    .sort({ createdAt: 1 })  // oldest → newest
+    .lean();
+
+    // map to a simple timeline structure
+    const timeline = rels.map(rel => {
+      const isRequester = rel.requester === username;
+      const other =
+        isRequester ? rel.target : rel.requester;
+
+      return {
+        id: rel._id,
+        type: rel.type,
+        with: other,
+        role: isRequester ? "requester" : "target",
+        approvedAt: rel.createdAt
+      };
+    });
+
+    res.json({ ok: true, timeline });
+  } catch (err) {
+    console.error("relationship timeline error:", err);
+    res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
 
 app.get("/api/admin/users", async (req, res) => {
   try {
