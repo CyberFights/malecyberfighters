@@ -973,3 +973,42 @@ function renderRoomMembers(members) {
 socket.on("roomMembers", members => {
   renderRoomMembers(members);
 });
+
+document.getElementById("srType").addEventListener("change", () => {
+  const type = document.getElementById("srType").value;
+  document.getElementById("srUserSection").style.display =
+    type === "user" ? "block" : "none";
+});
+document.getElementById("srSubmit").onclick = async () => {
+  const me = getSession();
+  if (!me) return alert("You must be logged in.");
+
+  const type = document.getElementById("srType").value;
+  const user = document.getElementById("srUser").value;
+  const where = document.getElementById("srWhere").value;
+  const when = document.getElementById("srWhen").value;
+  const info = document.getElementById("srInfo").value;
+
+  const payload = {
+    from: me.username,
+    to: "Administrator",
+    text: `
+Support Report
+Type: ${type}
+User: ${user || "N/A"}
+Where: ${where}
+When: ${when}
+Info: ${info}
+    `.trim()
+  };
+
+  await fetch("/api/send-dm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  alert("Report submitted.");
+  closePopup("supportPopup");
+};
+
