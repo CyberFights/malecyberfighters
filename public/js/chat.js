@@ -233,29 +233,29 @@ function openUserProfile(username) {
   $('vpColorBox').style.background = user.color || "#7fd8ff";
   $('vpAvatar').src = user.imageUrl || "https://via.placeholder.com/120?text=No+Image";
 
-document.getElementById("vpBlockButton").onclick = async () => {
-  const me = getSession();
-  if (!me) return;
+  document.getElementById("vpBlockButton").onclick = async () => {
+    const me = getSession();
+    if (!me) return;
 
-  if (!confirm("Block this user? They will not be able to DM you.")) return;
+    if (!confirm("Block this user? They will not be able to DM you.")) return;
 
-  const res = await fetch("/api/block-user", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      username: me.username,
-      target: username
-    })
-  });
+    const res = await fetch("/api/block-user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: me.username,
+        target: username
+      })
+    });
 
-  const data = await res.json();
+    const data = await res.json();
 
-  if (data.ok) {
-    alert("User blocked.");
-  } else {
-    alert("Failed to block user.");
-  }
-};
+    if (data.ok) {
+      alert("User blocked.");
+    } else {
+      alert("Failed to block user.");
+    }
+  };
 
   // Load stories + relationships + timeline
   loadStories(username);
@@ -288,10 +288,9 @@ document.getElementById("vpBlockButton").onclick = async () => {
   };
 
   $('modalViewProfile').style.display = "flex";
-   document.getElementById("vpDMButton").onclick = () => {
-  openPrivateWindow(username);
-};
-
+  document.getElementById("vpDMButton").onclick = () => {
+    openPrivateWindow(username);
+  };
 }
 
 $('vpClose').addEventListener('click', () => {
@@ -377,6 +376,7 @@ async function loadRelationships(username) {
     box.appendChild(div);
   });
 }
+
 async function loadRelationshipTimeline(username) {
   const res = await fetch("/api/relationship/timeline?username=" + username);
   const data = await res.json();
@@ -393,22 +393,21 @@ async function loadRelationshipTimeline(username) {
   }
 
   events.forEach(e => {
-  const div = document.createElement("div");
+    const div = document.createElement("div");
 
-  const cls = REL_COLORS[e.type] || "rel-friend"; // fallback
+    const cls = REL_COLORS[e.type] || "rel-friend"; // fallback
 
-  div.className = `timeline-item ${cls}`;
+    div.className = `timeline-item ${cls}`;
 
-  div.innerHTML = `
-    <div class="timeline-date">${new Date(e.approvedAt).toLocaleString()}</div>
-    <div class="timeline-desc">
-      ${e.type} with <strong>${e.with}</strong>
-    </div>
-  `;
+    div.innerHTML = `
+      <div class="timeline-date">${new Date(e.approvedAt).toLocaleString()}</div>
+      <div class="timeline-desc">
+        ${e.type} with <strong>${e.with}</strong>
+      </div>
+    `;
 
-  box.appendChild(div);
-});
-
+    box.appendChild(div);
+  });
 }
 
 
@@ -580,7 +579,7 @@ function sendPublicMessage(){
 ============================================================ */
 socket.on('publicMessage', msg => {
   const s = getSession();
-  if (msg.from === s.username) return; // prevent double render
+  if (s && msg.from === s.username) return; // prevent double render
   appendPublicMessage(msg);
 });
 
@@ -605,12 +604,12 @@ function appendPublicMessage(msg){
   div.innerHTML = `
     <div class="message-avatar">${avatar}</div>
     <div class="message">
-     <div style="font-weight:700; color:${user?.color || '#7fd8ff'}">
-  ${msg.display}
-  <span class="small" style="color:${user?.color || '#7fd8ff'}">
-    @${msg.from} • ${new Date(msg.time).toLocaleTimeString()}
-  </span>
-</div>
+      <div style="font-weight:700; color:${user?.color || '#7fd8ff'}">
+        ${msg.display}
+        <span class="small" style="color:${user?.color || '#7fd8ff'}">
+          @${msg.from} • ${new Date(msg.time).toLocaleTimeString()}
+        </span>
+      </div>
       <div>${escapeHtml(msg.text)}</div>
     </div>
   `;
@@ -648,7 +647,8 @@ socket.on('roomHistory', ({ room, history }) => {
 });
 
 socket.on('roomMessage', msg => {
-  const currentRoom = $('roomChatPopup').dataset.room;
+  const roomChat = $('roomChatPopup');
+  const currentRoom = roomChat?.dataset.room;
 
   if (msg.room !== currentRoom) {
     incrementRoomUnread(msg.room);
@@ -670,33 +670,35 @@ function appendRoomMessage(msg){
   const div = document.createElement('div');
   div.className = 'message-row';
 
-  div.innerHTML = `
+  let html = `
     <div class="message-avatar">${avatar}</div>
     <div class="message">
       <div style="font-weight:700; color:${user?.color || '#7fd8ff'}">
-  ${msg.display}
-  <span class="small" style="color:${user?.color || '#7fd8ff'}">
-    @${msg.from} • ${new Date(msg.time).toLocaleTimeString()}
-  </span>
-</div>
+        ${msg.display}
+        <span class="small" style="color:${user?.color || '#7fd8ff'}">
+          @${msg.from} • ${new Date(msg.time).toLocaleTimeString()}
+        </span>
+      </div>
       <div>${escapeHtml(msg.text)}</div>
     </div>
   `;
-if (msg.imageUrl) {
-  html += `
-    <img src="${msg.imageUrl}" class="chat-image" onclick="window.open('${msg.imageUrl}', '_blank')">
-  `;
-}
 
+  if (msg.imageUrl) {
+    html += `
+      <img src="${msg.imageUrl}" class="chat-image" onclick="window.open('${msg.imageUrl}', '_blank')">
+    `;
+  }
+
+  div.innerHTML = html;
   feed.appendChild(div);
   feed.scrollTop = feed.scrollHeight;
 }
 
-document.getElementById("roomImageBtn").addEventListener("click", () => {
+document.getElementById("roomImageBtn")?.addEventListener("click", () => {
   document.getElementById("roomImageInput").click();
 });
 
-document.getElementById("roomImageInput").addEventListener("change", e => {
+document.getElementById("roomImageInput")?.addEventListener("change", e => {
   const file = e.target.files[0];
   if (file) uploadRoomImage(file);
 });
@@ -726,6 +728,7 @@ function openPrivateWindow(username){
 makeDraggable($('chatPopup'));
 
 function makeDraggable(el) {
+  if (!el) return;
   let offsetX = 0, offsetY = 0, isDown = false;
 
   el.addEventListener('mousedown', (e) => {
@@ -769,8 +772,9 @@ socket.on("roomsList", rooms => {
 
 function renderRoomsSidebar() {
   const list = $('roomsList');
-  const sort = $('roomSort').value;
+  const sort = $('roomSort')?.value || 'newest';
   const s = getSession();
+  if (!list) return;
   list.innerHTML = "";
 
   let rooms = [...(window.rooms || [])];
@@ -862,6 +866,7 @@ $('closeSupport')?.addEventListener('click', () => {
 $('btnPrivacy')?.addEventListener('click', () => {
   $('modalPrivacy').style.display = 'flex';
 });
+
 function updateRoomsSidebarBadges() {
   const unread = getRoomUnread();
 
@@ -887,9 +892,13 @@ function updateRoomsSidebarBadges() {
 $('closePrivacy')?.addEventListener('click', () => {
   $('modalPrivacy').style.display = 'none';
 });
+
 function openRoomPopup(roomId, roomName) {
   const popup = $('roomChatPopup');
-  $('roomChatTitle').textContent = roomName;
+  const title = $('roomChatTitle');
+  if (!popup || !title) return;
+  
+  title.textContent = roomName;
 
   popup.dataset.room = roomId;
   popup.style.display = 'flex';
@@ -897,37 +906,43 @@ function openRoomPopup(roomId, roomName) {
   clearRoomUnread(roomId);
   updateRoomsSidebarBadges();
 
- socket.emit("joinRoom", { room: roomId });
+  socket.emit("joinRoom", { room: roomId });
 
-// Request member list refresh
-setTimeout(() => {
-  socket.emit("requestRoomMembers", { room: roomId });
-}, 200);
+  // Request member list refresh
+  setTimeout(() => {
+    socket.emit("requestRoomMembers", { room: roomId });
+  }, 200);
+}
+
 socket.on("requestRoomMembers", ({ room }) => {
   updateRoomMembers(room);
 });
 
-}
 
-
-$('roomSendBtn').addEventListener('click', () => {
-  const room = $('roomChatPopup').dataset.room;
-  const text = $('roomMessageInput').value.trim();
+$('roomSendBtn')?.addEventListener('click', () => {
+  const room = $('roomChatPopup')?.dataset.room;
+  const input = $('roomMessageInput');
+  if (!input || !room) return;
+  
+  const text = input.value.trim();
   if (!text) return;
 
   sendRoomMessage(room, text);
-  $('roomMessageInput').value = '';
+  input.value = '';
 });
-$('closeRoomChat').addEventListener('click', () => {
-  $('roomChatPopup').style.display = 'none';
+
+$('closeRoomChat')?.addEventListener('click', () => {
+  const popup = $('roomChatPopup');
+  if (popup) popup.style.display = 'none';
 });
 
 
 let roomTypingTimeout;
 
-$('roomMessageInput').addEventListener("input", () => {
-  const room = $('roomChatPopup').dataset.room;
+$('roomMessageInput')?.addEventListener("input", () => {
+  const room = $('roomChatPopup')?.dataset.room;
   const s = getSession();
+  if (!room || !s) return;
 
   socket.emit("typingRoom", { room, from: s.username });
 
@@ -936,21 +951,28 @@ $('roomMessageInput').addEventListener("input", () => {
     socket.emit("stopTypingRoom", { room, from: s.username });
   }, 1200);
 });
+
 socket.on("typingRoom", ({ from, room }) => {
-  const current = $('roomChatPopup').dataset.room;
+  const roomChat = $('roomChatPopup');
+  const current = roomChat?.dataset.room;
   if (current !== room) return;
 
   const el = $('roomTyping');
-  el.textContent = `${from} is typing...`;
-  el.style.display = "block";
+  if (el) {
+    el.textContent = `${from} is typing...`;
+    el.style.display = "block";
+  }
 });
 
 socket.on("stopTypingRoom", ({ from, room }) => {
-  const current = $('roomChatPopup').dataset.room;
+  const roomChat = $('roomChatPopup');
+  const current = roomChat?.dataset.room;
   if (current !== room) return;
 
-  $('roomTyping').style.display = "none";
+  const el = $('roomTyping');
+  if (el) el.style.display = "none";
 });
+
 function renderRoomMembers(members) {
   const list = $('roomMembersList');
   if (!list) return;
@@ -982,12 +1004,15 @@ socket.on("roomMembers", members => {
   renderRoomMembers(members);
 });
 
-document.getElementById("srType").addEventListener("change", () => {
+document.getElementById("srType")?.addEventListener("change", () => {
   const type = document.getElementById("srType").value;
-  document.getElementById("srUserSection").style.display =
-    type === "user" ? "block" : "none";
+  const section = document.getElementById("srUserSection");
+  if (section) {
+    section.style.display = type === "user" ? "block" : "none";
+  }
 });
-document.getElementById("srSubmit").onclick = async () => {
+
+document.getElementById("srSubmit")?.addEventListener("click", async () => {
   const me = getSession();
   if (!me) return alert("You must be logged in.");
 
@@ -1017,6 +1042,6 @@ Info: ${info}
   });
 
   alert("Report submitted.");
-  closePopup("supportPopup");
-};
-
+  const popup = $('supportPopup');
+  if (popup) popup.style.display = 'none';
+});
