@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Male Cyber Fighters – Mobile</title>
+
+<style>
+/* GLOBAL */
+body, html {
+  margin: 0;
+  padding: 0;
+  background: #0a0a0f;
+  color: #fff;
+  font-family: Arial, sans-serif;
+  overflow: hidden;
+}
+
+/* MAIN APP */
+#app {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+/* TAB NAVIGATION */
+#mobileTabs {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100vw;
+  height: 60px;
+  background: rgba(10,10,20,0.95);
+  backdrop-filter: blur(6px);
+  border-top: 1px solid rgba(255,255,255,0.1);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  z-index: 9998;
+}
+
+#mobileTabs button {
+  flex: 1;
+  height: 100%;
+  border: none;
+  background: none;
+  color: #fff;
+  font-size: 14px;
+}
+
+#mobileTabs button.active {
+  color: #3b9fff;
+  font-weight: bold;
+  border-bottom: 3px solid #3b9fff;
+}
+
+/* MAIN CHAT AREA */
+#publicChat {
+  width: 100vw;
+  height: calc(100vh - 60px);
+  overflow-y: auto;
+  padding: 15px;
+}
+
+/* INPUT BAR */
+#publicInputBar {
+  position: fixed;
+  bottom: 60px;
+  left: 0;
+  width: 100vw;
+  padding: 10px;
+  background: rgba(20,20,30,0.95);
+  border-top: 1px solid rgba(255,255,255,0.1);
+  display: flex;
+  gap: 10px;
+}
+
+#publicInputBar input {
+  flex: 1;
+  padding: 12px;
+  border-radius: 8px;
+  border: none;
+  background: #1a1a25;
+  color: #fff;
+}
+
+#publicInputBar button {
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: #3b9fff;
+  color: #fff;
+  border: none;
+}
+
+/* UNIVERSAL POPUP */
+.popup {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(10,10,20,0.95);
+  backdrop-filter: blur(6px);
+  z-index: 9999;
+  overflow-y: auto;
+  padding: 20px;
+  display: none;
+}
+
+.popup.active {
+  display: block;
+}
+
+.popup .close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: #ff3b3b;
+  color: #fff;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+
+/* PROFILE POPUP */
+.profile-mobile {
+  max-width: 480px;
+  margin: 0 auto;
+  padding-top: 40px;
+}
+
+.profile-mobile img {
+  width: 120px;
+  height: 120px;
+  border-radius: 12px;
+  display: block;
+  margin: 0 auto 20px auto;
+}
+
+.pm-section {
+  background: rgba(255,255,255,0.05);
+  padding: 15px;
+  border-radius: 10px;
+  margin-bottom: 15px;
+}
+
+.pm-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 40px;
+}
+
+.pm-buttons button {
+  padding: 14px;
+  border-radius: 10px;
+  border: none;
+  font-size: 16px;
+  background: #3b9fff;
+  color: #fff;
+}
+
+.pm-buttons .danger {
+  background: #ff3b3b;
+}
+
+/* SUPPORT POPUP */
+.support-mobile {
+  max-width: 480px;
+  margin: 0 auto;
+  padding-top: 40px;
+}
+
+#supportPopup label {
+  color: #fff;
+  font-size: 14px;
+  margin-bottom: 6px;
+  display: block;
+}
+
+#supportPopup input,
+#supportPopup select,
+#supportPopup textarea {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: none;
+  background: #1a1a25;
+  color: #fff;
+  margin-top: 6px;
+}
+
+#srSubmit {
+  padding: 14px;
+  border-radius: 10px;
+  border: none;
+  font-size: 16px;
+  background: #3b9fff;
+  color: #fff;
+}
+/* LOGIN & REGISTER POPUPS */
+.login-mobile,
+.register-mobile {
+  max-width: 480px;
+  margin: 0 auto;
+  padding-top: 40px;
+}
+
+#loginPopup h2,
+#registerPopup h2 {
+  text-align: center;
+  color: #fff;
+  margin-bottom: 25px;
+}
+
+#loginPopup input,
+#registerPopup input {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: none;
+  background: #1a1a25;
+  color: #fff;
+  margin-top: 6px;
+}
+
+#loginSubmit,
+#registerSubmit {
+  width: 100%;
+  padding: 14px;
+  border-radius: 10px;
+  border: none;
+  font-size: 16px;
+  background: #3b9fff;
+  color: #fff;
+  margin-top: 20px;
+}
+
+</style>
+</head>
+
+<body>
+<div id="app">
+
+  <!-- CHAT -->
+  <div id="publicChat"></div>
+
+  <!-- INPUT BAR -->
+  <div id="publicInputBar">
+    <input id="publicInput" placeholder="Message…">
+    <button id="publicSend">Send</button>
+  </div>
+
+  <!-- TABS -->
+  <div id="mobileTabs">
+    <button data-tab="login">Login</button>
+<button data-tab="register">Register</button>
+    <button data-tab="chat" class="active">Chat</button>
+    <button data-tab="profile">Profile</button>
+    <button data-tab="support">Support</button>
+  </div>
+
+  <!-- PROFILE POPUP -->
+  <div id="profilePopup" class="popup">
+    <button class="close-btn" onclick="closePopup('profilePopup')">Close</button>
+    <div class="profile-mobile">
+      <img id="pmAvatar" src="">
+      <h2 id="pmDisplay"></h2>
+      <p id="pmUsername"></p>
+
+      <div class="pm-section">
+        <h3>Stats</h3>
+        <div class="pm-stats">
+          <div><strong id="pmWins"></strong> Wins</div>
+          <div><strong id="pmLosses"></strong> Losses</div>
+        </div>
+      </div>
+
+      <div class="pm-section">
+        <h3>Bio</h3>
+        <p id="pmBio"></p>
+      </div>
+
+      <div class="pm-buttons">
+        <button id="pmDMButton">Send DM</button>
+        <button id="pmBlockButton" class="danger">Block User</button>
+      </div>
+    </div>
+  </div>
+<div id="loginPopup" class="popup">
+  <button class="close-btn" onclick="closePopup('loginPopup')">Close</button>
+
+  <div class="login-mobile">
+    <h2>Login</h2>
+
+    <div class="pm-section">
+      <label>Username</label>
+      <input id="loginUser" placeholder="Enter username">
+    </div>
+
+    <div class="pm-section">
+      <label>Password</label>
+      <input id="loginPass" type="password" placeholder="Enter password">
+    </div>
+
+    <button id="loginSubmit">Login</button>
+  </div>
+</div>
+<div id="registerPopup" class="popup">
+  <button class="close-btn" onclick="closePopup('registerPopup')">Close</button>
+
+  <div class="register-mobile">
+    <h2>Create Account</h2>
+
+    <div class="pm-section">
+      <label>Username</label>
+      <input id="regUser" placeholder="Choose a username">
+    </div>
+
+    <div class="pm-section">
+      <label>Email</label>
+      <input id="regEmail" type="email" placeholder="Enter your email">
+    </div>
+
+    <div class="pm-section">
+      <label>Password</label>
+      <input id="regPass" type="password" placeholder="Create a password">
+    </div>
+
+    <button id="registerSubmit">Register</button>
+  </div>
+</div>
+
+  <!-- SUPPORT POPUP -->
+  <div id="supportPopup" class="popup">
+    <button class="close-btn" onclick="closePopup('supportPopup')">Close</button>
+
+    <div class="support-mobile">
+      <h2>Support Request</h2>
+
+      <div class="pm-section">
+        <label>Type of Report</label>
+        <select id="srType">
+          <option value="user">User Report</option>
+          <option value="issue">App Issue</option>
+        </select>
+      </div>
+
+      <div class="pm-section" id="srUserSection">
+        <label>Who are you reporting?</label>
+        <input id="srUser" placeholder="Username">
+      </div>
+
+      <div class="pm-section">
+        <label>Where did this happen?</label>
+        <input id="srWhere" placeholder="Public chat, DM, room, etc.">
+      </div>
+
+      <div class="pm-section">
+        <label>When did this happen?</label>
+        <input id="srWhen" type="datetime-local">
+      </div>
+
+      <div class="pm-section">
+        <label>Additional Information</label>
+        <textarea id="srInfo" rows="5"></textarea>
+      </div>
+
+      <button id="srSubmit">Submit Report</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// POPUP SYSTEM
+function openPopup(id) {
+  document.querySelectorAll('.popup').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function closePopup(id) {
+  document.getElementById(id).classList.remove('active');
+}
+
+// TAB LOGIC
+document.querySelectorAll("#mobileTabs button").forEach(btn => {
+  btn.addEventListener("click", () => {
+
+    document.querySelectorAll("#mobileTabs button")
+      .forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+
+    const tab = btn.dataset.tab;
+
+    // Close popups
+    document.querySelectorAll('.popup').forEach(p => p.classList.remove('active'));
+
+    if (tab === "chat") {
+      // Chat is default visible
+    }
+
+    if (tab === "profile") {
+      openPopup("profilePopup");
+    }
+
+    if (tab === "support") {
+      openPopup("supportPopup");
+    }
+  });
+});
+
+// SUPPORT FORM LOGIC
+document.getElementById("srType").addEventListener("change", () => {
+  const type = document.getElementById("srType").value;
+  document.getElementById("srUserSection").style.display =
+    type === "user" ? "block" : "none";
+});
+document.querySelectorAll("#mobileTabs button").forEach(btn => {
+  btn.addEventListener("click", () => {
+
+    document.querySelectorAll("#mobileTabs button")
+      .forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+
+    const tab = btn.dataset.tab;
+
+    // Close all popups
+    document.querySelectorAll('.popup').forEach(p => p.classList.remove('active'));
+
+    if (tab === "chat") {
+      // Chat stays visible
+    }
+
+    if (tab === "profile") {
+      openPopup("profilePopup");
+    }
+
+    if (tab === "support") {
+      openPopup("supportPopup");
+    }
+
+    if (tab === "login") {
+      openPopup("loginPopup");
+    }
+
+    if (tab === "register") {
+      openPopup("registerPopup");
+    }
+  });
+});
+document.getElementById("loginSubmit").onclick = async () => {
+  const username = document.getElementById("loginUser").value;
+  const password = document.getElementById("loginPass").value;
+
+  const res = await fetch("/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password })
+  });
+
+  const data = await res.json();
+
+  if (!data.ok) return alert("Invalid login.");
+
+  alert("Logged in!");
+  closePopup("loginPopup");
+  location.reload();
+};
+document.getElementById("registerSubmit").onclick = async () => {
+  const username = document.getElementById("regUser").value;
+  const email = document.getElementById("regEmail").value;
+  const password = document.getElementById("regPass").value;
+
+  const res = await fetch("/api/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, email, password })
+  });
+
+  const data = await res.json();
+
+  if (!data.ok) return alert("Registration failed.");
+
+  alert("Account created!");
+  closePopup("registerPopup");
+  location.reload();
+};
+
+</script>
+
+</body>
+</html>
