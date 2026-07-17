@@ -271,20 +271,6 @@ function closePopup(id) {
   document.getElementById(id).classList.remove('active');
 }
 
-// LOGIN LOGIC
-document.getElementById("loginSubmit").onclick = async () => {
-  const username = document.getElementById("loginUser").value;
-  const password = document.getElementById("loginPass").value;
-
-  if (!username || !password) {
-    alert("Enter username and password");
-    return;
-  }
-
-  // Fake login for now
-  document.getElementById("loginScreen").style.display = "none";
-  document.getElementById("app").style.display = "block";
-};
 
 // SIDEBAR LOGIC
 document.querySelectorAll(".sidebar-item").forEach(item => {
