@@ -6,7 +6,6 @@
 <title>Male Cyber Fighters – Mobile</title>
 
 <style>
-/* GLOBAL */
 body, html {
   margin: 0;
   padding: 0;
@@ -143,13 +142,6 @@ body, html {
   padding-top: 40px;
 }
 
-#supportPopup label {
-  color: #fff;
-  font-size: 14px;
-  margin-bottom: 6px;
-  display: block;
-}
-
 #supportPopup input,
 #supportPopup select,
 #supportPopup textarea {
@@ -170,6 +162,16 @@ body, html {
   background: #3b9fff;
   color: #fff;
 }
+
+/* HIDDEN ADMIN ELEMENTS */
+.hidden-admin {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  height: 0 !important;
+  width: 0 !important;
+  overflow: hidden !important;
+}
 </style>
 </head>
 
@@ -182,10 +184,12 @@ body, html {
   <div class="login-box">
     <input id="loginUser" placeholder="Your fighter handle">
     <input id="loginPass" type="password" placeholder="Password">
-    <button id="loginSubmit">→ Login</button>
+    <button id="btnLogin">→ Login</button>
   </div>
 
-  <p style="margin-top:15px; opacity:0.7;">New fighter? Create an account</p>
+  <button id="btnRegister" style="margin-top:15px; background:none; border:none; color:#7ab8ff;">
+    Create an account
+  </button>
 </div>
 
 <!-- MAIN APP -->
@@ -198,6 +202,8 @@ body, html {
     <div class="sidebar-item" data-section="messages">Messages</div>
     <div class="sidebar-item" data-section="rooms">Rooms</div>
     <div class="sidebar-item" data-section="profile">My Profile</div>
+    <div class="sidebar-item" id="btnDMs" data-section="dms">DMs</div>
+    <div class="sidebar-item" id="btnAdmin" data-section="admin">Admin</div>
     <div class="sidebar-item logout" data-section="logout">Logout</div>
   </div>
 
@@ -206,7 +212,6 @@ body, html {
     <h2>Welcome to the Arena</h2>
     <p>Choose a section from the sidebar.</p>
   </div>
-
 </div>
 
 <!-- SUPPORT POPUP -->
@@ -247,6 +252,37 @@ body, html {
     <button id="srSubmit">Submit Report</button>
   </div>
 </div>
+
+<!-- HIDDEN ADMIN STRUCTURE (PREVENT JS ERRORS) -->
+<div id="modalAdminPassword" class="hidden-admin">
+  <button id="adminPasswordCancel"></button>
+  <button id="adminPasswordSubmit"></button>
+  <input id="adminPasswordInput">
+  <div id="adminPasswordError"></div>
+</div>
+
+<div id="modalAdmin" class="hidden-admin">
+  <button id="adminClose"></button>
+
+  <div id="adminUsersView"></div>
+  <div id="adminAnalyticsView"></div>
+
+  <div id="adminStatsSummary"></div>
+
+  <table id="adminTopIps">
+    <tbody></tbody>
+  </table>
+
+  <table id="adminTable">
+    <tbody></tbody>
+  </table>
+</div>
+
+<!-- Hidden edit cancel button -->
+<button id="editCancel" class="hidden-admin"></button>
+
+
+
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/utils.js"></script>
 <script src="/js/socket.js"></script>
@@ -263,7 +299,34 @@ body, html {
 <script>
 
 
-// SIDEBAR LOGIC
+<script>
+// POPUP SYSTEM
+function openPopup(id) {
+  document.querySelectorAll('.popup').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function closePopup(id) {
+  document.getElementById(id).classList.remove('active');
+}
+
+// LOGIN
+document.getElementById("btnLogin").onclick = () => {
+  const user = document.getElementById("loginUser").value;
+  const pass = document.getElementById("loginPass").value;
+
+  if (!user || !pass) return alert("Enter username and password");
+
+  document.getElementById("loginScreen").style.display = "none";
+  document.getElementById("app").style.display = "block";
+};
+
+// REGISTER (placeholder)
+document.getElementById("btnRegister").onclick = () => {
+  alert("Registration coming soon");
+};
+
+// SIDEBAR
 document.querySelectorAll(".sidebar-item").forEach(item => {
   item.addEventListener("click", () => {
 
@@ -279,7 +342,7 @@ document.querySelectorAll(".sidebar-item").forEach(item => {
     }
 
     if (section === "profile") {
-      openPopup("supportPopup"); // example popup
+      openPopup("supportPopup");
       return;
     }
 
