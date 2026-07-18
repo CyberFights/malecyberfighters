@@ -27,7 +27,8 @@ async function doLogin(){
       err.style.display = 'block';
       return;
     }
-
+document.getElementById("loginScreen").style.display = "none";
+  document.getElementById("app").style.display = "block";
     setSession(data.user);
     localStorage.setItem('currentUser', JSON.stringify(data.user));
     socket.emit('login', data.user);
