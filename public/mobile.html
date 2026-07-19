@@ -297,49 +297,8 @@ body, html {
   <script src="/js/dm-toggle.js"></script>
   <script src="/js/profile.js"></script>
 <script src="/js/landing.js"></script>
-<script>
 
 
-<script>
-
-
-// REGISTER (placeholder)
-document.getElementById("btnRegister").onclick = () => {
-  alert("Registration coming soon");
-};
-
-// SIDEBAR
-document.querySelectorAll(".sidebar-item").forEach(item => {
-  item.addEventListener("click", () => {
-
-    document.querySelectorAll(".sidebar-item")
-      .forEach(i => i.classList.remove("active"));
-    item.classList.add("active");
-
-    const section = item.dataset.section;
-
-    if (section === "logout") {
-      location.reload();
-      return;
-    }
-
-    if (section === "profile") {
-      openPopup("supportPopup");
-      return;
-    }
-
-    document.getElementById("mainContent").innerHTML =
-      `<h2>${section}</h2><p>Loaded ${section} section.</p>`;
-  });
-});
-
-// SUPPORT FORM LOGIC
-document.getElementById("srType").addEventListener("change", () => {
-  const type = document.getElementById("srType").value;
-  document.getElementById("srUserSection").style.display =
-    type === "user" ? "block" : "none";
-});
-</script>
 
 </body>
 </html>
