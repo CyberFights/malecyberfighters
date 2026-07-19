@@ -55,3 +55,51 @@ function logout(){
   if (window.updateProfileCard) updateProfileCard(null);
   if (window.updateDMListSidebar) updateDMListSidebar();
 }
+function renderChatMessage(msg) {
+  const me = getSession();
+  const box = document.createElement("div");
+  box.className = "chatMessage" + (msg.username === me.username ? " me" : "");
+
+  const avatar = msg.avatar || "/img/default-avatar.png";
+
+  box.innerHTML = `
+    <img src="${avatar}">
+    <div class="msgBody">
+      <div class="author">${msg.username}</div>
+      <div class="text">${msg.text}</div>
+    </div>
+  `;
+
+  $('chatMessages').appendChild(box);
+  $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
+}
+$('onlineToggle').addEventListener('click', () => {
+  $('onlineDrawer').classList.toggle('open');
+});
+socket.on('onlineUsers', list => {
+  const box = $('onlineList');
+  box.innerHTML = '';
+
+  list.forEach(u => {
+    const avatar = u.avatar || "/img/default-avatar.png";
+
+    const div = document.createElement('div');
+    div.className = "onlineUser";
+    div.innerHTML = `
+      <img src="${avatar}">
+      <span>${u.username}</span>
+    `;
+    box.appendChild(div);
+  });
+});
+
+$('chatSend').addEventListener('click', () => {
+  const text = $('chatInput').value.trim();
+  if (!text) return;
+
+  socket.emit('publicMessage', { text });
+  $('chatInput').value = '';
+});
+socket.on('publicMessage', msg => {
+  renderChatMessage(msg);
+});
