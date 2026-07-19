@@ -192,7 +192,56 @@ body, html {
     Create an account
   </button>
 </div>
+<!-- REGISTER MODAL -->
+<div id="modalRegister" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.6);align-items:center;justify-content:center">
+  <div>
 
+    <h3>Register - click upload image before create account</h3>
+    <div>
+
+      <div>
+        <input id="regUser" type="text" placeholder="Username" required />
+        <input id="regEmail" type="email" placeholder="Email" required />
+      </div>
+
+      <div>
+        <input id="regDisplay" type="text" placeholder="Display name"  required />
+        <input id="regAge" type="number" min="13" placeholder="Age" required/>
+      </div>
+
+      <div>
+        <input id="regPass" type="password" placeholder="Password" required />
+        <input id="regColor" type="color" required/>
+      </div>
+
+      <div>
+        <select id="regLanguage">
+          <option value="en">English</option>
+          <option value="es">Spanish</option>
+          <option value="fr">French</option>
+          <option value="de">German</option>
+        </select>
+        <input id="regWins" type="number" placeholder="Wins" />
+        <input id="regLosses" type="number" placeholder="Losses" />
+      </div>
+
+      <textarea id="regInfo" placeholder="Short bio / info" rows="3"></textarea>
+
+      <div>
+        <input id="regImageFile" type="file" accept="image/*" />
+        <button id="btnUploadImage" class="small-btn">Upload Image</button>
+        <div id="uploadStatus">No image uploaded</div>
+      </div>
+
+      <div>
+        <button id="regCancel" class="ghost">Cancel</button>
+        <button id="regSubmit">Create Account</button>
+      </div>
+
+      <div id="regError" style="display:none"></div>
+    </div>
+  </div>
+</div>
 <!-- MAIN APP -->
 <div id="app">
 
