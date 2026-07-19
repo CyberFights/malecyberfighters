@@ -62,20 +62,32 @@ function renderChatMessage(msg) {
 
   const avatar = msg.avatar || "/img/default-avatar.png";
 
-  box.innerHTML = `
+  let body = `
     <img src="${avatar}">
     <div class="msgBody">
       <div class="author">${msg.username}</div>
-      <div class="text">${msg.text}</div>
-    </div>
   `;
+
+  if (msg.text) {
+    body += `<div class="text">${msg.text}</div>`;
+  }
+
+  if (msg.image) {
+    body += `<img src="${msg.image}" class="chatImage">`;
+  }
+
+  body += `</div>`;
+
+  box.innerHTML = body;
 
   $('chatMessages').appendChild(box);
   $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
 }
+
 $('onlineToggle').addEventListener('click', () => {
   $('onlineDrawer').classList.toggle('open');
 });
+
 socket.on('onlineUsers', list => {
   const box = $('onlineList');
   box.innerHTML = '';
@@ -100,6 +112,7 @@ $('chatSend').addEventListener('click', () => {
   socket.emit('publicMessage', { text });
   $('chatInput').value = '';
 });
+
 socket.on('publicMessage', msg => {
   renderChatMessage(msg);
 });
