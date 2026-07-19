@@ -1,17 +1,21 @@
 // Helper
-function $(id){ return document.getElementById(id); }
+function $(id) {
+  return document.getElementById(id);
+}
 
 // LOGIN
 $('loginSubmit').addEventListener('click', doLogin);
-$('loginPass').addEventListener('keydown', e => { if(e.key === 'Enter') doLogin(); });
+$('loginPass').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
 
-async function doLogin(){
+async function doLogin() {
   const username = $('loginUser').value.trim();
   const password = $('loginPass').value;
   const err = $('loginError');
   err.style.display = 'none';
 
-  if(!username || !password){
+  if (!username || !password) {
     err.textContent = "Enter username and password";
     err.style.display = 'block';
     return;
@@ -19,18 +23,22 @@ async function doLogin(){
 
   try {
     const resp = await fetch('/api/login', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({username,password})
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
     });
+
     const data = await resp.json();
 
-    if(!data.ok){
-      err.textContent = data.error === 'banned' ? 'You are banned.' : 'Invalid credentials';
+    if (!data.ok) {
+      err.textContent = data.error === 'banned'
+        ? 'You are banned.'
+        : 'Invalid credentials';
       err.style.display = 'block';
       return;
     }
 
+    // SUCCESS
     $('loginScreen').style.display = 'none';
     $('app').style.display = 'block';
 
@@ -49,26 +57,25 @@ async function doLogin(){
     bindChat();
     bindDMDrawer();
 
-  } catch(e){
+  } catch (e) {
     err.textContent = "Network error";
     err.style.display = 'block';
   }
 }
 
-function logout(){
+function logout() {
   clearSession();
   localStorage.removeItem('currentUser');
-  if (window.updateUIForSession) updateUIForSession();
-  if (window.updateProfileCard) updateProfileCard(null);
-  if (window.updateDMListSidebar) updateDMListSidebar();
   location.reload();
 }
 
 // SIDEBAR
-function bindSidebar(){
+function bindSidebar() {
   document.querySelectorAll('.sidebar-item').forEach(item => {
     item.addEventListener('click', () => {
-      document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+
+      document.querySelectorAll('.sidebar-item')
+        .forEach(i => i.classList.remove('active'));
       item.classList.add('active');
 
       const section = item.dataset.section;
@@ -117,13 +124,13 @@ function bindSidebar(){
   });
 }
 
-function showView(id){
+function showView(id) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   $(id).classList.add('active');
 }
 
 // CHAT
-function bindChat(){
+function bindChat() {
   $('onlineToggle').addEventListener('click', () => {
     $('onlineDrawer').classList.toggle('open');
   });
@@ -139,6 +146,7 @@ function bindChat(){
     if (e.key === 'Enter') $('chatSend').click();
   });
 
+  // Image upload
   $('chatUpload').addEventListener('click', () => {
     $('chatImageFile').click();
   });
@@ -157,6 +165,7 @@ function bindChat(){
         method: 'POST',
         body: form
       });
+
       const data = await resp.json();
 
       if (!data.ok) {
@@ -165,23 +174,29 @@ function bindChat(){
         return;
       }
 
-      const imageUrl = data.url;
-      socket.emit('publicMessage', { text: "", image: imageUrl });
+      socket.emit('publicMessage', {
+        text: "",
+        image: data.url
+      });
+
       $('chatInput').value = "";
 
-    } catch(e){
+    } catch (e) {
       $('chatInput').value = "";
       alert("Network error");
     }
   });
 
+  // Incoming chat messages
   socket.on('publicMessage', msg => {
     renderChatMessage(msg);
   });
 
+  // Online users
   socket.on('onlineUsers', list => {
     const box = $('onlineList');
     box.innerHTML = '';
+
     list.forEach(u => {
       const avatar = u.avatar || "/img/default-avatar.png";
       const div = document.createElement('div');
@@ -195,7 +210,7 @@ function bindChat(){
   });
 }
 
-function renderChatMessage(msg){
+function renderChatMessage(msg) {
   const me = getSession();
   const box = document.createElement("div");
   box.className = "chatMessage" + (me && msg.username === me.username ? " me" : "");
@@ -225,15 +240,18 @@ function renderChatMessage(msg){
 }
 
 // DM DRAWER
-function bindDMDrawer(){
+function bindDMDrawer() {
   $('dmClose').addEventListener('click', closeDMDrawer);
+
   $('dmSend').addEventListener('click', sendDM);
+
   $('dmInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') sendDM();
   });
 
+  // DM list is populated by pm.js
   if (window.updateDMListSidebar) {
-    updateDMListSidebar(); // will populate dm list via existing logic
+    updateDMListSidebar();
   }
 
   socket.on('dmMessage', msg => {
@@ -241,15 +259,15 @@ function bindDMDrawer(){
   });
 }
 
-function openDMDrawer(){
+function openDMDrawer() {
   $('dmDrawer').classList.add('open');
 }
 
-function closeDMDrawer(){
+function closeDMDrawer() {
   $('dmDrawer').classList.remove('open');
 }
 
-function sendDM(){
+function sendDM() {
   const text = $('dmInput').value.trim();
   if (!text || !window.currentDMTarget) return;
 
@@ -261,7 +279,7 @@ function sendDM(){
   $('dmInput').value = '';
 }
 
-function renderDMMessage(msg){
+function renderDMMessage(msg) {
   const div = document.createElement('div');
   div.className = "chatMessage";
   div.innerHTML = `
@@ -275,27 +293,31 @@ function renderDMMessage(msg){
 }
 
 // POPUPS
-function openPopup(id){
+function openPopup(id) {
   document.querySelectorAll('.popup').forEach(p => p.classList.remove('active'));
   $(id).classList.add('active');
 }
 
-function closePopup(id){
+function closePopup(id) {
   $(id).classList.remove('active');
 }
 
-// INITIAL (if user already logged in)
+// AUTO-LOGIN IF SESSION EXISTS
 document.addEventListener('DOMContentLoaded', () => {
   const stored = localStorage.getItem('currentUser');
   if (stored) {
     const user = JSON.parse(stored);
     setSession(user);
+
     $('loginScreen').style.display = 'none';
     $('app').style.display = 'block';
+
     socket.emit('login', user);
+
     if (window.updateUIForSession) updateUIForSession();
     if (window.updateProfileCard) updateProfileCard(user);
     if (window.updateDMListSidebar) updateDMListSidebar();
+
     bindSidebar();
     bindChat();
     bindDMDrawer();
