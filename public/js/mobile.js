@@ -1,4 +1,7 @@
+// Helper
+function $(id){ return document.getElementById(id); }
 
+// LOGIN
 $('loginSubmit').addEventListener('click', doLogin);
 $('loginPass').addEventListener('keydown', e => { if(e.key === 'Enter') doLogin(); });
 
@@ -27,20 +30,24 @@ async function doLogin(){
       err.style.display = 'block';
       return;
     }
-document.getElementById("loginScreen").style.display = "none";
-  document.getElementById("app").style.display = "block";
-  
+
+    $('loginScreen').style.display = 'none';
+    $('app').style.display = 'block';
+
     setSession(data.user);
     localStorage.setItem('currentUser', JSON.stringify(data.user));
     socket.emit('login', data.user);
-    
+
     if (window.updateUIForSession) updateUIForSession();
     if (window.updateProfileCard) updateProfileCard(data.user);
+    if (window.updateDMListSidebar) updateDMListSidebar();
 
     $('loginUser').value = '';
     $('loginPass').value = '';
 
-    if (window.updateDMListSidebar) updateDMListSidebar();
+    bindSidebar();
+    bindChat();
+    bindDMDrawer();
 
   } catch(e){
     err.textContent = "Network error";
@@ -54,11 +61,144 @@ function logout(){
   if (window.updateUIForSession) updateUIForSession();
   if (window.updateProfileCard) updateProfileCard(null);
   if (window.updateDMListSidebar) updateDMListSidebar();
+  location.reload();
 }
-function renderChatMessage(msg) {
+
+// SIDEBAR
+function bindSidebar(){
+  document.querySelectorAll('.sidebar-item').forEach(item => {
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+
+      const section = item.dataset.section;
+
+      if (section === 'logout') {
+        logout();
+        return;
+      }
+
+      if (section === 'chat') {
+        showView('viewChat');
+        return;
+      }
+
+      if (section === 'roster') {
+        showView('viewRoster');
+        return;
+      }
+
+      if (section === 'messages') {
+        showView('viewMessages');
+        return;
+      }
+
+      if (section === 'rooms') {
+        showView('viewRooms');
+        return;
+      }
+
+      if (section === 'profile') {
+        showView('viewProfile');
+        return;
+      }
+
+      if (section === 'admin') {
+        showView('viewAdmin');
+        if (window.loadAdminPanel) loadAdminPanel();
+        return;
+      }
+
+      if (section === 'dms') {
+        openDMDrawer();
+        return;
+      }
+    });
+  });
+}
+
+function showView(id){
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  $(id).classList.add('active');
+}
+
+// CHAT
+function bindChat(){
+  $('onlineToggle').addEventListener('click', () => {
+    $('onlineDrawer').classList.toggle('open');
+  });
+
+  $('chatSend').addEventListener('click', () => {
+    const text = $('chatInput').value.trim();
+    if (!text) return;
+    socket.emit('publicMessage', { text });
+    $('chatInput').value = '';
+  });
+
+  $('chatInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') $('chatSend').click();
+  });
+
+  $('chatUpload').addEventListener('click', () => {
+    $('chatImageFile').click();
+  });
+
+  $('chatImageFile').addEventListener('change', async () => {
+    const file = $('chatImageFile').files[0];
+    if (!file) return;
+
+    const form = new FormData();
+    form.append('image', file);
+
+    $('chatInput').value = "Uploading image…";
+
+    try {
+      const resp = await fetch('/api/upload-image', {
+        method: 'POST',
+        body: form
+      });
+      const data = await resp.json();
+
+      if (!data.ok) {
+        $('chatInput').value = "";
+        alert("Image upload failed");
+        return;
+      }
+
+      const imageUrl = data.url;
+      socket.emit('publicMessage', { text: "", image: imageUrl });
+      $('chatInput').value = "";
+
+    } catch(e){
+      $('chatInput').value = "";
+      alert("Network error");
+    }
+  });
+
+  socket.on('publicMessage', msg => {
+    renderChatMessage(msg);
+  });
+
+  socket.on('onlineUsers', list => {
+    const box = $('onlineList');
+    box.innerHTML = '';
+    list.forEach(u => {
+      const avatar = u.avatar || "/img/default-avatar.png";
+      const div = document.createElement('div');
+      div.className = "onlineUser";
+      div.innerHTML = `
+        <img src="${avatar}">
+        <span>${u.username}</span>
+      `;
+      box.appendChild(div);
+    });
+  });
+}
+
+function renderChatMessage(msg){
   const me = getSession();
   const box = document.createElement("div");
-  box.className = "chatMessage" + (msg.username === me.username ? " me" : "");
+  box.className = "chatMessage" + (me && msg.username === me.username ? " me" : "");
 
   const avatar = msg.avatar || "/img/default-avatar.png";
 
@@ -84,35 +224,80 @@ function renderChatMessage(msg) {
   $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
 }
 
-$('onlineToggle').addEventListener('click', () => {
-  $('onlineDrawer').classList.toggle('open');
-});
-
-socket.on('onlineUsers', list => {
-  const box = $('onlineList');
-  box.innerHTML = '';
-
-  list.forEach(u => {
-    const avatar = u.avatar || "/img/default-avatar.png";
-
-    const div = document.createElement('div');
-    div.className = "onlineUser";
-    div.innerHTML = `
-      <img src="${avatar}">
-      <span>${u.username}</span>
-    `;
-    box.appendChild(div);
+// DM DRAWER
+function bindDMDrawer(){
+  $('dmClose').addEventListener('click', closeDMDrawer);
+  $('dmSend').addEventListener('click', sendDM);
+  $('dmInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendDM();
   });
-});
 
-$('chatSend').addEventListener('click', () => {
-  const text = $('chatInput').value.trim();
-  if (!text) return;
+  if (window.updateDMListSidebar) {
+    updateDMListSidebar(); // will populate dm list via existing logic
+  }
 
-  socket.emit('publicMessage', { text });
-  $('chatInput').value = '';
-});
+  socket.on('dmMessage', msg => {
+    renderDMMessage(msg);
+  });
+}
 
-socket.on('publicMessage', msg => {
-  renderChatMessage(msg);
+function openDMDrawer(){
+  $('dmDrawer').classList.add('open');
+}
+
+function closeDMDrawer(){
+  $('dmDrawer').classList.remove('open');
+}
+
+function sendDM(){
+  const text = $('dmInput').value.trim();
+  if (!text || !window.currentDMTarget) return;
+
+  socket.emit('dmMessage', {
+    to: window.currentDMTarget,
+    text
+  });
+
+  $('dmInput').value = '';
+}
+
+function renderDMMessage(msg){
+  const div = document.createElement('div');
+  div.className = "chatMessage";
+  div.innerHTML = `
+    <div class="msgBody">
+      <div class="author">${msg.from}</div>
+      <div class="text">${msg.text}</div>
+    </div>
+  `;
+  $('dmMessages').appendChild(div);
+  $('dmMessages').scrollTop = $('dmMessages').scrollHeight;
+}
+
+// POPUPS
+function openPopup(id){
+  document.querySelectorAll('.popup').forEach(p => p.classList.remove('active'));
+  $(id).classList.add('active');
+}
+
+function closePopup(id){
+  $(id).classList.remove('active');
+}
+
+// INITIAL (if user already logged in)
+document.addEventListener('DOMContentLoaded', () => {
+  const stored = localStorage.getItem('currentUser');
+  if (stored) {
+    const user = JSON.parse(stored);
+    setSession(user);
+    $('loginScreen').style.display = 'none';
+    $('app').style.display = 'block';
+    socket.emit('login', user);
+    if (window.updateUIForSession) updateUIForSession();
+    if (window.updateProfileCard) updateProfileCard(user);
+    if (window.updateDMListSidebar) updateDMListSidebar();
+    bindSidebar();
+    bindChat();
+    bindDMDrawer();
+  }
 });
