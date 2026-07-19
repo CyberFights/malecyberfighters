@@ -1,7 +1,3 @@
-// Helper
-function $(id) {
-  return document.getElementById(id);
-}
 
 // LOGIN
 $('loginSubmit').addEventListener('click', doLogin);
