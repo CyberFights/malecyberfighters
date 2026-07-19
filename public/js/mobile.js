@@ -1,5 +1,5 @@
 
-$('btnLogin').addEventListener('click', doLogin);
+$('loginSubmit').addEventListener('click', doLogin);
 $('loginPass').addEventListener('keydown', e => { if(e.key === 'Enter') doLogin(); });
 
 async function doLogin(){
