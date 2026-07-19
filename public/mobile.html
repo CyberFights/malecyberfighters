@@ -67,7 +67,7 @@ body, html {
   margin-top:10px;
 }
 
-/* MAIN APP */
+/* MAIN APP LAYOUT */
 #app {
   display: none;
   width: 100vw;
@@ -91,6 +91,7 @@ body, html {
   padding: 18px;
   font-size: 18px;
   border-bottom: 1px solid rgba(255,255,255,0.05);
+  cursor: pointer;
 }
 
 .sidebar-item.active {
@@ -103,83 +104,29 @@ body, html {
   color: #ff3b3b;
 }
 
-/* MAIN CONTENT */
-#mainContent {
-  margin-left: 240px;
-  height: 100vh;
-  overflow-y: auto;
-  padding: 20px;
-}
-
-/* POPUPS */
-.popup {
-  position: fixed;
+/* FULL-SCREEN VIEWS */
+.view {
+  position: absolute;
+  left: 240px;
   top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(10,10,20,0.95);
-  backdrop-filter: blur(6px);
-  z-index: 9999;
-  overflow-y: auto;
-  padding: 20px;
+  right: 0;
+  bottom: 0;
+  padding: 16px;
   display: none;
 }
 
-.popup.active {
+.view.active {
   display: block;
 }
 
-.popup .close-btn {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  background: #ff3b3b;
-  color: #fff;
-  border: none;
-  padding: 8px 12px;
-  border-radius: 6px;
-}
-
-/* SUPPORT POPUP */
-.support-mobile {
-  max-width: 480px;
-  margin: 0 auto;
-  padding-top: 40px;
-}
-
-#supportPopup input,
-#supportPopup select,
-#supportPopup textarea {
+/* CHAT VIEW */
+#chatContainer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   width: 100%;
-  padding: 12px;
-  border-radius: 8px;
-  border: none;
-  background: #1a1a25;
-  color: #fff;
-  margin-top: 6px;
 }
 
-#srSubmit {
-  padding: 14px;
-  border-radius: 10px;
-  border: none;
-  font-size: 16px;
-  background: #3b9fff;
-  color: #fff;
-}
-
-/* HIDDEN ADMIN ELEMENTS */
-.hidden-admin {
-  display: none !important;
-  visibility: hidden !important;
-  opacity: 0 !important;
-  height: 0 !important;
-  width: 0 !important;
-  overflow: hidden !important;
-}
-
-/* CHAT HEADER */
 #chatHeader {
   padding: 12px;
   background: #11131a;
@@ -268,6 +215,12 @@ body, html {
   margin-bottom: 4px;
 }
 
+.chatImage {
+  margin-top: 8px;
+  max-width: 200px;
+  border-radius: 8px;
+}
+
 /* INPUT BAR */
 #chatInputBar {
   display: flex;
@@ -293,6 +246,7 @@ body, html {
   color: #fff;
   border: none;
 }
+
 #chatUpload {
   background: #1a1a25;
   border: none;
@@ -301,13 +255,134 @@ body, html {
   color: #fff;
   font-size: 18px;
 }
-.chatImage {
-  margin-top: 8px;
-  max-width: 200px;
-  border-radius: 8px;
+
+/* DM DRAWER */
+#dmDrawer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: -70%;
+  height: 70%;
+  background: #0f0f15;
+  border-top: 1px solid rgba(255,255,255,0.2);
+  transition: bottom 0.3s ease;
+  z-index: 9998;
+  display: flex;
+  flex-direction: column;
 }
 
+#dmDrawer.open {
+  bottom: 0;
+}
 
+#dmHeader {
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #11131a;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+#dmList {
+  padding: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.dmUser {
+  padding: 6px;
+  cursor: pointer;
+}
+
+#dmMessages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+#dmInputBar {
+  display: flex;
+  padding: 10px;
+  background: #11131a;
+}
+
+#dmInputBar input {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  background: #1a1a25;
+  color: #fff;
+}
+
+#dmInputBar button {
+  margin-left: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #3b9fff;
+  color: #000;
+  border: none;
+}
+
+/* SUPPORT POPUP */
+.popup {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(10,10,20,0.95);
+  backdrop-filter: blur(6px);
+  z-index: 9999;
+  overflow-y: auto;
+  padding: 20px;
+  display: none;
+}
+
+.popup.active {
+  display: block;
+}
+
+.popup .close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: #ff3b3b;
+  color: #fff;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+
+.support-mobile {
+  max-width: 480px;
+  margin: 0 auto;
+  padding-top: 40px;
+}
+
+#supportPopup input,
+#supportPopup select,
+#supportPopup textarea {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: none;
+  background: #1a1a25;
+  color: #fff;
+  margin-top: 6px;
+}
+
+/* HIDDEN ADMIN ELEMENTS */
+.hidden-admin {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  height: 0 !important;
+  width: 0 !important;
+  overflow: hidden !important;
+}
 </style>
 </head>
 
@@ -332,25 +407,20 @@ body, html {
 <!-- REGISTER MODAL -->
 <div id="modalRegister" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.6);align-items:center;justify-content:center">
   <div>
-
     <h3>Register - click upload image before create account</h3>
     <div>
-
       <div>
         <input id="regUser" type="text" placeholder="Username" required />
         <input id="regEmail" type="email" placeholder="Email" required />
       </div>
-
       <div>
         <input id="regDisplay" type="text" placeholder="Display name"  required />
         <input id="regAge" type="number" min="13" placeholder="Age" required/>
       </div>
-
       <div>
         <input id="regPass" type="password" placeholder="Password" required />
         <input id="regColor" type="color" required/>
       </div>
-
       <div>
         <select id="regLanguage">
           <option value="en">English</option>
@@ -361,20 +431,16 @@ body, html {
         <input id="regWins" type="number" placeholder="Wins" />
         <input id="regLosses" type="number" placeholder="Losses" />
       </div>
-
       <textarea id="regInfo" placeholder="Short bio / info" rows="3"></textarea>
-
       <div>
         <input id="regImageFile" type="file" accept="image/*" />
         <button id="btnUploadImage" class="small-btn">Upload Image</button>
         <div id="uploadStatus">No image uploaded</div>
       </div>
-
       <div>
         <button id="regCancel" class="ghost">Cancel</button>
         <button id="regSubmit">Create Account</button>
       </div>
-
       <div id="regError" style="display:none"></div>
     </div>
   </div>
@@ -395,44 +461,74 @@ body, html {
     <div class="sidebar-item logout" data-section="logout">Logout</div>
   </div>
 
-  <!-- MAIN CONTENT -->
-  <div id="mainContent">
-    <h2>Welcome to the Arena</h2>
-    <p>Choose a section from the sidebar.</p>
+  <!-- FULL-SCREEN VIEWS -->
+  <div id="viewChat" class="view active">
+    <div id="chatContainer">
+      <div id="chatHeader">
+        <span>Arena Chat</span>
+        <button id="onlineToggle">Online</button>
+      </div>
+      <div id="onlineDrawer">
+        <div id="onlineList"></div>
+      </div>
+      <div id="chatMessages"></div>
+      <div id="chatInputBar">
+        <input id="chatInput" placeholder="Type a message…">
+        <button id="chatUpload">📷</button>
+        <button id="chatSend">Send</button>
+      </div>
+    </div>
   </div>
 
-<div id="chatContainer">
-
-  <div id="chatHeader">
-    <span>Arena Chat</span>
-    <button id="onlineToggle">Online</button>
+  <div id="viewRoster" class="view">
+    <h2>Roster</h2>
+    <div id="rosterContent"></div>
   </div>
 
-  <!-- Collapsible Online Users Drawer -->
-  <div id="onlineDrawer">
-    <div id="onlineList"></div>
+  <div id="viewMessages" class="view">
+    <h2>Messages</h2>
+    <div id="messagesContent"></div>
   </div>
 
-  <div id="chatMessages"></div>
+  <div id="viewRooms" class="view">
+    <h2>Rooms</h2>
+    <div id="roomsContent"></div>
+  </div>
 
-<div id="chatInputBar">
-  <input id="chatInput" placeholder="Type a message…"><input id="chatImageFile" type="file" accept="image/*" style="display:none">
+  <div id="viewProfile" class="view">
+    <h2>My Profile</h2>
+    <div id="profileContent"></div>
+  </div>
 
-  <button id="chatUpload">📷</button>
-  <button id="chatSend">Send</button>
+  <div id="viewAdmin" class="view">
+    <h2>Admin</h2>
+    <div id="adminUsersView"></div>
+    <div id="adminAnalyticsView"></div>
+    <div id="adminStatsSummary"></div>
+    <table id="adminTopIps"><tbody></tbody></table>
+    <table id="adminTable"><tbody></tbody></table>
+  </div>
 </div>
 
-
+<!-- DM DRAWER -->
+<div id="dmDrawer">
+  <div id="dmHeader">
+    <span>Direct Messages</span>
+    <button id="dmClose">Close</button>
+  </div>
+  <div id="dmList"></div>
+  <div id="dmMessages"></div>
+  <div id="dmInputBar">
+    <input id="dmInput" placeholder="Type a DM…">
+    <button id="dmSend">Send</button>
+  </div>
 </div>
-
 
 <!-- SUPPORT POPUP -->
 <div id="supportPopup" class="popup">
   <button class="close-btn" onclick="closePopup('supportPopup')">Close</button>
-
   <div class="support-mobile">
     <h2>Support Request</h2>
-
     <div class="pm-section">
       <label>Type of Report</label>
       <select id="srType">
@@ -440,27 +536,22 @@ body, html {
         <option value="issue">App Issue</option>
       </select>
     </div>
-
     <div class="pm-section" id="srUserSection">
       <label>Who are you reporting?</label>
       <input id="srUser" placeholder="Username">
     </div>
-
     <div class="pm-section">
       <label>Where did this happen?</label>
       <input id="srWhere" placeholder="Public chat, DM, room, etc.">
     </div>
-
     <div class="pm-section">
       <label>When did this happen?</label>
       <input id="srWhen" type="datetime-local">
     </div>
-
     <div class="pm-section">
       <label>Additional Information</label>
       <textarea id="srInfo" rows="5"></textarea>
     </div>
-
     <button id="srSubmit">Submit Report</button>
   </div>
 </div>
@@ -475,23 +566,11 @@ body, html {
 
 <div id="modalAdmin" class="hidden-admin">
   <button id="adminClose"></button>
-
-  <div id="adminUsersView"></div>
-  <div id="adminAnalyticsView"></div>
-
-  <div id="adminStatsSummary"></div>
-
-  <table id="adminTopIps">
-    <tbody></tbody>
-  </table>
-
-  <table id="adminTable">
-    <tbody></tbody>
-  </table>
 </div>
 
-<!-- Hidden edit cancel button -->
 <button id="editCancel" class="hidden-admin"></button>
+
+<input id="chatImageFile" type="file" accept="image/*" style="display:none">
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/utils.js"></script>
@@ -505,48 +584,6 @@ body, html {
 <script src="/js/analytics.js"></script>
 <script src="/js/dm-toggle.js"></script>
 <script src="/js/profile.js"></script>
-<script>
-$('chatUpload').addEventListener('click', () => {
-  $('chatImageFile').click();
-});
 
-$('chatImageFile').addEventListener('change', async () => {
-  const file = $('chatImageFile').files[0];
-  if (!file) return;
-
-  const form = new FormData();
-  form.append('image', file);
-
-  $('chatInput').value = "Uploading image…";
-
-  try {
-    const resp = await fetch('/api/upload-image', {
-      method: 'POST',
-      body: form
-    });
-
-    const data = await resp.json();
-
-    if (!data.ok) {
-      $('chatInput').value = "";
-      alert("Image upload failed");
-      return;
-    }
-
-    const imageUrl = data.url;
-
-    socket.emit('publicMessage', {
-      text: "",
-      image: imageUrl
-    });
-
-    $('chatInput').value = "";
-
-  } catch (e) {
-    $('chatInput').value = "";
-    alert("Network error");
-  }
-});
-</script>
 </body>
 </html>
