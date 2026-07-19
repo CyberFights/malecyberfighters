@@ -127,10 +127,13 @@ function showView(id) {
 
 // CHAT
 function bindChat() {
+
+  // Toggle online drawer
   $('onlineToggle').addEventListener('click', () => {
     $('onlineDrawer').classList.toggle('open');
   });
 
+  // Send message
   $('chatSend').addEventListener('click', () => {
     const text = $('chatInput').value.trim();
     if (!text) return;
@@ -138,6 +141,7 @@ function bindChat() {
     $('chatInput').value = '';
   });
 
+  // Enter key
   $('chatInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') $('chatSend').click();
   });
@@ -170,20 +174,23 @@ function bindChat() {
         return;
       }
 
-      socket.emit('publicMessage', {
-        text: "",
-        image: data.url
-      });
-
+      socket.emit('publicMessage', { text: "", image: data.url });
       $('chatInput').value = "";
 
-    } catch (e) {
+    } catch(e){
       $('chatInput').value = "";
       alert("Network error");
     }
   });
 
-  // Incoming chat messages
+  // Load chat history
+  socket.emit('getChatHistory');
+
+  socket.on('chatHistory', history => {
+    history.forEach(msg => renderChatMessage(msg));
+  });
+
+  // Live messages
   socket.on('publicMessage', msg => {
     renderChatMessage(msg);
   });
@@ -192,7 +199,6 @@ function bindChat() {
   socket.on('onlineUsers', list => {
     const box = $('onlineList');
     box.innerHTML = '';
-
     list.forEach(u => {
       const avatar = u.avatar || "/img/default-avatar.png";
       const div = document.createElement('div');
@@ -205,6 +211,7 @@ function bindChat() {
     });
   });
 }
+
 
 function renderChatMessage(msg) {
   const me = getSession();
