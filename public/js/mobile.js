@@ -1,5 +1,3 @@
-// Minimal helper (keeps compatibility with utils.js if present)
-function $(id) { return document.getElementById(id); }
 
 // Normalize messages to match index.js (username, avatar, message, image, timestamp)
 function normalizeMessage(msg) {
