@@ -212,7 +212,7 @@ function bindChat() {
 
   // Load chat history
   socket.on('chatHistory', history => {
-    $('chatMessages').innerHTML = "";
+    $('chatBox').innerHTML = "";
     history.forEach(raw => {
       renderChatMessage(normalizeMessage(raw));
     });
@@ -266,8 +266,8 @@ function renderChatMessage(msg) {
 
   box.innerHTML = body;
 
-  $('chatMessages').appendChild(box);
-  $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
+  $('chatBox').appendChild(box);
+  $('chatBox').scrollTop = $('chatBox').scrollHeight;
 }
 
 // DM DRAWER
