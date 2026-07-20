@@ -1,3 +1,10 @@
+// utils.js (top) — define $ only if not already defined
+if (typeof window.$ === 'undefined') {
+  window.$ = function(id) {
+    return document.getElementById(id);
+  };
+}
+
 const $ = id => document.getElementById(id);
 
 function show(el){ el.style.display = 'flex'; }
