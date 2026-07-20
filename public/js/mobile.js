@@ -226,9 +226,12 @@ function renderChatMessage(msg) {
       <div class="author">${msg.username}</div>
   `;
 
-  if (msg.text) {
-    body += `<div class="text">${msg.text}</div>`;
-  }
+  const text = msg.text || msg.message || msg.msg || "";
+
+if (text) {
+    body += `<div class="text">${text}</div>`;
+}
+
 
   if (msg.image) {
     body += `<img src="${msg.image}" class="chatImage">`;
