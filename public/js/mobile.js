@@ -1,3 +1,11 @@
+function normalizeMessage(msg) {
+  return {
+    username: msg.username || msg.user || msg.name || "Unknown",
+    avatar: msg.avatar || "/img/default-avatar.png",
+    text: msg.text || msg.message || msg.msg || "",
+    image: msg.image || null
+  };
+}
 
 // LOGIN
 $('loginSubmit').addEventListener('click', doLogin);
@@ -51,6 +59,7 @@ async function doLogin() {
 
     bindSidebar();
     bindChat();
+socket.emit('getChatHistory');
     bindDMDrawer();
 
   } catch (e) {
@@ -82,9 +91,11 @@ function bindSidebar() {
       }
 
       if (section === 'chat') {
-        showView('viewChat');
-        return;
-      }
+  showView('viewChat');
+  socket.emit('getChatHistory');
+  return;
+}
+
 
       if (section === 'roster') {
         showView('viewRoster');
@@ -187,19 +198,19 @@ function bindChat() {
   socket.emit('getChatHistory');
 
   socket.on('chatHistory', history => {
-    history.forEach(msg => {
-    msg.text = msg.text || msg.message || msg.msg || "";
+  history.forEach(raw => {
+    const msg = normalizeMessage(raw);
     renderChatMessage(msg);
+  });
 });
 
-  });
 
   // Live messages
-  socket.on('publicMessage', msg => {
-    msg.text = msg.text || msg.message || msg.msg || "";
-renderChatMessage(msg);
+  socket.on('publicMessage', raw => {
+  const msg = normalizeMessage(raw);
+  renderChatMessage(msg);
+});
 
-  });
 
   // Online users
   socket.on('onlineUsers', list => {
@@ -219,25 +230,22 @@ renderChatMessage(msg);
 }
 
 
-function renderChatMessage(msg) {
+function renderChatMessage(raw) {
+  const msg = normalizeMessage(raw);
   const me = getSession();
+
   const box = document.createElement("div");
   box.className = "chatMessage" + (me && msg.username === me.username ? " me" : "");
 
-  const avatar = msg.avatar || "/img/default-avatar.png";
-
   let body = `
-    <img src="${avatar}">
+    <img src="${msg.avatar}">
     <div class="msgBody">
       <div class="author">${msg.username}</div>
   `;
 
-  const text = msg.text || msg.message || msg.msg || "";
-
-if (text) {
-    body += `<div class="text">${text}</div>`;
-}
-
+  if (msg.text) {
+    body += `<div class="text">${msg.text}</div>`;
+  }
 
   if (msg.image) {
     body += `<img src="${msg.image}" class="chatImage">`;
@@ -250,6 +258,7 @@ if (text) {
   $('chatMessages').appendChild(box);
   $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
 }
+
 
 // DM DRAWER
 function bindDMDrawer() {
@@ -332,6 +341,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     bindSidebar();
     bindChat();
+socket.emit('getChatHistory');
     bindDMDrawer();
   }
 });
