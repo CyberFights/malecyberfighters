@@ -1,7 +1,4 @@
-// Helper
-function $(id) {
-  return document.getElementById(id);
-}
+
 
 // Normalize messages to match index.js + MongoDB
 function normalizeMessage(msg) {
