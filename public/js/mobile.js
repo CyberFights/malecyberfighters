@@ -1,8 +1,14 @@
+// Helper
+function $(id) {
+  return document.getElementById(id);
+}
+
+// Normalize messages to match index.js + MongoDB
 function normalizeMessage(msg) {
   return {
     username: msg.username || msg.user || msg.name || "Unknown",
     avatar: msg.avatar || "/img/default-avatar.png",
-    text: msg.text || msg.message || msg.msg || "",
+    message: msg.message || msg.text || msg.msg || "",
     image: msg.image || null
   };
 }
@@ -59,8 +65,10 @@ async function doLogin() {
 
     bindSidebar();
     bindChat();
-socket.emit('getChatHistory');
     bindDMDrawer();
+
+    // Load chat history immediately
+    socket.emit('getChatHistory');
 
   } catch (e) {
     err.textContent = "Network error";
@@ -91,11 +99,10 @@ function bindSidebar() {
       }
 
       if (section === 'chat') {
-  showView('viewChat');
-  socket.emit('getChatHistory');
-  return;
-}
-
+        showView('viewChat');
+        socket.emit('getChatHistory'); // reload history when switching
+        return;
+      }
 
       if (section === 'roster') {
         showView('viewRoster');
@@ -139,7 +146,6 @@ function showView(id) {
 // CHAT
 function bindChat() {
 
-  // Toggle online drawer
   $('onlineToggle').addEventListener('click', () => {
     $('onlineDrawer').classList.toggle('open');
   });
@@ -148,11 +154,11 @@ function bindChat() {
   $('chatSend').addEventListener('click', () => {
     const text = $('chatInput').value.trim();
     if (!text) return;
-    socket.emit('publicMessage', { text });
+
+    socket.emit('publicMessage', { message: text });
     $('chatInput').value = '';
   });
 
-  // Enter key
   $('chatInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') $('chatSend').click();
   });
@@ -185,37 +191,37 @@ function bindChat() {
         return;
       }
 
-      socket.emit('publicMessage', { text: "", image: data.url });
+      socket.emit('publicMessage', {
+        message: "",
+        image: data.url
+      });
+
       $('chatInput').value = "";
 
-    } catch(e){
+    } catch (e) {
       $('chatInput').value = "";
       alert("Network error");
     }
   });
 
   // Load chat history
-  socket.emit('getChatHistory');
-
   socket.on('chatHistory', history => {
-  history.forEach(raw => {
-    const msg = normalizeMessage(raw);
-    renderChatMessage(msg);
+    $('chatMessages').innerHTML = ""; // clear old messages
+    history.forEach(raw => {
+      renderChatMessage(normalizeMessage(raw));
+    });
   });
-});
-
 
   // Live messages
   socket.on('publicMessage', raw => {
-  const msg = normalizeMessage(raw);
-  renderChatMessage(msg);
-});
-
+    renderChatMessage(normalizeMessage(raw));
+  });
 
   // Online users
   socket.on('onlineUsers', list => {
     const box = $('onlineList');
     box.innerHTML = '';
+
     list.forEach(u => {
       const avatar = u.avatar || "/img/default-avatar.png";
       const div = document.createElement('div');
@@ -229,9 +235,7 @@ function bindChat() {
   });
 }
 
-
-function renderChatMessage(raw) {
-  const msg = normalizeMessage(raw);
+function renderChatMessage(msg) {
   const me = getSession();
 
   const box = document.createElement("div");
@@ -243,8 +247,8 @@ function renderChatMessage(raw) {
       <div class="author">${msg.username}</div>
   `;
 
-  if (msg.text) {
-    body += `<div class="text">${msg.text}</div>`;
+  if (msg.message) {
+    body += `<div class="text">${msg.message}</div>`;
   }
 
   if (msg.image) {
@@ -259,7 +263,6 @@ function renderChatMessage(raw) {
   $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
 }
 
-
 // DM DRAWER
 function bindDMDrawer() {
   $('dmClose').addEventListener('click', closeDMDrawer);
@@ -270,12 +273,12 @@ function bindDMDrawer() {
     if (e.key === 'Enter') sendDM();
   });
 
-  // DM list is populated by pm.js
   if (window.updateDMListSidebar) {
     updateDMListSidebar();
   }
 
-  socket.on('dmMessage', msg => {
+  socket.on('dmMessage', raw => {
+    const msg = normalizeMessage(raw);
     renderDMMessage(msg);
   });
 }
@@ -294,7 +297,7 @@ function sendDM() {
 
   socket.emit('dmMessage', {
     to: window.currentDMTarget,
-    text
+    message: text
   });
 
   $('dmInput').value = '';
@@ -305,8 +308,8 @@ function renderDMMessage(msg) {
   div.className = "chatMessage";
   div.innerHTML = `
     <div class="msgBody">
-      <div class="author">${msg.from}</div>
-      <div class="text">${msg.text}</div>
+      <div class="author">${msg.username}</div>
+      <div class="text">${msg.message}</div>
     </div>
   `;
   $('dmMessages').appendChild(div);
@@ -341,7 +344,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     bindSidebar();
     bindChat();
-socket.emit('getChatHistory');
     bindDMDrawer();
+
+    socket.emit('getChatHistory');
   }
 });
