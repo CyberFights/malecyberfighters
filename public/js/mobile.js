@@ -1,13 +1,24 @@
 
-
-// Normalize messages to match index.js + MongoDB
+// Normalize messages to match index.js + MongoDB + desktop chat.js
 function normalizeMessage(msg) {
   return {
     username: msg.username || msg.user || msg.name || "Unknown",
     avatar: msg.avatar || "/img/default-avatar.png",
     message: msg.message || msg.text || msg.msg || "",
-    image: msg.image || null
+    image: msg.image || null,
+    timestamp: msg.timestamp || msg.time || null
   };
+}
+
+// Format timestamp for mobile display
+function formatTimestamp(ts) {
+  if (!ts) return "";
+  try {
+    const d = new Date(ts);
+    return d.toLocaleString(); // mobile-friendly
+  } catch {
+    return "";
+  }
 }
 
 // LOGIN
@@ -45,7 +56,6 @@ async function doLogin() {
       return;
     }
 
-    // SUCCESS
     $('loginScreen').style.display = 'none';
     $('app').style.display = 'block';
 
@@ -64,7 +74,6 @@ async function doLogin() {
     bindChat();
     bindDMDrawer();
 
-    // Load chat history immediately
     socket.emit('getChatHistory');
 
   } catch (e) {
@@ -97,7 +106,7 @@ function bindSidebar() {
 
       if (section === 'chat') {
         showView('viewChat');
-        socket.emit('getChatHistory'); // reload history when switching
+        socket.emit('getChatHistory');
         return;
       }
 
@@ -203,7 +212,7 @@ function bindChat() {
 
   // Load chat history
   socket.on('chatHistory', history => {
-    $('chatMessages').innerHTML = ""; // clear old messages
+    $('chatMessages').innerHTML = "";
     history.forEach(raw => {
       renderChatMessage(normalizeMessage(raw));
     });
@@ -242,6 +251,7 @@ function renderChatMessage(msg) {
     <img src="${msg.avatar}">
     <div class="msgBody">
       <div class="author">${msg.username}</div>
+      <div class="timestamp">${formatTimestamp(msg.timestamp)}</div>
   `;
 
   if (msg.message) {
@@ -306,6 +316,7 @@ function renderDMMessage(msg) {
   div.innerHTML = `
     <div class="msgBody">
       <div class="author">${msg.username}</div>
+      <div class="timestamp">${formatTimestamp(msg.timestamp)}</div>
       <div class="text">${msg.message}</div>
     </div>
   `;
