@@ -1,154 +1,656 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Male Cyber Fighters – Mobile</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCF Mobile</title>
+<link rel="stylesheet" href="mobile.css">
 <style>
-  :root{--bg:#0a0a0f;--panel:#0f0f15;--muted:#9aa4b2;--accent:#3b9fff;--bubble:#1a1d25;--bubble-me:#3b9fff;--danger:#ff3b3b}
-  html,body{height:100%;margin:0;background:var(--bg);color:#fff;font-family:Inter,system-ui,Arial}
-  /* side panel */
-  #sidePanel{position:fixed;left:-280px;top:0;bottom:0;width:280px;background:var(--panel);z-index:1200;padding-top:18px;transition:left .22s ease;overflow:auto}
-  #sidePanel.open{left:0}
-  .side-item{padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.02);cursor:pointer}
-  .side-item.active{background:var(--accent);color:#000;font-weight:700}
-  .side-item.logout{color:var(--danger)}
-  /* main */
-  #main{margin-left:0;transition:margin-left .22s ease;display:flex;flex-direction:column;height:100vh;overflow:hidden}
-  #main.shift{margin-left:280px}
-  #topBar{display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--panel);border-bottom:1px solid rgba(255,255,255,0.03)}
-  #hamburger{background:transparent;border:none;color:var(--accent);font-weight:800;padding:8px}
-  /* views */
-  .view{display:none;flex-direction:column;min-height:0;height:100%}
-  .view.active{display:flex}
-  /* chat */
-  #chatContainer{display:flex;flex-direction:column;flex:1;min-height:0}
-  #onlineDrawer{max-height:0;overflow:hidden;transition:max-height .22s ease;background:var(--panel)}
-  #onlineDrawer.open{max-height:220px}
-  #chatMessages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
-  .chatMessage{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:12px;background:var(--bubble)}
-  .chatMessage.me{margin-left:auto;background:var(--bubble-me);color:#000}
-  .hidden{display:none!important}
-  @media (max-width:520px){#sidePanel{width:240px}#main.shift{margin-left:240px}}
+/* --------------------------------------------------
+   GLOBAL RESET & BASE
+-------------------------------------------------- */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #0a0f1a;
+  color: #fff;
+  font-family: system-ui, sans-serif;
+  overflow-x: hidden;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* --------------------------------------------------
+   HOLOGRAPHIC STYLE UTILITIES
+-------------------------------------------------- */
+.holo {
+  background: rgba(10,30,60,0.55);
+  border: 1px solid rgba(0,150,255,0.35);
+  backdrop-filter: blur(14px) saturate(180%);
+  box-shadow: 0 0 40px rgba(0,150,255,0.45);
+}
+
+/* --------------------------------------------------
+   HEADER BAR
+-------------------------------------------------- */
+#mobileHeader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  z-index: 9996;
+  font-size: 18px;
+}
+
+/* --------------------------------------------------
+   BOTTOM NAVIGATION
+-------------------------------------------------- */
+#mobileNav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  z-index: 9996;
+}
+
+#mobileNav button {
+  background: transparent;
+  border: none;
+  color: #0a84ff;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* --------------------------------------------------
+   BUTTONS
+-------------------------------------------------- */
+button {
+  padding: 10px 14px;
+  border-radius: 6px;
+  border: none;
+  background: #0a84ff;
+  color: #fff;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+button.ghost {
+  background: transparent;
+  border: 1px solid #0a84ff;
+}
+
+button.primary {
+  background: #0a84ff;
+  box-shadow: 0 0 12px rgba(0,150,255,0.45);
+}
+
+.small-btn {
+  padding: 6px 10px;
+  font-size: 14px;
+}
+
+.badge {
+  background: red;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+/* --------------------------------------------------
+   INPUTS & FORMS
+-------------------------------------------------- */
+input,
+textarea,
+select {
+  width: 100%;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #333;
+  background: #0a0f1a;
+  color: #fff;
+  font-size: 15px;
+  margin-bottom: 12px;
+}
+
+textarea {
+  resize: none;
+}
+
+/* --------------------------------------------------
+   MODALS
+-------------------------------------------------- */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.25s ease;
+}
+
+.modal-box {
+  background: #111;
+  padding: 20px;
+  border-radius: 10px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+/* Fade-in animation */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* --------------------------------------------------
+   SIDE PANELS (DMs, Rooms)
+-------------------------------------------------- */
+.side-panel {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: #0a0f1a;
+  z-index: 9997;
+  padding: 20px;
+  overflow-y: auto;
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+}
+
+.side-panel.open {
+  transform: translateX(0);
+}
+
+.side-panel-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 18px;
+}
+
+/* --------------------------------------------------
+   CHAT POPUPS (Public + Rooms)
+-------------------------------------------------- */
+.chat-popup {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: #0a0f1a;
+  z-index: 9998;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.25s ease;
+}
+
+.chat-popup.minimized {
+  transform: translateY(80%);
+}
+
+.chat-header {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px;
+  background: #111;
+  border-bottom: 1px solid #222;
+  font-size: 16px;
+}
+
+.chat-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  padding-bottom: 80px; /* prevents keyboard overlap */
+}
+
+/* Chat bubbles */
+#publicFeed div,
+#roomFeed div {
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: rgba(255,255,255,0.05);
+  border-left: 3px solid #0a84ff;
+  border-radius: 6px;
+  line-height: 1.4;
+}
+
+.chat-input {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  background: #111;
+  border-top: 1px solid #222;
+}
+
+/* --------------------------------------------------
+   ROOM CHAT MEMBERS COLUMN
+-------------------------------------------------- */
+#roomMembers {
+  width: 120px;
+  padding-left: 10px;
+  border-left: 1px solid #222;
+}
+
+#roomMembersList {
+  margin-top: 10px;
+}
+
+/* --------------------------------------------------
+   ROSTER POPUP
+-------------------------------------------------- */
+#modalRoster .modal-box {
+  max-width: 500px;
+}
+
+#rosterPagination {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* --------------------------------------------------
+   VIEW PROFILE POPUP
+-------------------------------------------------- */
+#modalViewProfile .modal-box {
+  max-width: 500px;
+}
+
+#vpRelationshipSection {
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px solid #333;
+}
+
+/* --------------------------------------------------
+   SUPPORT POPUP
+-------------------------------------------------- */
+#supportPopup .modal-box label {
+  margin-top: 10px;
+  display: block;
+}
+
+/* --------------------------------------------------
+   STORY CREATION POPUP
+-------------------------------------------------- */
+#storyEditor {
+  height: 300px;
+  margin-top: 20px;
+}
+
+/* --------------------------------------------------
+   LEGAL POPUPS (Rules, TOS, Privacy)
+-------------------------------------------------- */
+#rulesContent,
+#tosContent,
+#privacyContent {
+  margin-top: 10px;
+  line-height: 1.5;
+}
+
+/* --------------------------------------------------
+   AGE GATE
+-------------------------------------------------- */
+#ageGate h2 {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+/* --------------------------------------------------
+   MAIN ACTIONS SECTION
+-------------------------------------------------- */
+#legalLinks {
+  text-align: center;
+  margin-top: 20px;
+}
+
+#legalLinks button {
+  margin: 4px;
+}
+
+/* --------------------------------------------------
+   INTRO GIF
+-------------------------------------------------- */
+#introGif {
+  width: 100%;
+  height: 200px;
+  background-size: cover;
+  background-position: center;
+}
+
+/* --------------------------------------------------
+   DESKTOP-COMPAT CHATBOX (MOBILE WRAPPER)
+-------------------------------------------------- */
+#chatBox {
+  display: none;
+}
+
+/* --------------------------------------------------
+   SCROLLBAR STYLING
+-------------------------------------------------- */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #0a84ff;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0f1a;
+}
 </style>
 </head>
+
 <body>
 
-<!-- Side panel (mobile) with exact desktop ids -->
-<nav id="sidePanel" aria-hidden="true">
-  <div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.03)">
-    <strong style="color:var(--accent)">Male Cyber Fighters</strong>
-    <button id="sideClose" style="float:right;background:transparent;border:none;color:var(--muted)">✕</button>
+<!-- MOBILE HEADER -->
+<div id="mobileHeader" class="holo">
+  <span style="font-weight:700">MCF</span>
+  <span id="chatUserLabel">Not signed in</span>
+</div>
+
+<!-- AGE GATE -->
+<div id="ageGate" class="modal-overlay" style="display:flex">
+  <div id="ageBox" class="modal-box">
+    <h2>Are you 18 or older?</h2>
+    <button id="confirmBtn">Yes, Enter</button>
+  </div>
+</div>
+
+<!-- INTRO GIF -->
+<div id="introGif"></div>
+
+<!-- MAIN ACTIONS -->
+<div style="padding:20px; margin-top:70px;">
+  <h1>Male Cyber Fighters</h1>
+  <p>Enter the ring, find opponents, and trash talk in real time.</p>
+
+  <button id="btnLogin">Login</button>
+  <button id="btnRegister" class="ghost">Register</button>
+  <button id="btnRoster" class="ghost">User Roster</button>
+  <button id="btnOpenChat">Open Arena</button>
+  <button id="btnDMs" class="ghost">
+    DMs <span id="dmBadge" class="badge" style="display:none"></span>
+  </button>
+  <button id="btnRooms" class="ghost">Rooms</button>
+  <button id="openSupport">Support</button>
+
+  <div id="legalLinks">
+    <button id="btnTOS" class="ghost small-btn">Terms of Service</button>
+    <button id="btnPrivacy" class="ghost small-btn">Privacy Policy</button>
+    <button id="btnRules" class="ghost small-btn">Server Rules</button>
+    <button id="btnAdmin" class="ghost">Admin Panel</button>
+  </div>
+</div>
+
+<!-- BOTTOM NAV -->
+<div id="mobileNav" class="holo">
+  <button id="btnOpenChat">Arena</button>
+  <button id="btnDMs">DMs</button>
+  <button id="btnRooms">Rooms</button>
+  <button id="btnRoster">Roster</button>
+</div>
+
+<!-- DM SIDEBAR -->
+<div id="dmSidebar" class="side-panel">
+  <div class="side-panel-header">
+    <span>Direct Messages</span>
+    <button id="closeDmSidebar" class="ghost">x</button>
+  </div>
+  <input id="dmSearch" placeholder="Search DMs">
+  <div id="dmSidebarList"></div>
+</div>
+
+<!-- ROOMS SIDEBAR -->
+<div id="roomsPanel" class="side-panel">
+  <div class="side-panel-header">
+    <span>Rooms</span>
+    <button id="closeRoomsSidebar" class="ghost">x</button>
   </div>
 
-  <!-- EXACT IDS from desktop index.html / chat.js -->
-  <div class="side-item active" id="btnArenaChat" data-section="chat">Arena Chat</div>
-  <div class="side-item" id="btnRoster" data-section="roster">Roster</div>
-  <div class="side-item" id="btnMessages" data-section="messages">Messages</div>
-  <div class="side-item" id="btnRooms" data-section="rooms">Rooms</div>
-  <div class="side-item" id="btnProfile" data-section="profile">My Profile</div>
-  <div class="side-item" id="btnDMs" data-section="dms">DMs</div>
-  <div class="side-item" id="btnAdmin" data-section="admin">Admin</div>
-  <div class="side-item logout" id="btnLogout" data-section="logout">Logout</div>
+  <select id="roomSort" class="ghost">
+    <option value="newest">Newest First</option>
+    <option value="oldest">Oldest First</option>
+    <option value="az">A → Z</option>
+    <option value="za">Z → A</option>
+  </select>
 
-  <!-- register trigger -->
-  <div style="padding:12px;border-top:1px solid rgba(255,255,255,0.03)">
-    <button id="btnOpenRegister" style="width:100%;padding:10px;border-radius:8px;border:none;background:var(--accent);color:#000">Register</button>
+  <div id="roomsList"></div>
+  <button id="createRoomBtn" class="small-btn">Create Room</button>
+</div>
+
+<!-- DESKTOP-COMPAT CHATBOX -->
+<div id="chatBox" style="display:none"></div>
+
+<!-- PUBLIC CHAT POPUP -->
+<div id="chatPopup" class="chat-popup">
+  <div class="chat-header">
+    <span>Arena Chat</span>
+    <div>
+      <button id="btnMinimize" class="small-btn">_</button>
+      <button id="btnCloseChat" class="small-btn">x</button>
+    </div>
   </div>
-</nav>
 
-<!-- Main -->
-<div id="main">
-  <header id="topBar">
-    <button id="hamburger">☰</button>
-    <div id="pageTitle">Arena Chat</div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <button id="onlineToggle">Online</button>
-      <!-- keep desktop ids (hidden if unused) -->
-      <button id="btnUploadImage" class="hidden">Upload</button>
-      <button id="btnEditUploadImage" class="hidden">EditUpload</button>
+  <div class="chat-body">
+    <div id="publicFeed"></div>
+  </div>
+
+  <div class="chat-input">
+    <input id="publicMessage" type="text" placeholder="Say something to the arena">
+    <button id="sendPublic" class="primary">Send</button>
+  </div>
+</div>
+
+<!-- ROOM CHAT POPUP -->
+<div id="roomChatPopup" class="chat-popup" data-room="">
+  <div class="chat-header">
+    <span id="roomChatTitle">Room</span>
+    <button id="closeRoomChat" class="ghost small-btn">x</button>
+  </div>
+
+  <div class="chat-body" style="display:flex">
+    <div id="roomFeed" style="flex:1;overflow-y:auto"></div>
+    <div id="roomMembers">
+      <div class="side-panel-header">Members</div>
+      <div id="roomMembersList"></div>
     </div>
-  </header>
+  </div>
 
-  <!-- Views -->
-  <section id="viewChat" class="view active" style="flex:1;display:flex;flex-direction:column;min-height:0">
-    <div id="chatContainer">
-      <div id="onlineDrawer" aria-hidden="true"><div id="onlineList"></div></div>
+  <div id="roomTyping" class="small muted" style="display:none;margin:6px 0 10px"></div>
 
-      <!-- Desktop chat containers / ids preserved -->
-      <div id="chatBox" class="hidden"></div>
-      <div id="chatHistoryContainer" class="hidden"></div>
+  <div class="chat-input">
+    <input id="roomMessageInput" type="text" placeholder="Message room">
+    <button id="roomSendBtn" class="primary">Send</button>
+  </div>
+</div>
 
-      <div id="chatMessages" aria-live="polite"></div>
+<!-- LOGIN -->
+<div id="modalLogin" class="modal-overlay">
+  <div class="modal-box">
+    <h3>Login</h3>
+    <input id="loginUser" placeholder="Username">
+    <input id="loginPass" type="password" placeholder="Password">
+    <div id="loginError" style="display:none;color:red"></div>
+    <button id="loginCancel" class="ghost">Cancel</button>
+    <button id="loginSubmit">Login</button>
+  </div>
+</div>
 
-      <div id="chatInputBar">
-        <div id="chatInputBox" class="hidden"></div>
-        <input id="chatInput" placeholder="Type a message…" autocomplete="off" />
-        <button id="chatUpload">📷</button>
-        <button id="chatSend" id="chatSendBtn">Send</button>
-      </div>
+<!-- REGISTER -->
+<div id="modalRegister" class="modal-overlay">
+  <div class="modal-box">
+    <h3>Register</h3>
+    <input id="regUser" placeholder="Username">
+    <input id="regEmail" type="email" placeholder="Email">
+    <input id="regDisplay" placeholder="Display name">
+    <input id="regAge" type="number" min="13" placeholder="Age">
+    <input id="regPass" type="password" placeholder="Password">
+    <input id="regColor" type="color">
+    <select id="regLanguage">
+      <option value="en">English</option>
+      <option value="es">Spanish</option>
+      <option value="fr">French</option>
+      <option value="de">German</option>
+    </select>
+    <input id="regWins" type="number" placeholder="Wins">
+    <input id="regLosses" type="number" placeholder="Losses">
+    <textarea id="regInfo" rows="3" placeholder="Short bio"></textarea>
+    <input id="regImageFile" type="file" accept="image/*">
+    <button id="btnUploadImage" class="small-btn">Upload Image</button>
+    <div id="uploadStatus">No image uploaded</div>
+    <button id="regCancel" class="ghost">Cancel</button>
+    <button id="regSubmit">Create Account</button>
+    <div id="regError" style="display:none;color:red"></div>
+  </div>
+</div>
+
+<!-- EDIT PROFILE -->
+<div id="modalEditProfile" class="modal-overlay">
+  <div class="modal-box">
+    <h3>Edit Profile</h3>
+    <input id="editDisplay" placeholder="Display name">
+    <input id="editAge" type="number" min="13" placeholder="Age">
+    <textarea id="editInfo" rows="3" placeholder="Bio"></textarea>
+    <input id="editColor" type="color">
+    <select id="editLanguage">
+      <option value="en">English</option>
+      <option value="es">Spanish</option>
+      <option value="fr">French</option>
+      <option value="de">German</option>
+    </select>
+    <input id="editWins" type="number" placeholder="Wins">
+    <input id="editLosses" type="number" placeholder="Losses">
+    <input id="editImageFile" type="file" accept="image/*">
+    <button id="btnEditUploadImage" class="small-btn">Upload Image</button>
+    <div id="editUploadStatus">No image uploaded</div>
+    <button id="editCancel" class="ghost">Cancel</button>
+    <button id="editSubmit">Save Changes</button>
+    <div id="editError" style="display:none;color:red"></div>
+  </div>
+</div>
+
+<!-- SUPPORT -->
+<div id="supportPopup" class="modal-overlay">
+  <div class="modal-box">
+    <button id="closeSupport" class="ghost">Close</button>
+    <h2>Support Request</h2>
+    <label>Type of Report</label>
+    <select id="srType">
+      <option value="user">User Report</option>
+      <option value="issue">App Issue</option>
+    </select>
+    <label>Who are you reporting?</label>
+    <input id="srUser">
+    <label>Where did this happen?</label>
+    <input id="srWhere">
+    <label>When did this happen?</label>
+    <input id="srWhen" type="datetime-local">
+    <label>Additional Information</label>
+    <textarea id="srInfo" rows="5"></textarea>
+    <button id="srSubmit">Submit Report</button>
+  </div>
+</div>
+
+<!-- RULES -->
+<div id="modalRules" class="modal-overlay">
+  <div class="modal-box">
+    <h3>Rules</h3>
+    <div id="rulesContent"></div>
+    <button id="closeRules" class="ghost">Close</button>
+  </div>
+</div>
+
+<!-- TOS -->
+<div id="modalTOS" class="modal-overlay">
+  <div class="modal-box">
+    <h3>Terms of Service</h3>
+    <div id="tosContent"></div>
+    <button id="closeTOS" class="ghost">Close</button>
+  </div>
+</div>
+
+<!-- PRIVACY -->
+<div id="modalPrivacy" class="modal-overlay">
+  <div class="modal-box">
+    <h3>Privacy Policy</h3>
+    <div id="privacyContent"></div>
+    <button id="closePrivacy" class="ghost">Close</button>
+  </div>
+</div>
+
+<!-- STORY CREATION -->
+<div id="storyPopup" class="modal-overlay">
+  <div class="modal-box">
+    <h2>Create Story</h2>
+    <label>Select start date:</label>
+    <input type="date" id="storyDate">
+    <button id="storyLoadBtn" class="small-btn">Load Messages</button>
+    <textarea id="storyEditor"></textarea>
+    <button id="storySaveBtn" class="small-btn">Save Story</button>
+    <button id="storyCloseBtn" class="ghost small-btn">Close</button>
+  </div>
+</div>
+
+<!-- ROSTER -->
+<div id="modalRoster" class="modal-overlay">
+  <div class="modal-box">
+    <h3>Roster</h3>
+    <input id="rosterSearch" placeholder="Search users...">
+    <div id="rosterPage"></div>
+    <div id="rosterPagination">
+      <button id="rosterPrev" class="small-btn">Prev</button>
+      <span id="rosterPageNumber"></span>
+      <button id="rosterNext" class="small-btn">Next</button>
     </div>
-  </section>
-
-  <section id="viewRoster" class="view"><h2>Roster</h2><div id="rosterContent"></div></section>
-  <section id="viewMessages" class="view"><h2>Messages</h2><div id="messagesContent"></div></section>
-  <section id="viewRooms" class="view"><h2>Rooms</h2><div id="roomsContent"></div></section>
-  <section id="viewProfile" class="view"><h2>My Profile</h2><div id="profileContent"></div></section>
-  <section id="viewAdmin" class="view"><h2>Admin</h2><div id="adminUsersView"></div><div id="adminAnalyticsView"></div></section>
+    <button id="rosterClose" class="ghost">Close</button>
+  </div>
 </div>
 
-<!-- DM Drawer -->
-<div id="dmDrawer" aria-hidden="true">
-  <div id="dmHeader"><span>Direct Messages</span><button id="dmClose">Close</button></div>
-  <div id="dmList"></div>
-  <div id="dmMessages"></div>
-  <div id="dmInputBar"><input id="dmInput" placeholder="Type a DM…" /><button id="dmSend">Send</button></div>
+<!-- VIEW PROFILE -->
+<div id="modalViewProfile" class="modal-overlay">
+  <div class="modal-box">
+    <h3>Profile</h3>
+    <div id="profileRelationships"></div>
+    <div id="profileTimeline"></div>
+
+    <div id="vpRelationshipSection">
+      <h3>Add Relationship</h3>
+      <select id="vpRelationshipSelect">
+        <option value="">Select relationship…</option>
+        <option value="rival">Rival</option>
+        <option value="friend">Friend</option>
+        <option value="opponent">Opponent</option>
+        <option value="tagteam">Tag Team</option>
+        <option value="dating">Dating</option>
+        <option value="married">Married</option>
+        <option value="sibling">Sibling</option>
+        <option value="parent">Parent</option>
+        <option value="owner">Owner</option>
+      </select>
+      <button id="vpRelationshipSend" class="small-btn">Send Request</button>
+    </div>
+
+    <button id="viewProfileClose" class="ghost">Close</button>
+  </div>
 </div>
-
-<!-- Login/Register/Admin placeholders and ids used by chat.js and other scripts -->
-<div id="loginScreen" class="hidden">
-  <input id="loginUser" placeholder="Username" />
-  <input id="loginPass" type="password" />
-  <button id="loginSubmit">Login</button>
-  <div id="loginError" class="hidden"></div>
-  <button id="btnRegister" class="hidden">Register</button>
-</div>
-
-<div id="modalRegister" class="hidden">
-  <input id="regUser" placeholder="Username" />
-  <input id="regEmail" placeholder="Email" />
-  <button id="regCancel">Cancel</button>
-  <button id="regSubmit">Create</button>
-</div>
-
-<button id="vpClose" class="hidden"></button>
-<div id="modalAdminPassword" class="hidden">
-  <button id="adminPasswordCancel"></button>
-  <button id="adminPasswordSubmit"></button>
-  <input id="adminPasswordInput" />
-  <div id="adminPasswordError"></div>
-</div>
-<div id="modalAdmin" class="hidden"><button id="adminClose"></button></div>
-<button id="editCancel" class="hidden"></button>
-<button id="btnUploadImage" class="hidden"></button>
-<input id="chatImageFile" type="file" accept="image/*" class="hidden" />
-
-<!-- legacy placeholders -->
-<div id="placeholders" class="hidden"><div id="someLegacyPlaceholder"></div></div>
-
-<!-- Scripts (utils first) -->
-<script src="/socket.io/socket.io.js"></script>
-<script src="/js/utils.js"></script>
-<script src="/js/socket.js"></script>
-<script src="/js/chat.js"></script>
-<script src="/js/register.js"></script>
-<script src="/js/mobile.js"></script>
-<script src="/js/pm.js"></script>
-<script src="/js/admin.js"></script>
-<script src="/js/admin-auth.js"></script>
-<script src="/js/analytics.js"></script>
-<script src="/js/dm-toggle.js"></script>
-<script src="/js/profile.js"></script>
 
 </body>
 </html>
