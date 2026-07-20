@@ -5,7 +5,6 @@ if (typeof window.$ === 'undefined') {
   };
 }
 
-const $ = id => document.getElementById(id);
 
 function show(el){ el.style.display = 'flex'; }
 function hide(el){ el.style.display = 'none'; }
