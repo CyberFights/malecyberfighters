@@ -14,36 +14,28 @@
     --bubble-me:#3b9fff;
     --danger:#ff3b3b;
   }
-
   html,body{height:100%;margin:0;background:var(--bg);color:#fff;font-family:Inter,system-ui,Arial;overflow:hidden}
-
-  /* Login */
+  /* Layout */
   #loginScreen{width:100vw;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
   .login-box{width:100%;max-width:420px;background:rgba(255,255,255,0.03);padding:22px;border-radius:12px}
   .login-box input{width:100%;padding:12px;margin:8px 0;border-radius:8px;border:none;background:#111217;color:#fff}
   .login-box button{width:100%;padding:12px;border-radius:8px;border:none;background:var(--accent);color:#000;font-weight:600}
-
-  /* App layout */
   #app{display:none;width:100vw;height:100vh;position:relative}
   #sidebar{position:fixed;left:0;top:0;bottom:0;width:220px;background:var(--panel);border-right:1px solid rgba(255,255,255,0.04);padding-top:18px;overflow:auto}
   .sidebar-item{padding:14px 16px;font-size:16px;border-bottom:1px solid rgba(255,255,255,0.02);cursor:pointer}
   .sidebar-item.active{background:var(--accent);color:#000;font-weight:700}
   .sidebar-item.logout{color:var(--danger)}
-
   .view{position:absolute;left:220px;top:0;right:0;bottom:0;padding:12px;display:none}
   .view.active{display:block}
-
   /* Chat */
   #chatContainer{display:flex;flex-direction:column;height:100%}
   #chatHeader{display:flex;align-items:center;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.02);border-bottom:1px solid rgba(255,255,255,0.03)}
   #onlineToggle{background:var(--accent);border:none;padding:8px 10px;border-radius:8px;color:#000;font-weight:600}
-
   #onlineDrawer{max-height:0;overflow:hidden;transition:max-height .28s ease;background:var(--panel);border-bottom:1px solid rgba(255,255,255,0.03)}
   #onlineDrawer.open{max-height:220px}
   #onlineList{padding:10px}
   .onlineUser{display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px}
   .onlineUser img{width:36px;height:36px;border-radius:50%}
-
   #chatMessages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
   .chatMessage{display:flex;gap:10px;align-items:flex-start;max-width:85%;padding:10px;border-radius:12px;background:var(--bubble)}
   .chatMessage.me{margin-left:auto;background:var(--bubble-me);color:#000}
@@ -54,11 +46,9 @@
   .timestamp{font-size:12px;color:var(--muted);margin-left:8px;flex-shrink:0;white-space:nowrap}
   .text{margin-top:6px;line-height:1.35;word-break:break-word}
   .chatImage{margin-top:8px;max-width:220px;border-radius:8px}
-
   #chatInputBar{display:flex;gap:8px;padding:10px;background:rgba(255,255,255,0.02);border-top:1px solid rgba(255,255,255,0.03)}
   #chatInput{flex:1;padding:12px;border-radius:10px;border:none;background:#0f1116;color:#fff}
   #chatUpload,#chatSend{padding:10px;border-radius:10px;border:none;background:var(--accent);color:#000;font-weight:700}
-
   /* DM drawer */
   #dmDrawer{position:fixed;left:0;right:0;bottom:-70%;height:70%;background:var(--panel);border-top:1px solid rgba(255,255,255,0.06);transition:bottom .28s ease;z-index:999}
   #dmDrawer.open{bottom:0}
@@ -68,7 +58,6 @@
   #dmInputBar{display:flex;padding:10px;border-top:1px solid rgba(255,255,255,0.03);gap:8px}
   #dmInput{flex:1;padding:10px;border-radius:8px;border:none;background:#0f1116;color:#fff}
   #dmSend{padding:10px;border-radius:8px;border:none;background:var(--accent);color:#000;font-weight:700}
-
   .hidden-admin{display:none !important;visibility:hidden !important;opacity:0 !important;height:0 !important;width:0 !important;overflow:hidden !important}
 </style>
 </head>
@@ -94,10 +83,10 @@
     <div class="sidebar-item active" data-section="chat">Arena Chat</div>
     <div class="sidebar-item" data-section="roster">Roster</div>
     <div class="sidebar-item" data-section="messages">Messages</div>
-    <div class="sidebar-item" data-section="rooms">Rooms</div>
+    <div class="sidebar-item" data-section="rooms" id="btnRooms">Rooms</div>
     <div class="sidebar-item" data-section="profile">My Profile</div>
     <div class="sidebar-item" data-section="dms" id="btnDMs">DMs</div>
-    <div class="sidebar-item" data-section="admin">Admin</div>
+    <div class="sidebar-item" data-section="admin" id="btnAdmin">Admin</div>
     <div class="sidebar-item logout" data-section="logout">Logout</div>
   </div>
 
@@ -146,7 +135,24 @@
   </div>
 </div>
 
-<!-- Hidden admin placeholders -->
+<!-- REGISTER MODAL (placeholders and controls expected by register.js) -->
+<div id="modalRegister" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.6);align-items:center;justify-content:center;z-index:9999">
+  <div style="background:var(--panel);padding:16px;border-radius:12px;width:92%;max-width:520px">
+    <h3 style="margin:0 0 8px 0">Register</h3>
+    <input id="regUser" placeholder="Username" style="width:100%;padding:10px;margin:6px 0;border-radius:8px;border:none;background:#0f1116;color:#fff" />
+    <input id="regEmail" type="email" placeholder="Email" style="width:100%;padding:10px;margin:6px 0;border-radius:8px;border:none;background:#0f1116;color:#fff" />
+    <div style="display:flex;gap:8px">
+      <button id="regCancel" style="flex:1;padding:10px;border-radius:8px;border:none;background:#444;color:#fff">Cancel</button>
+      <button id="regSubmit" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--accent);color:#000">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- PROFILE EDIT placeholders (expected by profile/admin scripts) -->
+<button id="vpClose" style="display:none"></button>
+<button id="btnEditUploadImage" style="display:none"></button>
+
+<!-- Hidden admin placeholders to prevent JS errors -->
 <div id="modalAdminPassword" class="hidden-admin">
   <button id="adminPasswordCancel"></button>
   <button id="adminPasswordSubmit"></button>
@@ -163,7 +169,7 @@
 <!-- File input for chat images -->
 <input id="chatImageFile" type="file" accept="image/*" style="display:none" />
 
-<!-- Scripts: keep utils first, then other modules, then mobile.js -->
+<!-- Load utils first (defines single global $), then other scripts -->
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/utils.js"></script>
 <script src="/js/socket.js"></script>
