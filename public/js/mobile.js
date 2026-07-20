@@ -187,12 +187,18 @@ function bindChat() {
   socket.emit('getChatHistory');
 
   socket.on('chatHistory', history => {
-    history.forEach(msg => renderChatMessage(msg));
+    history.forEach(msg => {
+    msg.text = msg.text || msg.message || msg.msg || "";
+    renderChatMessage(msg);
+});
+
   });
 
   // Live messages
   socket.on('publicMessage', msg => {
-    renderChatMessage(msg);
+    msg.text = msg.text || msg.message || msg.msg || "";
+renderChatMessage(msg);
+
   });
 
   // Online users
