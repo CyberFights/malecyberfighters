@@ -5,171 +5,138 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Male Cyber Fighters – Mobile</title>
 <style>
-  :root{
-    --bg:#0a0a0f;
-    --panel:#0f0f15;
-    --muted:#9aa4b2;
-    --accent:#3b9fff;
-    --bubble:#1a1d25;
-    --bubble-me:#3b9fff;
-    --danger:#ff3b3b;
-  }
-  html,body{height:100%;margin:0;background:var(--bg);color:#fff;font-family:Inter,system-ui,Arial;overflow:hidden}
-  /* Layout */
-  #loginScreen{width:100vw;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
-  .login-box{width:100%;max-width:420px;background:rgba(255,255,255,0.03);padding:22px;border-radius:12px}
-  .login-box input{width:100%;padding:12px;margin:8px 0;border-radius:8px;border:none;background:#111217;color:#fff}
-  .login-box button{width:100%;padding:12px;border-radius:8px;border:none;background:var(--accent);color:#000;font-weight:600}
-  #app{display:none;width:100vw;height:100vh;position:relative}
-  #sidebar{position:fixed;left:0;top:0;bottom:0;width:220px;background:var(--panel);border-right:1px solid rgba(255,255,255,0.04);padding-top:18px;overflow:auto}
-  .sidebar-item{padding:14px 16px;font-size:16px;border-bottom:1px solid rgba(255,255,255,0.02);cursor:pointer}
-  .sidebar-item.active{background:var(--accent);color:#000;font-weight:700}
-  .sidebar-item.logout{color:var(--danger)}
-  .view{position:absolute;left:220px;top:0;right:0;bottom:0;padding:12px;display:none}
-  .view.active{display:block}
-  /* Chat */
-  #chatContainer{display:flex;flex-direction:column;height:100%}
-  #chatHeader{display:flex;align-items:center;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.02);border-bottom:1px solid rgba(255,255,255,0.03)}
-  #onlineToggle{background:var(--accent);border:none;padding:8px 10px;border-radius:8px;color:#000;font-weight:600}
-  #onlineDrawer{max-height:0;overflow:hidden;transition:max-height .28s ease;background:var(--panel);border-bottom:1px solid rgba(255,255,255,0.03)}
+  :root{--bg:#0a0a0f;--panel:#0f0f15;--muted:#9aa4b2;--accent:#3b9fff;--bubble:#1a1d25;--bubble-me:#3b9fff;--danger:#ff3b3b}
+  html,body{height:100%;margin:0;background:var(--bg);color:#fff;font-family:Inter,system-ui,Arial}
+  /* side panel */
+  #sidePanel{position:fixed;left:-280px;top:0;bottom:0;width:280px;background:var(--panel);z-index:1200;padding-top:18px;transition:left .22s ease;overflow:auto}
+  #sidePanel.open{left:0}
+  .side-item{padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.02);cursor:pointer}
+  .side-item.active{background:var(--accent);color:#000;font-weight:700}
+  .side-item.logout{color:var(--danger)}
+  /* main */
+  #main{margin-left:0;transition:margin-left .22s ease;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+  #main.shift{margin-left:280px}
+  #topBar{display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--panel);border-bottom:1px solid rgba(255,255,255,0.03)}
+  #hamburger{background:transparent;border:none;color:var(--accent);font-weight:800;padding:8px}
+  /* views */
+  .view{display:none;flex-direction:column;min-height:0;height:100%}
+  .view.active{display:flex}
+  /* chat */
+  #chatContainer{display:flex;flex-direction:column;flex:1;min-height:0}
+  #onlineDrawer{max-height:0;overflow:hidden;transition:max-height .22s ease;background:var(--panel)}
   #onlineDrawer.open{max-height:220px}
-  #onlineList{padding:10px}
-  .onlineUser{display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px}
-  .onlineUser img{width:36px;height:36px;border-radius:50%}
   #chatMessages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
-  .chatMessage{display:flex;gap:10px;align-items:flex-start;max-width:85%;padding:10px;border-radius:12px;background:var(--bubble)}
+  .chatMessage{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:12px;background:var(--bubble)}
   .chatMessage.me{margin-left:auto;background:var(--bubble-me);color:#000}
-  .chatMessage img.avatar{width:44px;height:44px;border-radius:50%;flex-shrink:0}
-  .msgBody{display:flex;flex-direction:column;min-width:0}
-  .author-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
-  .author{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .timestamp{font-size:12px;color:var(--muted);margin-left:8px;flex-shrink:0;white-space:nowrap}
-  .text{margin-top:6px;line-height:1.35;word-break:break-word}
-  .chatImage{margin-top:8px;max-width:220px;border-radius:8px}
-  #chatInputBar{display:flex;gap:8px;padding:10px;background:rgba(255,255,255,0.02);border-top:1px solid rgba(255,255,255,0.03)}
-  #chatInput{flex:1;padding:12px;border-radius:10px;border:none;background:#0f1116;color:#fff}
-  #chatUpload,#chatSend{padding:10px;border-radius:10px;border:none;background:var(--accent);color:#000;font-weight:700}
-  /* DM drawer */
-  #dmDrawer{position:fixed;left:0;right:0;bottom:-70%;height:70%;background:var(--panel);border-top:1px solid rgba(255,255,255,0.06);transition:bottom .28s ease;z-index:999}
-  #dmDrawer.open{bottom:0}
-  #dmHeader{display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid rgba(255,255,255,0.03);background:rgba(255,255,255,0.02)}
-  #dmList{padding:10px;border-bottom:1px solid rgba(255,255,255,0.03);max-height:120px;overflow:auto}
-  #dmMessages{flex:1;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:10px}
-  #dmInputBar{display:flex;padding:10px;border-top:1px solid rgba(255,255,255,0.03);gap:8px}
-  #dmInput{flex:1;padding:10px;border-radius:8px;border:none;background:#0f1116;color:#fff}
-  #dmSend{padding:10px;border-radius:8px;border:none;background:var(--accent);color:#000;font-weight:700}
-  .hidden-admin{display:none !important;visibility:hidden !important;opacity:0 !important;height:0 !important;width:0 !important;overflow:hidden !important}
+  .hidden{display:none!important}
+  @media (max-width:520px){#sidePanel{width:240px}#main.shift{margin-left:240px}}
 </style>
 </head>
 <body>
 
-<!-- LOGIN -->
-<div id="loginScreen">
-  <h1 style="color:var(--accent);margin-bottom:12px">ENTER THE ARENA</h1>
-  <div class="login-box">
-    <input id="loginUser" placeholder="Your fighter handle" />
-    <input id="loginPass" type="password" placeholder="Password" />
-    <button id="loginSubmit">→ Login</button>
-    <div id="loginError" style="display:none;color:var(--danger);margin-top:8px"></div>
-  </div>
-  <button id="btnRegister" style="margin-top:12px;background:none;border:none;color:var(--accent)">Create an account</button>
-</div>
-
-<!-- APP -->
-<div id="app">
-
-  <!-- SIDEBAR -->
-  <div id="sidebar">
-    <div class="sidebar-item active" data-section="chat">Arena Chat</div>
-    <div class="sidebar-item" data-section="roster">Roster</div>
-    <div class="sidebar-item" data-section="messages">Messages</div>
-    <div class="sidebar-item" data-section="rooms" id="btnRooms">Rooms</div>
-    <div class="sidebar-item" data-section="profile">My Profile</div>
-    <div class="sidebar-item" data-section="dms" id="btnDMs">DMs</div>
-    <div class="sidebar-item" data-section="admin" id="btnAdmin">Admin</div>
-    <div class="sidebar-item logout" data-section="logout">Logout</div>
+<!-- Side panel (mobile) with exact desktop ids -->
+<nav id="sidePanel" aria-hidden="true">
+  <div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.03)">
+    <strong style="color:var(--accent)">Male Cyber Fighters</strong>
+    <button id="sideClose" style="float:right;background:transparent;border:none;color:var(--muted)">✕</button>
   </div>
 
-  <!-- CHAT VIEW -->
-  <div id="viewChat" class="view active">
+  <!-- EXACT IDS from desktop index.html / chat.js -->
+  <div class="side-item active" id="btnArenaChat" data-section="chat">Arena Chat</div>
+  <div class="side-item" id="btnRoster" data-section="roster">Roster</div>
+  <div class="side-item" id="btnMessages" data-section="messages">Messages</div>
+  <div class="side-item" id="btnRooms" data-section="rooms">Rooms</div>
+  <div class="side-item" id="btnProfile" data-section="profile">My Profile</div>
+  <div class="side-item" id="btnDMs" data-section="dms">DMs</div>
+  <div class="side-item" id="btnAdmin" data-section="admin">Admin</div>
+  <div class="side-item logout" id="btnLogout" data-section="logout">Logout</div>
+
+  <!-- register trigger -->
+  <div style="padding:12px;border-top:1px solid rgba(255,255,255,0.03)">
+    <button id="btnOpenRegister" style="width:100%;padding:10px;border-radius:8px;border:none;background:var(--accent);color:#000">Register</button>
+  </div>
+</nav>
+
+<!-- Main -->
+<div id="main">
+  <header id="topBar">
+    <button id="hamburger">☰</button>
+    <div id="pageTitle">Arena Chat</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button id="onlineToggle">Online</button>
+      <!-- keep desktop ids (hidden if unused) -->
+      <button id="btnUploadImage" class="hidden">Upload</button>
+      <button id="btnEditUploadImage" class="hidden">EditUpload</button>
+    </div>
+  </header>
+
+  <!-- Views -->
+  <section id="viewChat" class="view active" style="flex:1;display:flex;flex-direction:column;min-height:0">
     <div id="chatContainer">
-      <div id="chatHeader">
-        <div class="title">Arena Chat</div>
-        <button id="onlineToggle">Online</button>
-      </div>
+      <div id="onlineDrawer" aria-hidden="true"><div id="onlineList"></div></div>
 
-      <div id="onlineDrawer">
-        <div id="onlineList"></div>
-      </div>
+      <!-- Desktop chat containers / ids preserved -->
+      <div id="chatBox" class="hidden"></div>
+      <div id="chatHistoryContainer" class="hidden"></div>
 
       <div id="chatMessages" aria-live="polite"></div>
 
       <div id="chatInputBar">
-        <input id="chatInput" placeholder="Type a message…" />
+        <div id="chatInputBox" class="hidden"></div>
+        <input id="chatInput" placeholder="Type a message…" autocomplete="off" />
         <button id="chatUpload">📷</button>
-        <button id="chatSend">Send</button>
+        <button id="chatSend" id="chatSendBtn">Send</button>
       </div>
     </div>
-  </div>
+  </section>
 
-  <!-- OTHER VIEWS -->
-  <div id="viewRoster" class="view"><h2>Roster</h2><div id="rosterContent"></div></div>
-  <div id="viewMessages" class="view"><h2>Messages</h2><div id="messagesContent"></div></div>
-  <div id="viewRooms" class="view"><h2>Rooms</h2><div id="roomsContent"></div></div>
-  <div id="viewProfile" class="view"><h2>My Profile</h2><div id="profileContent"></div></div>
-  <div id="viewAdmin" class="view"><h2>Admin</h2><div id="adminUsersView"></div><div id="adminAnalyticsView"></div></div>
-
+  <section id="viewRoster" class="view"><h2>Roster</h2><div id="rosterContent"></div></section>
+  <section id="viewMessages" class="view"><h2>Messages</h2><div id="messagesContent"></div></section>
+  <section id="viewRooms" class="view"><h2>Rooms</h2><div id="roomsContent"></div></section>
+  <section id="viewProfile" class="view"><h2>My Profile</h2><div id="profileContent"></div></section>
+  <section id="viewAdmin" class="view"><h2>Admin</h2><div id="adminUsersView"></div><div id="adminAnalyticsView"></div></section>
 </div>
 
-<!-- DM DRAWER -->
+<!-- DM Drawer -->
 <div id="dmDrawer" aria-hidden="true">
-  <div id="dmHeader">
-    <span>Direct Messages</span>
-    <button id="dmClose">Close</button>
-  </div>
+  <div id="dmHeader"><span>Direct Messages</span><button id="dmClose">Close</button></div>
   <div id="dmList"></div>
   <div id="dmMessages"></div>
-  <div id="dmInputBar">
-    <input id="dmInput" placeholder="Type a DM…" />
-    <button id="dmSend">Send</button>
-  </div>
+  <div id="dmInputBar"><input id="dmInput" placeholder="Type a DM…" /><button id="dmSend">Send</button></div>
 </div>
 
-<!-- REGISTER MODAL (placeholders and controls expected by register.js) -->
-<div id="modalRegister" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.6);align-items:center;justify-content:center;z-index:9999">
-  <div style="background:var(--panel);padding:16px;border-radius:12px;width:92%;max-width:520px">
-    <h3 style="margin:0 0 8px 0">Register</h3>
-    <input id="regUser" placeholder="Username" style="width:100%;padding:10px;margin:6px 0;border-radius:8px;border:none;background:#0f1116;color:#fff" />
-    <input id="regEmail" type="email" placeholder="Email" style="width:100%;padding:10px;margin:6px 0;border-radius:8px;border:none;background:#0f1116;color:#fff" />
-    <div style="display:flex;gap:8px">
-      <button id="regCancel" style="flex:1;padding:10px;border-radius:8px;border:none;background:#444;color:#fff">Cancel</button>
-      <button id="regSubmit" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--accent);color:#000">Create</button>
-    </div>
-  </div>
+<!-- Login/Register/Admin placeholders and ids used by chat.js and other scripts -->
+<div id="loginScreen" class="hidden">
+  <input id="loginUser" placeholder="Username" />
+  <input id="loginPass" type="password" />
+  <button id="loginSubmit">Login</button>
+  <div id="loginError" class="hidden"></div>
+  <button id="btnRegister" class="hidden">Register</button>
 </div>
 
-<!-- PROFILE EDIT placeholders (expected by profile/admin scripts) -->
-<button id="vpClose" style="display:none"></button>
-<button id="btnEditUploadImage" style="display:none"></button>
+<div id="modalRegister" class="hidden">
+  <input id="regUser" placeholder="Username" />
+  <input id="regEmail" placeholder="Email" />
+  <button id="regCancel">Cancel</button>
+  <button id="regSubmit">Create</button>
+</div>
 
-<!-- Hidden admin placeholders to prevent JS errors -->
-<div id="modalAdminPassword" class="hidden-admin">
+<button id="vpClose" class="hidden"></button>
+<div id="modalAdminPassword" class="hidden">
   <button id="adminPasswordCancel"></button>
   <button id="adminPasswordSubmit"></button>
   <input id="adminPasswordInput" />
   <div id="adminPasswordError"></div>
 </div>
+<div id="modalAdmin" class="hidden"><button id="adminClose"></button></div>
+<button id="editCancel" class="hidden"></button>
+<button id="btnUploadImage" class="hidden"></button>
+<input id="chatImageFile" type="file" accept="image/*" class="hidden" />
 
-<div id="modalAdmin" class="hidden-admin">
-  <button id="adminClose"></button>
-</div>
+<!-- legacy placeholders -->
+<div id="placeholders" class="hidden"><div id="someLegacyPlaceholder"></div></div>
 
-<button id="editCancel" class="hidden-admin"></button>
-
-<!-- File input for chat images -->
-<input id="chatImageFile" type="file" accept="image/*" style="display:none" />
-
-<!-- Load utils first (defines single global $), then other scripts -->
+<!-- Scripts (utils first) -->
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/utils.js"></script>
 <script src="/js/socket.js"></script>
