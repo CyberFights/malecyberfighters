@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>NOVA OS Mobile</title>
+<title>Male Cyber Fighters Mobile</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -493,16 +493,127 @@
   from { opacity: 0.6; }
   to { opacity: 1; }
 }
+#overlayIntro {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at top, #101b3a, #05060d 50%, #02030a 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  transition: opacity .5s ease;
+}
+
+#overlayIntro.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.auth-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.holo-ring {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  border: 3px solid rgba(79,209,255,0.4);
+  box-shadow: 0 0 25px rgba(79,209,255,0.7);
+  animation: pulse 2s infinite ease-in-out;
+  margin-bottom: 25px;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.8; }
+}
+
+.auth-box {
+  width: 260px;
+  padding: 20px;
+  background: rgba(12,18,32,0.85);
+  border-radius: 14px;
+  border: 1px solid rgba(79,209,255,0.35);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 0 22px rgba(79,209,255,0.4);
+}
+
+.auth-title {
+  text-align: center;
+  color: #4fd1ff;
+  font-size: 1.1rem;
+  margin-bottom: 15px;
+  text-shadow: 0 0 12px rgba(79,209,255,0.8);
+}
+
+.auth-input {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(79,209,255,0.35);
+  background: rgba(5,8,20,0.9);
+  color: #e8f7ff;
+  font-size: 0.85rem;
+}
+
+.auth-btn {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(135deg, #4fd1ff, #1b9fff);
+  color: #050814;
+  font-weight: 600;
+  box-shadow: 0 0 22px rgba(79,209,255,0.7);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.auth-btn.ghost {
+  background: transparent;
+  border: 1px solid rgba(79,209,255,0.35);
+  color: #4fd1ff;
+}
+
+.auth-message {
+  margin-top: 8px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #ff4f7b;
+}
 
 </style>
 </head>
 
 <body>
+ <div id="overlayIntro">
+  <div class="auth-center">
+    <div class="holo-ring"></div>
+
+    <div class="auth-box">
+      <div class="auth-title">Male Cyber Fighters Access</div>
+
+      <input id="authUsername" class="auth-input" placeholder="Username">
+      <input id="authPassword" class="auth-input" type="password" placeholder="Password">
+
+      <button id="authLogin" class="auth-btn">Login</button>
+      <button id="authRegister" class="auth-btn ghost">Register</button>
+
+      <div id="authMessage" class="auth-message"></div>
+    </div>
+  </div>
+</div>
+
 <div id="app">
   <header>
     <img src="./images/mcf.png" alt="NOVA">
     <div>
-      <h1>NOVA OS Mobile</h1>
+      <h1>Male Cyber Fighters Mobile</h1>
       <div class="subtitle">Realtime Arena</div>
     </div>
   </header>
@@ -633,13 +744,6 @@
   </div>
 </div>
 
-<div id="overlayIntro">
-  <div class="intro-center">
-    <div class="holo-ring"></div>
-    <div class="holo-text">Tap to Enter Arena</div>
-  </div>
-</div>
-
 
 <div id="toast"></div>
 
@@ -679,10 +783,76 @@
     setTimeout(() => toastEl.classList.remove("show"), 2500);
   }
 
- const overlayIntro = document.getElementById("overlayIntro");
+const overlayIntro = document.getElementById("overlayIntro");
+const authUsername = document.getElementById("authUsername");
+const authPassword = document.getElementById("authPassword");
+const authLogin = document.getElementById("authLogin");
+const authRegister = document.getElementById("authRegister");
+const authMessage = document.getElementById("authMessage");
 
-overlayIntro.onclick = () => {
-  overlayIntro.classList.add("hidden");
+function showAuthMessage(msg, color = "#ff4f7b") {
+  authMessage.style.color = color;
+  authMessage.textContent = msg;
+}
+
+authLogin.onclick = () => {
+  const username = authUsername.value.trim();
+  const password = authPassword.value.trim();
+
+  if (!username || !password) {
+    showAuthMessage("Missing credentials");
+    return;
+  }
+
+  fetch("/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password })
+  })
+    .then(r => r.json())
+    .then(res => {
+      if (res.error) {
+        showAuthMessage(res.error);
+        return;
+      }
+
+      showAuthMessage("Access Granted", "#4fd1ff");
+
+      setTimeout(() => {
+        overlayIntro.classList.add("hidden");
+      }, 600);
+    })
+    .catch(() => showAuthMessage("Network error"));
+};
+
+authRegister.onclick = () => {
+  const username = authUsername.value.trim();
+  const password = authPassword.value.trim();
+
+  if (!username || !password) {
+    showAuthMessage("Missing credentials");
+    return;
+  }
+
+  fetch("/api/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password })
+  })
+    .then(r => r.json())
+    .then(res => {
+      if (res.error) {
+        showAuthMessage(res.error);
+        return;
+      }
+
+      showAuthMessage("Account Created", "#4fd1ff");
+
+      setTimeout(() => {
+        overlayIntro.classList.add("hidden");
+      }, 600);
+    })
+    .catch(() => showAuthMessage("Network error"));
 };
 
   const publicChatList = document.getElementById("publicChatList");
