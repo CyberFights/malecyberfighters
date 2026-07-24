@@ -444,6 +444,56 @@
   #toast.show {
     display: block;
   }
+  #overlayIntro {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at top, #101b3a, #05060d 50%, #02030a 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  transition: opacity .5s ease;
+}
+
+#overlayIntro.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.intro-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.holo-ring {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  border: 3px solid rgba(79,209,255,0.4);
+  box-shadow: 0 0 25px rgba(79,209,255,0.7);
+  animation: pulse 2s infinite ease-in-out;
+}
+
+.holo-text {
+  margin-top: 20px;
+  font-size: 1.2rem;
+  color: #4fd1ff;
+  text-shadow: 0 0 12px rgba(79,209,255,0.8);
+  animation: glow 1.8s infinite alternate;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.8; }
+}
+
+@keyframes glow {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
+}
+
 </style>
 </head>
 
@@ -584,11 +634,12 @@
 </div>
 
 <div id="overlayIntro">
-  <h2>Welcome to NOVA OS</h2>
-  <p>Realtime Arena. Please confirm you are 18+ to continue.</p>
-  <input id="ageInput" type="number" placeholder="Age">
-  <button id="ageConfirm">Enter Arena</button>
+  <div class="intro-center">
+    <div class="holo-ring"></div>
+    <div class="holo-text">Tap to Enter Arena</div>
+  </div>
 </div>
+
 
 <div id="toast"></div>
 
@@ -628,16 +679,11 @@
     setTimeout(() => toastEl.classList.remove("show"), 2500);
   }
 
-  const overlayIntro = document.getElementById("overlayIntro");
-  document.getElementById("ageConfirm").addEventListener("click", () => {
-    const age = parseInt(document.getElementById("ageInput").value, 10);
-    if (!age || age < 18) {
-      toast("You must be 18+ to enter.");
-      return;
-    }
-    overlayIntro.classList.add("hidden");
-    toast("Welcome to the Arena.");
-  });
+ const overlayIntro = document.getElementById("overlayIntro");
+
+overlayIntro.onclick = () => {
+  overlayIntro.classList.add("hidden");
+};
 
   const publicChatList = document.getElementById("publicChatList");
   const publicInput = document.getElementById("publicInput");
