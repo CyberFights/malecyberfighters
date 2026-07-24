@@ -2,655 +2,331 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<title>NOVA OS Mobile</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MCF Mobile</title>
 
 <style>
-/* --------------------------------------------------
-   GLOBAL RESET & BASE
--------------------------------------------------- */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+  :root {
+    --bg: #05060d;
+    --panel: rgba(12,18,32,0.72);
+    --accent: #4fd1ff;
+    --accent-glow: 0 0 22px rgba(79,209,255,0.7);
+    --text: #e8f7ff;
+    --muted: #7b8ca5;
+    --radius: 14px;
+    --border: 1px solid rgba(79,209,255,0.35);
+    --glass: rgba(10,16,32,0.55);
+  }
 
-body {
-  background: #0a0f1a;
-  color: #fff;
-  font-family: system-ui, sans-serif;
-  overflow-x: hidden;
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
-}
+  body {
+    margin: 0;
+    background: radial-gradient(circle at top, #0f1a33, #05060d 40%, #02030a 100%);
+    font-family: system-ui, sans-serif;
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+  }
 
-/* --------------------------------------------------
-   HOLOGRAPHIC STYLE UTILITIES
--------------------------------------------------- */
-.holo {
-  background: rgba(10,30,60,0.55);
-  border: 1px solid rgba(0,150,255,0.35);
-  backdrop-filter: blur(14px) saturate(180%);
-  box-shadow: 0 0 40px rgba(0,150,255,0.45);
-}
+  /* HEADER */
+  header {
+    padding: 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--glass);
+    border-bottom: var(--border);
+    backdrop-filter: blur(18px);
+  }
 
-/* --------------------------------------------------
-   HEADER BAR
--------------------------------------------------- */
-#mobileHeader {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 56px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 14px;
-  z-index: 9996;
-  font-size: 18px;
-}
+  header img {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    box-shadow: var(--accent-glow);
+  }
 
-/* --------------------------------------------------
-   BOTTOM NAVIGATION
--------------------------------------------------- */
-#mobileNav {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 60px;
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  z-index: 9996;
-}
+  header h1 {
+    font-size: 1.1rem;
+    margin: 0;
+    color: var(--accent);
+  }
 
-#mobileNav button {
-  background: transparent;
-  border: none;
-  color: #0a84ff;
-  font-size: 16px;
-  font-weight: 600;
-}
+  /* MAIN PUBLIC CHAT */
+  #publicChat {
+    height: calc(100vh - 180px);
+    overflow-y: auto;
+    padding: 12px;
+  }
 
-/* --------------------------------------------------
-   BUTTONS
--------------------------------------------------- */
-button {
-  padding: 10px 14px;
-  border-radius: 6px;
-  border: none;
-  background: #0a84ff;
-  color: #fff;
-  font-weight: 600;
-  font-size: 15px;
-}
+  .msg {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
 
-button.ghost {
-  background: transparent;
-  border: 1px solid #0a84ff;
-}
+  .msg-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 0, #4fd1ff, #1b9fff 40%, #050814 100%);
+    box-shadow: var(--accent-glow);
+  }
 
-button.primary {
-  background: #0a84ff;
-  box-shadow: 0 0 12px rgba(0,150,255,0.45);
-}
+  .msg-body {
+    background: var(--panel);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    border: var(--border);
+    flex: 1;
+  }
 
-.small-btn {
-  padding: 6px 10px;
-  font-size: 14px;
-}
+  .msg-author {
+    color: var(--accent);
+    font-size: 0.85rem;
+  }
 
-.badge {
-  background: red;
-  padding: 2px 6px;
-  border-radius: 6px;
-  font-size: 12px;
-}
+  .msg-text {
+    margin-top: 4px;
+    font-size: 0.9rem;
+  }
 
-/* --------------------------------------------------
-   INPUTS & FORMS
--------------------------------------------------- */
-input,
-textarea,
-select {
-  width: 100%;
-  padding: 10px;
-  border-radius: 6px;
-  border: 1px solid #333;
-  background: #0a0f1a;
-  color: #fff;
-  font-size: 15px;
-  margin-bottom: 12px;
-}
+  /* INPUT BAR */
+  #inputBar {
+    padding: 10px;
+    background: var(--glass);
+    border-top: var(--border);
+    display: flex;
+    gap: 10px;
+  }
 
-textarea {
-  resize: none;
-}
+  #publicInput {
+    flex: 1;
+    padding: 10px;
+    border-radius: var(--radius);
+    border: var(--border);
+    background: rgba(5,8,20,0.9);
+    color: var(--text);
+  }
 
-/* --------------------------------------------------
-   MODALS
--------------------------------------------------- */
-.modal-overlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.65);
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  animation: fadeIn 0.25s ease;
-}
+  #publicSend {
+    padding: 10px 16px;
+    border-radius: var(--radius);
+    background: linear-gradient(135deg, #4fd1ff, #1b9fff);
+    border: none;
+    color: #050814;
+    font-weight: 600;
+    box-shadow: var(--accent-glow);
+  }
 
-.modal-box {
-  background: #111;
-  padding: 20px;
-  border-radius: 10px;
-  width: 90%;
-  max-height: 90vh;
-  overflow-y: auto;
-}
+  /* FLOATING DM BUTTON */
+  #dmButton {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--accent);
+    color: #050814;
+    padding: 14px 18px;
+    border-radius: 999px;
+    box-shadow: var(--accent-glow);
+    font-weight: 700;
+  }
 
-/* Fade-in animation */
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
+  /* DM SIDEBAR */
+  #dmSidebar {
+    position: fixed;
+    top: 0;
+    right: -100%;
+    width: 80%;
+    height: 100%;
+    background: var(--glass);
+    border-left: var(--border);
+    backdrop-filter: blur(18px);
+    transition: 0.3s;
+    padding: 14px;
+    overflow-y: auto;
+  }
 
-/* --------------------------------------------------
-   SIDE PANELS (DMs, Rooms)
--------------------------------------------------- */
-.side-panel {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: #0a0f1a;
-  z-index: 9997;
-  padding: 20px;
-  overflow-y: auto;
-  transform: translateX(100%);
-  transition: transform 0.25s ease;
-}
+  #dmSidebar.open {
+    right: 0;
+  }
 
-.side-panel.open {
-  transform: translateX(0);
-}
+  .dm-user {
+    padding: 10px;
+    border-radius: var(--radius);
+    background: var(--panel);
+    border: var(--border);
+    margin-bottom: 10px;
+  }
 
-.side-panel-header {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 10px;
-  font-size: 18px;
-}
+  /* ROOM POPUP */
+  #roomPopup {
+    position: fixed;
+    bottom: -100%;
+    left: 0;
+    width: 100%;
+    height: 70%;
+    background: var(--glass);
+    border-top: var(--border);
+    backdrop-filter: blur(18px);
+    transition: 0.3s;
+    padding: 14px;
+    overflow-y: auto;
+  }
 
-/* --------------------------------------------------
-   CHAT POPUPS (Public + Rooms)
--------------------------------------------------- */
-.chat-popup {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: #0a0f1a;
-  z-index: 9998;
-  display: flex;
-  flex-direction: column;
-  transition: transform 0.25s ease;
-}
+  #roomPopup.open {
+    bottom: 0;
+  }
 
-.chat-popup.minimized {
-  transform: translateY(80%);
-}
+  /* PROFILE POPUP */
+  #profilePopup {
+    position: fixed;
+    top: 0;
+    left: -100%;
+    width: 80%;
+    height: 100%;
+    background: var(--glass);
+    border-right: var(--border);
+    backdrop-filter: blur(18px);
+    transition: 0.3s;
+    padding: 14px;
+    overflow-y: auto;
+  }
 
-.chat-header {
-  display: flex;
-  justify-content: space-between;
-  padding: 12px;
-  background: #111;
-  border-bottom: 1px solid #222;
-  font-size: 16px;
-}
+  #profilePopup.open {
+    left: 0;
+  }
 
-.chat-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 10px;
-  padding-bottom: 80px; /* prevents keyboard overlap */
-}
-
-/* Chat bubbles */
-#publicFeed div,
-#roomFeed div {
-  padding: 8px 12px;
-  margin-bottom: 8px;
-  background: rgba(255,255,255,0.05);
-  border-left: 3px solid #0a84ff;
-  border-radius: 6px;
-  line-height: 1.4;
-}
-
-.chat-input {
-  display: flex;
-  gap: 8px;
-  padding: 10px;
-  background: #111;
-  border-top: 1px solid #222;
-}
-
-/* --------------------------------------------------
-   ROOM CHAT MEMBERS COLUMN
--------------------------------------------------- */
-#roomMembers {
-  width: 120px;
-  padding-left: 10px;
-  border-left: 1px solid #222;
-}
-
-#roomMembersList {
-  margin-top: 10px;
-}
-
-/* --------------------------------------------------
-   ROSTER POPUP
--------------------------------------------------- */
-#modalRoster .modal-box {
-  max-width: 500px;
-}
-
-#rosterPagination {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-/* --------------------------------------------------
-   VIEW PROFILE POPUP
--------------------------------------------------- */
-#modalViewProfile .modal-box {
-  max-width: 500px;
-}
-
-#vpRelationshipSection {
-  margin-top: 20px;
-  padding-top: 15px;
-  border-top: 1px solid #333;
-}
-
-/* --------------------------------------------------
-   SUPPORT POPUP
--------------------------------------------------- */
-#supportPopup .modal-box label {
-  margin-top: 10px;
-  display: block;
-}
-
-/* --------------------------------------------------
-   STORY CREATION POPUP
--------------------------------------------------- */
-#storyEditor {
-  height: 300px;
-  margin-top: 20px;
-}
-
-/* --------------------------------------------------
-   LEGAL POPUPS (Rules, TOS, Privacy)
--------------------------------------------------- */
-#rulesContent,
-#tosContent,
-#privacyContent {
-  margin-top: 10px;
-  line-height: 1.5;
-}
-
-/* --------------------------------------------------
-   AGE GATE
--------------------------------------------------- */
-#ageGate h2 {
-  text-align: center;
-  margin-bottom: 20px;
-}
-
-/* --------------------------------------------------
-   MAIN ACTIONS SECTION
--------------------------------------------------- */
-#legalLinks {
-  text-align: center;
-  margin-top: 20px;
-}
-
-#legalLinks button {
-  margin: 4px;
-}
-
-/* --------------------------------------------------
-   INTRO GIF
--------------------------------------------------- */
-#introGif {
-  width: 100%;
-  height: 200px;
-  background-size: cover;
-  background-position: center;
-}
-
-/* --------------------------------------------------
-   DESKTOP-COMPAT CHATBOX (MOBILE WRAPPER)
--------------------------------------------------- */
-#chatBox {
-  display: none;
-}
-
-/* --------------------------------------------------
-   SCROLLBAR STYLING
--------------------------------------------------- */
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #0a84ff;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-track {
-  background: #0a0f1a;
-}
 </style>
 </head>
 
 <body>
 
-<!-- MOBILE HEADER -->
-<div id="mobileHeader" class="holo">
-  <span style="font-weight:700">MCF</span>
-  <span id="chatUserLabel">Not signed in</span>
-</div>
-
-<!-- AGE GATE -->
-<div id="ageGate" class="modal-overlay" style="display:flex">
-  <div id="ageBox" class="modal-box">
-    <h2>Are you 18 or older?</h2>
-    <button id="confirmBtn">Yes, Enter</button>
+<header>
+  <img src="./images/mcf.png">
+  <div>
+    <h1>NOVA OS Mobile</h1>
+    <div class="muted">Realtime Arena</div>
   </div>
+</header>
+
+<div id="publicChat"></div>
+
+<div id="inputBar">
+  <input id="publicInput" placeholder="Message the Arena…">
+  <button id="publicSend">Send</button>
 </div>
 
-<!-- INTRO GIF -->
-<div id="introGif"></div>
-
-<!-- MAIN ACTIONS -->
-<div style="padding:20px; margin-top:70px;">
-  <h1>Male Cyber Fighters</h1>
-  <p>Enter the ring, find opponents, and trash talk in real time.</p>
-
-  <button id="btnLogin">Login</button>
-  <button id="btnRegister" class="ghost">Register</button>
-  <button id="btnRoster" class="ghost">User Roster</button>
-  <button id="btnOpenChat">Open Arena</button>
-  <button id="btnDMs" class="ghost">
-    DMs <span id="dmBadge" class="badge" style="display:none"></span>
-  </button>
-  <button id="btnRooms" class="ghost">Rooms</button>
-  <button id="openSupport">Support</button>
-
-  <div id="legalLinks">
-    <button id="btnTOS" class="ghost small-btn">Terms of Service</button>
-    <button id="btnPrivacy" class="ghost small-btn">Privacy Policy</button>
-    <button id="btnRules" class="ghost small-btn">Server Rules</button>
-    <button id="btnAdmin" class="ghost">Admin Panel</button>
-  </div>
-</div>
-
-<!-- BOTTOM NAV -->
-<div id="mobileNav" class="holo">
-  <button id="btnOpenChat">Arena</button>
-  <button id="btnDMs">DMs</button>
-  <button id="btnRooms">Rooms</button>
-  <button id="btnRoster">Roster</button>
-</div>
+<button id="dmButton">DMs</button>
 
 <!-- DM SIDEBAR -->
-<div id="dmSidebar" class="side-panel">
-  <div class="side-panel-header">
-    <span>Direct Messages</span>
-    <button id="closeDmSidebar" class="ghost">x</button>
-  </div>
-  <input id="dmSearch" placeholder="Search DMs">
-  <div id="dmSidebarList"></div>
-</div>
+<div id="dmSidebar"></div>
 
-<!-- ROOMS SIDEBAR -->
-<div id="roomsPanel" class="side-panel">
-  <div class="side-panel-header">
-    <span>Rooms</span>
-    <button id="closeRoomsSidebar" class="ghost">x</button>
-  </div>
+<!-- ROOM POPUP -->
+<div id="roomPopup"></div>
 
-  <select id="roomSort" class="ghost">
-    <option value="newest">Newest First</option>
-    <option value="oldest">Oldest First</option>
-    <option value="az">A → Z</option>
-    <option value="za">Z → A</option>
-  </select>
+<!-- PROFILE POPUP -->
+<div id="profilePopup"></div>
 
-  <div id="roomsList"></div>
-  <button id="createRoomBtn" class="small-btn">Create Room</button>
-</div>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
 
-<!-- DESKTOP-COMPAT CHATBOX -->
-<div id="chatBox" style="display:none"></div>
+  const chat = document.getElementById("publicChat");
+  const input = document.getElementById("publicInput");
+  const send = document.getElementById("publicSend");
 
-<!-- PUBLIC CHAT POPUP -->
-<div id="chatPopup" class="chat-popup">
-  <div class="chat-header">
-    <span>Arena Chat</span>
-    <div>
-      <button id="btnMinimize" class="small-btn">_</button>
-      <button id="btnCloseChat" class="small-btn">x</button>
-    </div>
-  </div>
+  const dmSidebar = document.getElementById("dmSidebar");
+  const dmButton = document.getElementById("dmButton");
 
-  <div class="chat-body">
-    <div id="publicFeed"></div>
-  </div>
+  const roomPopup = document.getElementById("roomPopup");
+  const profilePopup = document.getElementById("profilePopup");
 
-  <div class="chat-input">
-    <input id="publicMessage" type="text" placeholder="Say something to the arena">
-    <button id="sendPublic" class="primary">Send</button>
-  </div>
-</div>
+  let msgCount = 0;
 
-<!-- ROOM CHAT POPUP -->
-<div id="roomChatPopup" class="chat-popup" data-room="">
-  <div class="chat-header">
-    <span id="roomChatTitle">Room</span>
-    <button id="closeRoomChat" class="ghost small-btn">x</button>
-  </div>
+  function addMsg({ from, text, avatar }) {
+    const wrap = document.createElement("div");
+    wrap.className = "msg";
 
-  <div class="chat-body" style="display:flex">
-    <div id="roomFeed" style="flex:1;overflow-y:auto"></div>
-    <div id="roomMembers">
-      <div class="side-panel-header">Members</div>
-      <div id="roomMembersList"></div>
-    </div>
-  </div>
+    const av = document.createElement("div");
+    av.className = "msg-avatar";
+    if (avatar) av.style.backgroundImage = `url(${avatar})`;
 
-  <div id="roomTyping" class="small muted" style="display:none;margin:6px 0 10px"></div>
+    const body = document.createElement("div");
+    body.className = "msg-body";
 
-  <div class="chat-input">
-    <input id="roomMessageInput" type="text" placeholder="Message room">
-    <button id="roomSendBtn" class="primary">Send</button>
-  </div>
-</div>
+    const author = document.createElement("div");
+    author.className = "msg-author";
+    author.textContent = from;
 
-<!-- LOGIN -->
-<div id="modalLogin" class="modal-overlay">
-  <div class="modal-box">
-    <h3>Login</h3>
-    <input id="loginUser" placeholder="Username">
-    <input id="loginPass" type="password" placeholder="Password">
-    <div id="loginError" style="display:none;color:red"></div>
-    <button id="loginCancel" class="ghost">Cancel</button>
-    <button id="loginSubmit">Login</button>
-  </div>
-</div>
+    const txt = document.createElement("div");
+    txt.className = "msg-text";
+    txt.textContent = text;
 
-<!-- REGISTER -->
-<div id="modalRegister" class="modal-overlay">
-  <div class="modal-box">
-    <h3>Register</h3>
-    <input id="regUser" placeholder="Username">
-    <input id="regEmail" type="email" placeholder="Email">
-    <input id="regDisplay" placeholder="Display name">
-    <input id="regAge" type="number" min="13" placeholder="Age">
-    <input id="regPass" type="password" placeholder="Password">
-    <input id="regColor" type="color">
-    <select id="regLanguage">
-      <option value="en">English</option>
-      <option value="es">Spanish</option>
-      <option value="fr">French</option>
-      <option value="de">German</option>
-    </select>
-    <input id="regWins" type="number" placeholder="Wins">
-    <input id="regLosses" type="number" placeholder="Losses">
-    <textarea id="regInfo" rows="3" placeholder="Short bio"></textarea>
-    <input id="regImageFile" type="file" accept="image/*">
-    <button id="btnUploadImage" class="small-btn">Upload Image</button>
-    <div id="uploadStatus">No image uploaded</div>
-    <button id="regCancel" class="ghost">Cancel</button>
-    <button id="regSubmit">Create Account</button>
-    <div id="regError" style="display:none;color:red"></div>
-  </div>
-</div>
+    body.appendChild(author);
+    body.appendChild(txt);
+    wrap.appendChild(av);
+    wrap.appendChild(body);
 
-<!-- EDIT PROFILE -->
-<div id="modalEditProfile" class="modal-overlay">
-  <div class="modal-box">
-    <h3>Edit Profile</h3>
-    <input id="editDisplay" placeholder="Display name">
-    <input id="editAge" type="number" min="13" placeholder="Age">
-    <textarea id="editInfo" rows="3" placeholder="Bio"></textarea>
-    <input id="editColor" type="color">
-    <select id="editLanguage">
-      <option value="en">English</option>
-      <option value="es">Spanish</option>
-      <option value="fr">French</option>
-      <option value="de">German</option>
-    </select>
-    <input id="editWins" type="number" placeholder="Wins">
-    <input id="editLosses" type="number" placeholder="Losses">
-    <input id="editImageFile" type="file" accept="image/*">
-    <button id="btnEditUploadImage" class="small-btn">Upload Image</button>
-    <div id="editUploadStatus">No image uploaded</div>
-    <button id="editCancel" class="ghost">Cancel</button>
-    <button id="editSubmit">Save Changes</button>
-    <div id="editError" style="display:none;color:red"></div>
-  </div>
-</div>
+    chat.appendChild(wrap);
+    chat.scrollTop = chat.scrollHeight;
+  }
 
-<!-- SUPPORT -->
-<div id="supportPopup" class="modal-overlay">
-  <div class="modal-box">
-    <button id="closeSupport" class="ghost">Close</button>
-    <h2>Support Request</h2>
-    <label>Type of Report</label>
-    <select id="srType">
-      <option value="user">User Report</option>
-      <option value="issue">App Issue</option>
-    </select>
-    <label>Who are you reporting?</label>
-    <input id="srUser">
-    <label>Where did this happen?</label>
-    <input id="srWhere">
-    <label>When did this happen?</label>
-    <input id="srWhen" type="datetime-local">
-    <label>Additional Information</label>
-    <textarea id="srInfo" rows="5"></textarea>
-    <button id="srSubmit">Submit Report</button>
-  </div>
-</div>
+  /* PUBLIC CHAT */
+  socket.on("publicMessage", msg => addMsg(msg));
+  socket.on("externalPublicMessage", msg => addMsg(msg));
 
-<!-- RULES -->
-<div id="modalRules" class="modal-overlay">
-  <div class="modal-box">
-    <h3>Rules</h3>
-    <div id="rulesContent"></div>
-    <button id="closeRules" class="ghost">Close</button>
-  </div>
-</div>
+  send.onclick = () => {
+    const text = input.value.trim();
+    if (!text) return;
 
-<!-- TOS -->
-<div id="modalTOS" class="modal-overlay">
-  <div class="modal-box">
-    <h3>Terms of Service</h3>
-    <div id="tosContent"></div>
-    <button id="closeTOS" class="ghost">Close</button>
-  </div>
-</div>
+    socket.emit("publicMessage", {
+      from: "You",
+      display: "You",
+      text
+    });
 
-<!-- PRIVACY -->
-<div id="modalPrivacy" class="modal-overlay">
-  <div class="modal-box">
-    <h3>Privacy Policy</h3>
-    <div id="privacyContent"></div>
-    <button id="closePrivacy" class="ghost">Close</button>
-  </div>
-</div>
+    addMsg({ from: "You", text });
+    input.value = "";
+  };
 
-<!-- STORY CREATION -->
-<div id="storyPopup" class="modal-overlay">
-  <div class="modal-box">
-    <h2>Create Story</h2>
-    <label>Select start date:</label>
-    <input type="date" id="storyDate">
-    <button id="storyLoadBtn" class="small-btn">Load Messages</button>
-    <textarea id="storyEditor"></textarea>
-    <button id="storySaveBtn" class="small-btn">Save Story</button>
-    <button id="storyCloseBtn" class="ghost small-btn">Close</button>
-  </div>
-</div>
+  /* DM SIDEBAR */
+  dmButton.onclick = () => {
+    dmSidebar.classList.toggle("open");
+  };
 
-<!-- ROSTER -->
-<div id="modalRoster" class="modal-overlay">
-  <div class="modal-box">
-    <h3>Roster</h3>
-    <input id="rosterSearch" placeholder="Search users...">
-    <div id="rosterPage"></div>
-    <div id="rosterPagination">
-      <button id="rosterPrev" class="small-btn">Prev</button>
-      <span id="rosterPageNumber"></span>
-      <button id="rosterNext" class="small-btn">Next</button>
-    </div>
-    <button id="rosterClose" class="ghost">Close</button>
-  </div>
-</div>
+  socket.on("dmPartners", list => {
+    dmSidebar.innerHTML = "<h2>Direct Messages</h2>";
+    list.forEach(u => {
+      const div = document.createElement("div");
+      div.className = "dm-user";
+      div.textContent = u;
+      div.onclick = () => openDM(u);
+      dmSidebar.appendChild(div);
+    });
+  });
 
-<!-- VIEW PROFILE -->
-<div id="modalViewProfile" class="modal-overlay">
-  <div class="modal-box">
-    <h3>Profile</h3>
-    <div id="profileRelationships"></div>
-    <div id="profileTimeline"></div>
+  function openDM(username) {
+    alert("Open DM window for " + username);
+  }
 
-    <div id="vpRelationshipSection">
-      <h3>Add Relationship</h3>
-      <select id="vpRelationshipSelect">
-        <option value="">Select relationship…</option>
-        <option value="rival">Rival</option>
-        <option value="friend">Friend</option>
-        <option value="opponent">Opponent</option>
-        <option value="tagteam">Tag Team</option>
-        <option value="dating">Dating</option>
-        <option value="married">Married</option>
-        <option value="sibling">Sibling</option>
-        <option value="parent">Parent</option>
-        <option value="owner">Owner</option>
-      </select>
-      <button id="vpRelationshipSend" class="small-btn">Send Request</button>
-    </div>
+  /* ROOMS */
+  socket.on("roomsList", rooms => {
+    roomPopup.innerHTML = "<h2>Rooms</h2>";
+    rooms.forEach(r => {
+      const div = document.createElement("div");
+      div.className = "dm-user";
+      div.textContent = (r.private ? "🔒 " : "") + r.name;
+      div.onclick = () => openRoom(r._id, r.name);
+      roomPopup.appendChild(div);
+    });
+  });
 
-    <button id="viewProfileClose" class="ghost">Close</button>
-  </div>
-</div>
+  function openRoom(id, name) {
+    roomPopup.classList.add("open");
+    roomPopup.innerHTML = `<h2>${name}</h2>`;
+  }
+
+</script>
 
 </body>
 </html>
