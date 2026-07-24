@@ -1,0 +1,2768 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Male Cyber Fighters</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+      <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+<script>
+  eruda.init();
+</script>
+<style>
+ :root {
+    --bg: #05060d;
+    --panel: rgba(12,18,32,0.72);
+    --accent: #4fd1ff;
+    --accent-glow: 0 0 18px rgba(79,209,255,0.7);
+    --text: #e8f7ff;
+    --muted: #7b8ca5;
+    --radius: 14px;
+    --border: 1px solid rgba(79,209,255,0.35);
+    --glass: rgba(10,16,32,0.55);
+  }
+
+  body {
+    margin: 0;
+    background: radial-gradient(circle at top, #0f1a33, #05060d 40%, #02030a 100%);
+    font-family: system-ui, sans-serif;
+    color: var(--text);
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 260px;
+    background: var(--glass);
+    border-right: var(--border);
+    backdrop-filter: blur(18px) saturate(140%);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .brand-logo {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 0, #4fd1ff, #1b9fff 40%, #050814 100%);
+    box-shadow: var(--accent-glow);
+  }
+
+  .nav {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+h1{margin:0;font-size:20px}
+p.lead{margin:6px 0 0;color:var(--muted)}
+/* PARTICLE BACKGROUND ------------------------------------------------------ */
+body::after {
+  content:"";
+  position:fixed; inset:0; pointer-events:none; z-index:-1;
+  background:
+    radial-gradient(circle, rgba(120,200,255,0.35) 0%, transparent 60%) 10% 20%,
+    radial-gradient(circle, rgba(120,200,255,0.25) 0%, transparent 60%) 80% 30%,
+    radial-gradient(circle, rgba(120,200,255,0.20) 0%, transparent 60%) 50% 70%,
+    radial-gradient(circle, rgba(120,200,255,0.30) 0%, transparent 60%) 30% 85%,
+    radial-gradient(circle, rgba(120,200,255,0.18) 0%, transparent 60%) 70% 60%;
+  background-size:180px 180px,140px 140px,200px 200px,160px 160px,120px 120px;
+  animation:holoParticles 22s linear infinite;
+  opacity:0.35; filter:blur(1px);
+}
+
+@keyframes holoParticles {
+  0%{background-position:10% 20%,80% 30%,50% 70%,30% 85%,70% 60%;}
+  50%{background-position:15% 25%,75% 35%,55% 65%,35% 80%,65% 55%;}
+  100%{background-position:10% 20%,80% 30%,50% 70%,30% 85%,70% 60%;}
+}
+
+/* LAYOUT ------------------------------------------------------------------- */
+.container{
+  max-width:100%; margin:36px auto; padding:28px;
+  background:linear-gradient(180deg, rgba(0,16,122,0.05), transparent);
+  border-radius:12px;
+  box-shadow:0 8px 30px rgba(120,180,255,0.25);
+}
+
+header{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.brand{display:flex;align-items:center;gap:12px}
+
+.logo{
+  width:56px;height:56px;border-radius:8px;
+  background:linear-gradient(135deg,#7fd8ff,#b0c4ff);
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;color:#00121f;
+  box-shadow:0 0 12px #7fd8ff, 0 0 24px #7fd8ff;
+}
+
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+
+button{
+  background:linear-gradient(135deg,#7fd8ff,#b0c4ff);
+  border:0;padding:10px 14px;border-radius:8px;
+  color:#00121f;font-weight:600;cursor:pointer;
+  box-shadow:0 0 10px rgba(120,200,255,0.4);
+}
+
+button.ghost{
+  background:transparent;
+  border:1px solid rgba(180,220,255,0.15);
+  color:var(--muted);
+}
+
+.grid{display:grid;grid-template-columns:1fr 320px;gap:18px;margin-top:22px}
+
+.card{
+  background:var(--card);
+  padding:18px;border-radius:10px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+.hero{min-height:220px;display:flex;flex-direction:column;justify-content:center;gap:12px}
+
+/* PROFILE CARD ------------------------------------------------------------- */
+.user-profile-card{
+  display:flex;flex-direction:column;gap:12px;
+  padding:16px;
+  background:linear-gradient(180deg, rgba(127,216,255,0.08), rgba(160,200,255,0.04));
+  border:1px solid rgba(127,216,255,0.2);
+  border-radius:10px;
+  align-items:center;text-align:center;
+}
+
+.user-profile-card.logged-in{
+  flex-direction:row;align-items:flex-start;text-align:left;
+}
+
+.profile-avatar{
+  width:56px;height:56px;border-radius:8px;
+  background:linear-gradient(135deg,#1a2233,#0d1320);
+  display:flex;align-items:center;justify-content:center;
+  color:#dff6ff;font-weight:700;font-size:24px;
+  border:1px solid rgba(160,200,255,0.25);
+  flex-shrink:0;
+}
+
+.profile-info{display:flex;flex-direction:column;gap:6px;flex:1}
+.profile-name{font-weight:600;font-size:16px;color:#e9f6ff;margin:0}
+.profile-status{font-size:12px;color:var(--muted);margin:0}
+
+.profile-details{
+  display:flex;flex-direction:column;gap:4px;
+  padding:8px 0;
+  border-top:1px solid rgba(127,216,255,0.1);
+  border-bottom:1px solid rgba(127,216,255,0.1);
+  margin-bottom:8px;
+}
+
+.profile-age{font-size:12px;color:var(--accent);font-weight:500}
+.profile-bio{font-size:11px;color:var(--muted);line-height:1.4;max-width:200px}
+
+.profile-stats{display:flex;gap:16px;font-size:12px}
+.profile-stat{display:flex;flex-direction:column;gap:2px;align-items:center}
+.profile-stat-value{font-weight:600;color:var(--accent)}
+.profile-stat-label{color:var(--muted);font-size:10px}
+
+.profile-logout{
+  margin-left:auto;padding:6px 12px;font-size:12px;
+  display:none;flex-shrink:0;
+}
+.user-profile-card.logged-in .profile-logout{display:block}
+
+  .profile-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+  .avatar-img {
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.avatar-fallback {
+  border-radius: 50%;
+  background: #333;
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* DM SIDEBAR --------------------------------------------------------------- */
+#dmSidebar {
+  position: fixed;
+  top: 0;
+  left: -300px; /* hidden by default */
+  width: 240px;
+  height: 100vh;
+
+  background: rgba(160,200,255,0.06);
+  border-right: 1px solid rgba(160,200,255,0.15);
+  backdrop-filter: blur(12px);
+
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+
+  box-shadow: 0 0 25px rgba(120,180,255,0.25);
+  transition: left 0.35s ease;
+  z-index: 9999;
+}
+
+#dmSidebar.open {
+  left: 0;
+}
+
+.dm-search{
+  background:rgba(160,200,255,0.05);
+  border:1px solid rgba(160,200,255,0.25);
+  padding:6px;border-radius:6px;
+  color:#e6f6ff;margin-bottom:8px;
+}
+
+.dm-sidebar-item{
+  padding:8px;border-radius:8px;
+  background:rgba(160,200,255,0.08);
+  cursor:pointer;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.dm-sidebar-item:hover{background:rgba(160,200,255,0.15)}
+
+.dm-unread-badge{
+  background:#7fd8ff;color:#00121f;
+  padding:2px 6px;border-radius:6px;
+  font-size:11px;font-weight:bold;
+}
+
+.user-profile-card.logged-in .profile-logout{
+  display:block;
+}
+.muted{color:var(--muted);font-size:13px}
+
+.roster-list{
+  display:flex;flex-direction:column;gap:8px;
+  max-height:420px;overflow:auto;padding-right:6px;
+}
+.user-row{
+  display:flex;align-items:center;gap:12px;
+background:var(--glass);
+  border:1px solid rgba(160,200,255,0.12);
+}
+.avatar{
+  width:44px;height:44px;border-radius:8px;
+  background:linear-gradient(135deg,#1a2233,#0d1320);
+  display:flex;align-items:center;justify-content:center;
+  color:#dff6ff;font-weight:700;
+  border:1px solid rgba(160,200,255,0.25);
+}
+.status{width:10px;height:10px;border-radius:50%}
+.status.online{background:var(--success)}
+.status.offline{background:var(--muted)}
+
+.small{font-size:13px;color:var(--muted)}
+/* CHAT POPUP --------------------------------------------------------------- */
+.chat-popup {
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  width: 650px;
+  height: 620px;
+  background: linear-gradient(180deg,#050a16,#0a1324);
+  border-radius: 12px;
+  border: 1px solid rgba(160,200,255,0.12);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(120,180,255,0.25);
+
+  /* ADD THIS */
+  cursor: default;
+}
+
+.chat-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 14px;
+  border-bottom:1px solid rgba(160,200,255,0.12);
+  cursor: grab;
+}
+
+  .chat-popup.shifted {
+  transform: translate(-260px);
+}
+  .chat-header:active {
+  cursor: grabbing;
+}
+  
+.chat-body{display:flex;flex:1;gap:10px;overflow:hidden}
+
+.public-feed{
+  flex:1;padding:12px;
+  display:flex;flex-direction:column;gap:10px;overflow:auto;
+}
+
+.online-list{
+  width:160px;border-left:1px solid rgba(160,200,255,0.12);
+  padding:12px;display:flex;flex-direction:column;gap:8px;overflow:auto;
+}
+
+.message{
+  padding:8px 10px;border-radius:8px;
+  background:rgba(160,200,255,0.06);
+  max-width:78%;
+  border:1px solid rgba(160,200,255,0.12);
+}
+
+.message.me{
+  background:linear-gradient(90deg,rgba(127,216,255,0.20),rgba(176,196,255,0.12));
+  align-self:flex-end;
+  border-color:rgba(127,216,255,0.35);
+}
+
+.chat-input {
+  display: flex;
+  padding: 10px;
+  border-top: 1px solid rgba(160,200,255,0.12);
+  gap: 8px;
+  max-width: none;
+  width: 110%;      /* make it 10% wider */
+}
+
+
+/* PM WINDOWS --------------------------------------------------------------- */
+.pm-window{
+  position:fixed;right:460px;bottom:28px;
+  width:320px;height:360px;
+  background:linear-gradient(180deg,#050a16,#0a1324);
+  border-radius:10px;
+  border:1px solid rgba(160,200,255,0.12);
+  display:flex;flex-direction:column;overflow:hidden;
+  box-shadow:0 20px 60px rgba(120,180,255,0.25);
+}
+
+.pm-header{
+  padding:10px;border-bottom:1px solid rgba(160,200,255,0.12);
+  display:flex;align-items:center;justify-content:space-between;
+}
+
+.pm-body{
+  flex:1;padding:10px;
+  display:flex;flex-direction:column;gap:8px;overflow:auto;
+}
+
+.pm-input{
+  display:flex;padding:8px;
+  border-top:1px solid rgba(160,200,255,0.12);
+  gap:8px;
+}
+
+/* ADMIN PANEL -------------------------------------------------------------- */
+.small-btn{
+  padding:6px 8px;border-radius:8px;
+  background:rgba(160,200,255,0.06);
+  border:1px solid rgba(160,200,255,0.25);
+  color:var(--muted);cursor:pointer;
+}
+
+footer{
+  margin-top:18px;color:var(--muted);
+  font-size:13px;text-align:center;
+}
+
+@media(max-width:900px){
+  .grid{grid-template-columns:1fr}
+  .chat-popup{right:12px;left:12px;width:auto}
+  .user-profile-card.logged-in{
+    flex-direction:column;align-items:center;
+  }
+  .profile-logout{margin-left:0;margin-top:8px}
+}
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+
+  background:
+    radial-gradient(circle, rgba(120,200,255,0.35) 0%, transparent 60%) 10% 20%,
+    radial-gradient(circle, rgba(120,200,255,0.25) 0%, transparent 60%) 80% 30%,
+    radial-gradient(circle, rgba(120,200,255,0.20) 0%, transparent 60%) 50% 70%,
+    radial-gradient(circle, rgba(120,200,255,0.30) 0%, transparent 60%) 30% 85%,
+    radial-gradient(circle, rgba(120,200,255,0.18) 0%, transparent 60%) 70% 60%;
+
+  background-size: 180px 180px, 140px 140px, 200px 200px, 160px 160px, 120px 120px;
+animation: holoParticles 22s linear infinite;
+  opacity: 0.35;
+  filter: blur(1px);
+}
+
+@keyframes holoParticles {
+  0% {
+    background-position:
+      10% 20%,
+      80% 30%,
+      50% 70%,
+      30% 85%,
+      70% 60%;
+  }
+  50% {
+    background-position:
+      15% 25%,
+      75% 35%,
+      55% 65%,
+      35% 80%,
+      65% 55%;
+  }
+  100% {
+    background-position:
+      10% 20%,
+      80% 30%,
+      50% 70%,
+      30% 85%,
+      70% 60%;
+  }
+}
+/* Cards */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 18px;
+  backdrop-filter: blur(10px);
+}
+
+/* Roster */
+.user-row {
+  background: var(--glass);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  transition: 0.2s;
+}
+
+.user-row:hover {
+  background: rgba(0, 255, 255, 0.12);
+  box-shadow: var(--accent-glow);
+}
+
+.avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: rgba(0, 255, 255, 0.15);
+  border: 1px solid var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  color: var(--accent);
+  text-shadow: var(--accent-glow);
+}
+/* Admin Panel */
+#modalAdmin > div {
+  background: rgba(0, 20, 30, 0.9);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  box-shadow: var(--accent-glow);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table td, table th {
+  border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+  padding: 8px;
+}
+
+table tr:hover {
+  background: rgba(0, 255, 255, 0.08);
+}
+
+  #modalLogin > div {
+    background:#111;
+    padding:20px;
+    border-radius:10px;
+    width:360px
+  }
+
+  #modalRegister > div {
+    background:#111;
+    padding:18px;
+    border-radius:10px;
+    width:520px;
+    max-height:90vh;
+    overflow:auto
+  }
+
+  #roomsSidebar {
+  position: fixed;
+  top: 0;
+  right: -320px; /* hidden by default */
+  width: 220px;
+  height: 100vh;
+
+  background: rgba(160,200,255,0.06);
+  border-left: 1px solid rgba(160,200,255,0.15);
+  backdrop-filter: blur(12px);
+
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+
+  box-shadow: 0 0 25px rgba(127,216,255,0.25);
+  transition: right 0.35s ease;
+  z-index: 9999;
+}
+
+#roomsSidebar.open {
+  right: 0;
+}
+
+.rooms-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rooms-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.room-item {
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(160,200,255,0.08);
+  border: 1px solid rgba(160,200,255,0.15);
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.room-item:hover {
+  background: rgba(127,216,255,0.15);
+}
+
+  .message-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.message-avatar {
+  flex-shrink: 0;
+}
+
+.message-row.me {
+  justify-content: flex-end;
+}
+
+.message-row.me .message-avatar {
+  order: 2;
+}
+
+.message-row.me .message {
+  order: 1;
+}
+
+  .avatar-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+  /* Shared panel header */
+.side-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(160,200,255,0.15);
+}
+
+/* Close button */
+.side-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.side-close-btn:hover {
+  color: var(--accent);
+}
+.roster-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(160,200,255,0.06);
+  border: 1px solid rgba(160,200,255,0.15);
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.roster-user:hover {
+  background: rgba(127,216,255,0.15);
+}
+
+.roster-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid rgba(160,200,255,0.25);
+}
+
+.roster-name {
+  font-weight: 700;
+  color: #e9f6ff;
+}
+
+.roster-username {
+  font-size: 12px;
+  color: var(--muted);
+}
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modal-box {
+  background: #111;
+  padding: 20px;
+  border-radius: 12px;
+  width: 600px;
+  max-height: 80vh;
+  overflow: hidden;
+  border: 1px solid rgba(160,200,255,0.25);
+}
+
+.modal-scroll {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 10px;
+}
+.room-members-panel {
+  width: 180px;
+  border-left: 1px solid rgba(160,200,255,0.15);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  background: rgba(160,200,255,0.06);
+}
+
+.room-member {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 6px;
+  background: rgba(160,200,255,0.08);
+}
+
+.room-member:hover {
+  background: rgba(127,216,255,0.15);
+}
+
+.room-member-status {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.room-member-status.online {
+  background: #6dffe7;
+}
+
+.room-member-status.offline {
+  background: #b8c7d9;
+}
+
+  .chat-image {
+  max-width: 220px;
+  border-radius: 8px;
+  margin-top: 6px;
+  cursor: pointer;
+}
+/* AGE GATE */
+#ageGate {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.95);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  transition: opacity 1.2s ease;
+}
+
+#ageBox {
+  background: #111;
+  padding: 40px;
+  border-radius: 10px;
+  text-align: center;
+  color: #fff;
+  font-family: Arial, sans-serif;
+}
+
+#confirmBtn {
+  margin-top: 20px;
+  padding: 12px 24px;
+  background: #e60000;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+/* INTRO GIF */
+#introGif {
+  position: fixed;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  z-index: 9998;
+  transition: opacity 1.2s ease;
+}
+/* STORY POPUP OVERLAY */
+#storyPopup {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: none;            /* shown via JS */
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  backdrop-filter: blur(6px);
+  animation: fadeIn 0.3s ease;
+}
+
+/* POPUP WINDOW */
+#storyPopup .modal-content {
+  background: #111;
+  padding: 30px;
+  width: 480px;
+  max-width: 90%;
+  border-radius: 12px;
+  box-shadow: 0 0 25px rgba(0,150,255,0.4);
+  border: 1px solid rgba(0,150,255,0.4);
+  color: #fff;
+  font-family: Arial, sans-serif;
+  animation: scaleIn 0.25s ease;
+}
+
+/* TITLE */
+#storyPopup h2 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-size: 22px;
+  text-align: center;
+  color: #00aaff;
+}
+
+/* DATE SELECTOR */
+#storyDate {
+  width: 100%;
+  padding: 10px;
+  background: #222;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #fff;
+  margin-bottom: 15px;
+}
+
+/* TEXT EDITOR */
+#storyEditor {
+  width: 100%;
+  background: #181818;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 12px;
+  color: #fff;
+  font-size: 14px;
+  resize: vertical;
+  font-family: monospace;
+}
+
+/* BUTTONS */
+#storyLoadBtn,
+#storySaveBtn,
+#storyCloseBtn {
+  padding: 10px 18px;
+  margin-top: 15px;
+  margin-right: 10px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+#storyLoadBtn {
+  background: #0077ff;
+  color: #fff;
+}
+
+#storySaveBtn {
+  background: #00cc66;
+  color: #fff;
+}
+
+#storyCloseBtn {
+  background: #444;
+  color: #ddd;
+}
+
+/* BUTTON HOVER */
+#storyLoadBtn:hover {
+  background: #3399ff;
+}
+
+#storySaveBtn:hover {
+  background: #00e67a;
+}
+
+#storyCloseBtn:hover {
+  background: #555;
+}
+
+/* ANIMATIONS */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.modal-content {
+  background: #111;
+  padding: 30px;
+  border-radius: 12px;
+  width: 400px;
+  text-align: center;
+  color: #fff;
+  border: 1px solid #00aaff;
+}
+
+.modal-content button {
+  margin: 10px;
+  padding: 10px 20px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+}
+
+#approveStoryBtn {
+  background: #00cc66;
+  color: #fff;
+}
+
+#denyStoryBtn {
+  background: #cc0000;
+  color: #fff;
+}
+#profilePendingStories {
+  margin-top: 20px;
+}
+
+.story-item.pending {
+  background: #222;
+  border-left: 4px solid #ffaa00;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 6px;
+}
+
+.story-item.pending .tiny {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+  .message.system {
+  background: #222;
+  border-left: 4px solid #ffaa00;
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 6px;
+  color: #fff;
+}
+
+.system-msg button {
+  margin-top: 10px;
+}
+
+.relationship-item {
+  background: #222;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 6px;
+  border-left: 4px solid #00aaff;
+}
+
+.relationship-item.pending {
+  border-left-color: #ffaa00;
+}
+
+.relationship-item .tiny {
+  font-size: 11px;
+  opacity: 0.7;
+}
+.story-item,
+.relationship-item,
+.timeline-item {
+  background: #222;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 6px;
+}
+
+.story-item.pending,
+.relationship-item.pending {
+  border-left: 4px solid #ffaa00;
+}
+
+.timeline-item {
+  border-left: 4px solid #00aaff;
+}
+
+.timeline-date {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.timeline-desc {
+  font-size: 14px;
+}
+#vpRelationshipSection {
+  margin-top: 20px;
+  background: #222;
+  padding: 12px;
+  border-radius: 8px;
+}
+
+#vpRelationshipSelect {
+  width: 100%;
+  padding: 8px;
+  margin-top: 8px;
+  background: #111;
+  color: #fff;
+  border: 1px solid #444;
+  border-radius: 6px;
+}
+
+#vpRelationshipSend {
+  margin-top: 10px;
+  width: 100%;
+  padding: 10px;
+  background: #00aaff;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+}
+
+#vpRelationshipSend:hover {
+  background: #33bbff;
+}
+.message.system {
+  background: #222;
+  border-left: 4px solid #ffaa00;
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 6px;
+  color: #fff;
+}
+
+.system-msg button {
+  margin-top: 10px;
+}
+#profileStories .story-item,
+#profileRelationships .relationship-item,
+#profileTimeline .timeline-item {
+  background:#1a1a1a;
+  padding:10px;
+  margin-bottom:10px;
+  border-radius:6px;
+  border-left:4px solid #00aaff;
+}
+
+.timeline-item {
+  border-left-color:#ffaa00;
+}
+
+.timeline-date {
+  font-size:11px;
+  opacity:0.7;
+}
+
+.timeline-desc {
+  font-size:14px;
+}
+
+.holo-avatar {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid rgba(0,150,255,0.55);
+  box-shadow:
+    0 0 8px rgba(0,150,255,0.6),
+    0 0 16px rgba(0,150,255,0.4),
+    inset 0 0 10px rgba(0,150,255,0.3);
+}
+
+/* holographic animated shimmer */
+.holo-avatar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    120deg,
+    rgba(0,150,255,0.15),
+    rgba(255,255,255,0.25),
+    rgba(0,150,255,0.15)
+  );
+  mix-blend-mode: overlay;
+  animation: holoShimmer 4s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes holoShimmer {
+  0% { opacity: 0.4; transform: translateX(-20%); }
+  50% { opacity: 0.8; transform: translateX(20%); }
+  100% { opacity: 0.4; transform: translateX(-20%); }
+}
+
+.rel-rival {
+  border-left: 4px solid #ff3b3b;
+  background: rgba(255, 60, 60, 0.08);
+}
+
+.rel-friend {
+  border-left: 4px solid #3bff6b;
+  background: rgba(60, 255, 120, 0.08);
+}
+
+.rel-opponent {
+  border-left: 4px solid #ff9f3b;
+  background: rgba(255, 160, 60, 0.08);
+}
+
+.rel-tagteam {
+  border-left: 4px solid #3b9fff;
+  background: rgba(60, 160, 255, 0.08);
+}
+
+.rel-dating {
+  border-left: 4px solid #ff3bbd;
+  background: rgba(255, 60, 180, 0.08);
+}
+
+.rel-married {
+  border-left: 4px solid #a03bff;
+  background: rgba(160, 60, 255, 0.08);
+}
+
+.rel-sibling {
+  border-left: 4px solid #3bffd7;
+  background: rgba(60, 255, 220, 0.08);
+}
+
+.rel-parent {
+  border-left: 4px solid #ffd83b;
+  background: rgba(255, 220, 60, 0.08);
+}
+
+.rel-owner {
+  border-left: 4px solid #c0c0c0;
+  background: rgba(200, 200, 200, 0.08);
+}
+
+.timeline-item {
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 6px;
+}
+
+/* MOBILE MODE */
+@media (max-width: 768px) {
+
+  /* Global layout */
+  body, html {
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* prevent background scrolling */
+    background: #0a0a0f;
+  }
+
+  /* Main app container */
+  #app {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Hide desktop-only UI */
+  .sidebar,
+  .rooms-panel,
+  .dm-panel,
+  .profile-side,
+  .wide-layout {
+    display: none !important;
+  }
+
+  /* PUBLIC CHAT AREA */
+  #publicChat {
+    width: 100vw;
+    height: 100vh;
+    overflow-y: auto;
+    padding-bottom: 80px; /* space for input bar */
+  }
+
+  /* INPUT BAR */
+  #publicInputBar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100vw;
+    padding: 10px;
+    background: rgba(20,20,30,0.95);
+    border-top: 1px solid rgba(255,255,255,0.1);
+    display: flex;
+    gap: 10px;
+  }
+
+  #publicInputBar input {
+    flex: 1;
+    padding: 12px;
+    border-radius: 8px;
+    border: none;
+    background: #1a1a25;
+    color: #fff;
+  }
+
+  #publicInputBar button {
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: #3b9fff;
+    color: #fff;
+    border: none;
+  }
+
+  /* UNIVERSAL POPUP SYSTEM */
+  .popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(10,10,20,0.95);
+    backdrop-filter: blur(6px);
+    z-index: 9999;
+    overflow-y: auto;
+    padding: 20px;
+    display: none; /* hidden until opened */
+  }
+
+  .popup.active {
+    display: block; /* only one popup visible */
+  }
+
+  /* Popup header */
+  .popup h2,
+  .popup h3 {
+    margin-top: 0;
+    color: #fff;
+    text-align: center;
+  }
+
+  /* Close button */
+  .popup .close-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: #ff3b3b;
+    color: #fff;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+  }
+
+  /* Profile popup specifics */
+  #profilePopup {
+    display: none;
+  }
+
+  #profilePopup.active {
+    display: block;
+  }
+
+  #profilePopup img {
+    width: 120px;
+    height: 120px;
+    border-radius: 12px;
+    display: block;
+    margin: 0 auto 20px auto;
+  }
+
+  #profilePopup .section {
+    background: rgba(255,255,255,0.05);
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+  }
+
+}
+@media (max-width: 768px) {
+
+  #supportPopup.popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(10,10,20,0.95);
+    backdrop-filter: blur(6px);
+    overflow-y: auto;
+    padding: 20px;
+    z-index: 9999;
+    display: none;
+  }
+
+  #supportPopup.active {
+    display: block;
+  }
+
+  .support-mobile {
+    max-width: 480px;
+    margin: 0 auto;
+    padding-top: 40px;
+  }
+
+  #supportPopup label {
+    color: #fff;
+    font-size: 14px;
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  #supportPopup input,
+  #supportPopup select,
+  #supportPopup textarea {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    border: none;
+    background: #1a1a25;
+    color: #fff;
+    margin-top: 6px;
+  }
+
+  #srSubmit {
+    padding: 14px;
+    border-radius: 10px;
+    border: none;
+    font-size: 16px;
+    background: #3b9fff;
+    color: #fff;
+  }
+}
+/* DESKTOP SUPPORT POPUP */
+#supportPopup.popup {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+
+  background: rgba(10,10,20,0.92);
+  backdrop-filter: blur(8px);
+
+  display: none;
+  overflow-y: auto;
+  padding: 40px;
+
+  z-index: 9999;
+}
+
+/* When opened */
+#supportPopup.active {
+  display: block;
+}
+
+/* Close button */
+#supportPopup .close-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+
+  background: #ff3b3b;
+  color: #fff;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* Main container */
+.support-mobile {
+  width: 600px;
+  max-width: 90%;
+  margin: 0 auto;
+  background: rgba(255,255,255,0.05);
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 0 20px rgba(0,0,0,0.4);
+  overflow-y: auto;
+}
+
+/* Header */
+#supportPopup h2 {
+  text-align: center;
+  color: #fff;
+  margin-top: 0;
+  margin-bottom: 25px;
+  font-size: 28px;
+}
+
+/* Section blocks */
+#supportPopup .pm-section {
+  background: rgba(255,255,255,0.06);
+  padding: 20px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+
+/* Labels */
+#supportPopup label {
+  color: #fff;
+  font-size: 15px;
+  margin-bottom: 8px;
+  display: block;
+}
+
+/* Inputs */
+#supportPopup input,
+#supportPopup select,
+#supportPopup textarea {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: none;
+  background: #1a1a25;
+  color: #fff;
+  font-size: 15px;
+  margin-top: 6px;
+}
+
+/* Textarea */
+#supportPopup textarea {
+  resize: vertical;
+}
+
+/* Submit button */
+#supportPopup #srSubmit {
+  width: 100%;
+  padding: 14px;
+  border-radius: 10px;
+  border: none;
+  font-size: 18px;
+  background: #3b9fff;
+  color: #fff;
+  cursor: pointer;
+  margin-top: 10px;
+}
+
+#supportPopup #srSubmit:hover {
+  background: #5ab0ff;
+}
+
+</style>
+
+
+</head>
+
+
+<body>
+
+<!-- AGE GATE OVERLAY -->
+<div id="ageGate">
+   <button id="btnLogin">Login</button>
+    <button id="btnRegister" class="ghost">Register</button>
+</div>
+
+<!-- INTRO GIF -->
+<div id="introGif"></div>
+
+<!-- DM SIDEBAR (hidden until toggled) -->
+<div id="dmSidebar"></div>
+
+<div class="container">
+
+<header>
+  <div class="brand">
+  <div class="logo">
+    <img src="./images/mcf.png" 
+         class="holo-avatar"
+        alt="Male Cyber Fighters Logo"
+         style="height:80px; width:80px; border-radius:8px;">
+  </div>
+
+  <div>
+    <h1>Male Cyber Fighters</h1>
+    <p class="lead">Enter the ring, find opponents, and trash talk in real time</p>
+  </div>
+</div>
+</header>
+<div class="sidebar">
+  <div class="brand">
+    <div class="brand-logo"></div>
+    <div>
+      <div style="font-size:0.9rem;letter-spacing:0.1em;color:var(--accent)">Male Cyber Fighters</div>
+      <div style="font-size:0.75rem;color:var(--muted)">Realtime System</div>
+    </div>
+  </div>
+</div>
+  <div class="nav">
+     <button id="btnOpenChat">Open Arena</button>
+ <button id="btnRoster" class="ghost">User Roster</button>
+ <button id="btnDMs" class="ghost">
+  DMs <span id="dmBadge" class="badge" style="display:none"></span>
+</button>
+    <button id="btnRooms" class="ghost">Rooms</button>
+<button id="openSupport">Support</button>
+
+    <div id="legalLinks" style="text-align:center;margin-top:20px">
+  <button id="btnTOS" class="ghost small-btn">Terms of Service</button>
+  <button id="btnPrivacy" class="ghost small-btn">Privacy Policy</button>
+  <button id="btnRules" class="ghost small-btn">Server Rules</button>
+     <button id="btnAdmin" class="ghost">Admin Panel</button>
+</div>
+</div>
+  </div>
+
+
+<div class="grid">
+  <div class="card hero">
+    <h2>Welcome to the Arena</h2>
+    <p class="muted">This website connects discord cyber fighters with non discord users. Now you can chat in real time with anyone on the United Gay Cyber Wrestling discord server without needing a discord account.</p>
+    <p class="muted"> Site Features:</p>
+    <div class="muted"> • Main public chatroom (called the Arena) connecting to the discord server for live chats.<br>
+      • customizable profiles<br>
+        • auto-translation of all messages based on selected language<br>
+          • story creation from Direct messages and created rooms<br>
+            • Toxic free environment with a zero tolerance policy
+            </div>
+    <h2>Updates</h2>
+      <div class="muted"><br>
+    - adding new message notification to dms</div> <br>
+     <div class="muted">COMPLETED UPDATES</div>
+    <div class="muted">- avatar images - dm chats - fix user roster button  - working on public/private rooms - private room invites - support system - image uploads in dm and custom rooms - story creation - user relationships - relationship timeline - story/relationship approval
+        </div>
+    <br>
+    <div class="user-profile-card" id="userProfileCard">
+            <button id="btnEditProfile" class="ghost">Edit Profile</button>
+      <div>🔒 Not logged in</div>
+      <p>Login or register to see your profile</p>
+
+    </div>
+
+  </div>
+
+  <aside class="card">
+    <h3>Quick Roster</h3>
+    <div id="quickRoster" class="roster-list"></div>
+  </aside>
+</div>
+
+<footer>Male Cyber Fighters</footer>
+</div>
+
+<!-- LOGIN MODAL -->
+<div id="modalLogin" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);align-items:center;justify-content:center">
+  <div>
+
+    <h3>Login</h3>
+    <input id="loginUser" type="text" placeholder="Username">
+    <input id="loginPass" type="password" placeholder="Password">
+    <div id="loginError" style="display:none"></div>
+    <div>
+      <button id="loginCancel" class="ghost">Cancel</button>
+      <button id="loginSubmit">Login</button>
+    </div>
+  </div>
+</div>
+
+  <!-- UPDATE MODAL -->
+  <div id="modalEditProfile" style="display:none;position:fixed;inset:0;">
+  <div style="padding:20px;width:480px;margin:auto;background:#111;border-radius:10px;max-height:90vh;overflow:auto">
+
+    <h3>Edit Profile</h3>
+
+    <div style="display:flex;flex-direction:column;gap:8px">
+
+      <input id="editDisplay" type="text" placeholder="Display name">
+      <input id="editAge" type="number" min="13" placeholder="Age">
+
+      <textarea id="editInfo" rows="3" placeholder="Bio"></textarea>
+
+      <div>
+        <label>Favorite Color</label>
+        <input id="editColor" type="color">
+      </div>
+
+      <div>
+        <label>Language</label>
+        <select id="editLanguage">
+          <option value="en">English</option>
+          <option value="es">Spanish</option>
+          <option value="fr">French</option>
+          <option value="de">German</option>
+        </select>
+      </div>
+
+      <div style="display:flex;gap:8px">
+        <input id="editWins" type="number" placeholder="Wins">
+        <input id="editLosses" type="number" placeholder="Losses">
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="editImageFile" type="file" accept="image/*">
+        <button id="btnEditUploadImage" class="small-btn">Upload Image</button>
+        <div id="editUploadStatus">No image uploaded</div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button id="editCancel" class="ghost">Cancel</button>
+        <button id="editSubmit">Save Changes</button>
+      </div>
+
+      <div id="editError" style="display:none;color:#ff6b6b"></div>
+    </div>
+  </div>
+</div>
+<div id="modalAdminPassword" style="display:none;position:fixed;inset:0;">
+  <div style="padding:20px;width:360px;margin:auto;background:#111;border-radius:10px;">
+    <h3>Admin Login</h3>
+
+    <input id="adminPasswordInput" type="password" placeholder="Enter admin password" style="width:100%;margin-bottom:10px">
+
+    <div id="adminPasswordError" style="display:none;color:#ff6b6b;margin-bottom:10px"></div>
+
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button id="adminPasswordCancel" class="ghost">Cancel</button>
+      <button id="adminPasswordSubmit">Enter</button>
+    </div>
+  </div>
+</div>
+
+<!-- REGISTER MODAL -->
+<div id="modalRegister" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.6);align-items:center;justify-content:center">
+  <div>
+
+    <h3>Register - click upload image before create account</h3>
+    <div>
+
+      <div>
+        <input id="regUser" type="text" placeholder="Username" required />
+        <input id="regEmail" type="email" placeholder="Email" required />
+      </div>
+
+      <div>
+        <input id="regDisplay" type="text" placeholder="Display name"  required />
+        <input id="regAge" type="number" min="13" placeholder="Age" required/>
+      </div>
+
+      <div>
+        <input id="regPass" type="password" placeholder="Password" required />
+        <input id="regColor" type="color" required/>
+      </div>
+
+      <div>
+        <select id="regLanguage">
+          <option value="en">English</option>
+          <option value="es">Spanish</option>
+          <option value="fr">French</option>
+          <option value="de">German</option>
+        </select>
+        <input id="regWins" type="number" placeholder="Wins" />
+        <input id="regLosses" type="number" placeholder="Losses" />
+      </div>
+
+      <textarea id="regInfo" placeholder="Short bio / info" rows="3"></textarea>
+
+      <div>
+        <input id="regImageFile" type="file" accept="image/*" />
+        <button id="btnUploadImage" class="small-btn">Upload Image</button>
+        <div id="uploadStatus">No image uploaded</div>
+      </div>
+
+      <div>
+        <button id="regCancel" class="ghost">Cancel</button>
+        <button id="regSubmit">Create Account</button>
+      </div>
+
+      <div id="regError" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<div id="supportPopup" class="popup">
+ 
+
+  <div class="support-mobile">
+ <button class="ghost" id="closeSupport">Close</button>
+    <h2>Support Request</h2>
+
+    <div class="pm-section">
+      <label>Type of Report</label>
+      <select id="srType">
+        <option value="user">User Report</option>
+        <option value="issue">App Issue</option>
+      </select>
+    </div>
+
+    <div class="pm-section" id="srUserSection">
+      <label>Who are you reporting?</label>
+      <input id="srUser" placeholder="Username">
+    </div>
+
+    <div class="pm-section">
+      <label>Where did this happen?</label>
+      <input id="srWhere" placeholder="Public chat, DM, room, etc.">
+    </div>
+
+    <div class="pm-section">
+      <label>When did this happen?</label>
+      <input id="srWhen" type="datetime-local">
+    </div>
+
+    <div class="pm-section">
+      <label>Additional Information</label>
+      <textarea id="srInfo" placeholder="Describe what happened..." rows="5"></textarea>
+    </div>
+
+    <div class="pm-buttons">
+      <button id="srSubmit">Submit Report</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ROSTER MODAL -->
+<!-- USER ROSTER POPUP -->
+<div id="modalRoster" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.6);align-items:center;justify-content:center;z-index:9999">
+  <div style="background:#111;padding:18px;border-radius:10px;width:760px;max-height:80vh;overflow:auto">
+
+    <h3 style="margin:0 0 12px 0">User Roster</h3>
+
+    <!-- SEARCH BAR -->
+    <input 
+      id="rosterSearch" 
+      type="text" 
+      placeholder="Search users..." 
+      style="width:100%;margin-bottom:12px"
+    >
+
+    <!-- USER LIST -->
+    <div id="rosterPage" class="roster-list"></div>
+
+    <div style="display:flex;justify-content:flex-end;margin-top:12px">
+      <button id="rosterClose" class="ghost">Close</button>
+    </div>
+<div id="rosterPagination" style="display:flex;justify-content:center;gap:10px;margin-top:12px">
+  <button id="rosterPrev" class="small-btn">Prev</button>
+  <span id="rosterPageNumber" class="small muted"></span>
+  <button id="rosterNext" class="small-btn">Next</button>
+</div>
+
+  </div>
+</div>
+
+<!-- VIEW PROFILE POPUP -->
+<div id="modalViewProfile" style="
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.6);
+  align-items:center;
+  justify-content:center;
+  z-index:9999;
+">
+  <div style="
+  background:rgba(10,30,60,0.55);
+  backdrop-filter:blur(14px) saturate(180%);
+  border:1px solid rgba(0,150,255,0.35);
+  padding:20px;
+  border-radius:14px;
+  width:520px;
+  max-height:90vh;
+  overflow:auto;
+  box-shadow:0 0 40px rgba(0,150,255,0.45);
+">
+
+
+    <!-- HEADER -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h3 id="vpName" style="margin:0"></h3>
+      <button id="vpClose" class="ghost">✕</button>
+    </div>
+
+    <!-- TOP SECTION: AVATAR + INFO -->
+    <div style="display:flex;gap:20px;align-items:flex-start;margin-bottom:20px">
+
+      <!-- AVATAR -->
+      <img id="vpAvatar" class="holo-avatar" src="" style="
+        width:120px;
+        height:120px;
+        border-radius:12px;
+        object-fit:cover;
+        ">
+
+      <!-- INFO -->
+      <div style="flex:1">
+
+        <div class="small muted">@<span id="vpUsername"></span></div>
+<!-- DM BUTTON -->
+<button id="vpDMButton" class="small-btn" style="
+  margin-top:10px;
+  width:100%;
+">
+  Message User
+</button>
+<button id="vpBlockButton" class="small-btn" style="
+  margin-top:10px;
+  width:100%;
+  background:#ff3b3b;
+  color:white;
+">
+  Block User
+</button>
+
+        <div style="margin-top:10px">
+          <div class="muted">Bio</div>
+          <div id="vpBio" style="margin-top:4px"></div>
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:20px">
+          <div>
+            <div class="muted">Wins</div>
+            <div id="vpWins" style="color:var(--accent);font-weight:700"></div>
+          </div>
+          <div>
+            <div class="muted">Losses</div>
+            <div id="vpLosses" style="color:var(--accent);font-weight:700"></div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <div class="muted">Favorite Color</div>
+          <div id="vpColorBox" style="
+            width:40px;
+            height:20px;
+            border-radius:4px;
+            margin-top:4px;
+            border:1px solid rgba(160,200,255,0.25);
+          "></div>
+        </div>
+
+        <div style="margin-top:12px">
+          <div class="muted">Language</div>
+          <div id="vpLang"></div>
+        </div>
+
+        <div style="margin-top:12px">
+          <div class="muted">Age</div>
+          <div id="vpAge"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- STORIES + RELATIONSHIPS SIDE BY SIDE -->
+    <div style="display:flex;gap:20px;margin-top:20px">
+
+      <div style="flex:1">
+        <h3>Stories</h3>
+        <div id="profileStories"></div>
+      </div>
+
+      <div style="flex:1">
+        <h3>Relationships</h3>
+        <div id="profileRelationships"></div>
+      </div>
+
+    </div>
+
+    <!-- TIMELINE -->
+    <div style="margin-top:20px">
+      <h3>Relationship Timeline</h3>
+      <div id="profileTimeline"></div>
+    </div>
+
+    <!-- ADD RELATIONSHIP -->
+    <div id="vpRelationshipSection" style="margin-top:25px;padding-top:15px;border-top:1px solid #333">
+      <h3>Add Relationship</h3>
+
+      <select id="vpRelationshipSelect" style="
+        width:100%;
+        padding:8px;
+        margin-top:8px;
+        background:#222;
+        color:#fff;
+        border:1px solid #444;
+        border-radius:6px;
+      ">
+        <option value="">Select relationship…</option>
+        <option value="rival">Rival of</option>
+        <option value="friend">Friend of</option>
+        <option value="opponent">Opponent of</option>
+        <option value="tagteam">Tag team partners with</option>
+        <option value="dating">Dating</option>
+        <option value="married">Married to</option>
+        <option value="sibling">Sibling of</option>
+        <option value="parent">Parent of</option>
+        <option value="owner">Owner of</option>
+      </select>
+
+      <button id="vpRelationshipSend" class="small-btn" style="margin-top:10px;width:100%">
+        Send Request
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- CHAT POPUP -->
+<div id="chatPopup" class="chat-popup" style="display:none">
+  <div class="chat-header">
+    <div>
+      <div>CW</div>
+      <div>
+        <div>Arena Chat</div>
+        <div id="chatUserLabel">Not signed in</div>
+      </div>
+    </div>
+    <div>
+      <button id="btnMinimize" class="small-btn">_</button>
+      <button id="btnCloseChat" class="small-btn">X</button>
+    </div>
+  </div>
+
+  <div class="chat-body">
+    <div class="public-feed" id="publicFeed"></div>
+
+    <div class="online-list card">
+      <div>Online</div>
+      <div id="onlineList"></div>
+    </div>
+  </div>
+
+  <div class="chat-input">
+    <input id="publicMessage" type="text" placeholder="Say something to the arena" />
+    <button id="sendPublic">Send</button>
+  </div>
+</div>
+
+<div id="dmSidebar" class="dm-panel">
+  <div class="side-panel-header">
+    <span>Direct Messages</span>
+    <button id="closeDmSidebar" class="side-close-btn">✕</button>
+  </div>
+
+  <input id="dmSearch" class="dm-search" placeholder="Search DMs">
+
+  <div id="dmSidebarList" class="dm-list"></div>
+</div>
+
+
+<!-- ADMIN PANEL -->
+
+<div id="modalAdmin" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);align-items:center;justify-content:center">
+  <div>
+
+    <h2>Admin Panel</h2>
+
+    <div>
+      <button id="tabUsers" class="small-btn">Users</button>
+      <button id="tabAnalytics" class="small-btn">Analytics</button>
+    </div>
+
+    <div id="adminUsersView">
+      <input id="adminSearch" type="text" placeholder="Search users...">
+      <table id="adminTable">
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Online</th>
+            <th>Banned</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div id="adminAnalyticsView" style="display:none">
+      <h3>Analytics</h3>
+      <div id="statsSummary"></div>
+
+      <h4>Top IPs (24h)</h4>
+      <ul id="topIpsList"></ul>
+    </div>
+
+    <button id="adminClose" class="ghost">Close</button>
+  </div>
+</div>
+<div id="roomsSidebar" class="rooms-panel">
+  <div class="side-panel-header">
+    <span>Rooms</span>
+    <button id="closeRoomsSidebar" class="side-close-btn">✕</button>
+  </div>
+<select id="roomSort" class="ghost" style="margin-bottom:10px;width:100%">
+  <option value="newest">Newest First</option>
+  <option value="oldest">Oldest First</option>
+  <option value="az">A → Z</option>
+  <option value="za">Z → A</option>
+</select>
+
+  <div id="roomsList" class="rooms-list"></div>
+
+  <button id="createRoomBtn" class="small-btn">Create Room</button>
+</div>
+
+<!-- ROOM CHAT POPUP -->
+<div id="roomChatPopup" class="chat-popup" style="display:none" data-room="">
+  <div class="chat-header">
+    <span id="roomChatTitle">Room</span>
+    <button id="closeRoomChat" class="ghost small-btn">X</button>
+  </div>
+
+  <div class="chat-body" style="display:flex; height:100%">
+    
+    <!-- LEFT: ROOM FEED -->
+    <div id="roomFeed" class="public-feed" style="flex:1; overflow-y:auto;"></div>
+
+    <!-- RIGHT: MEMBERS COLUMN -->
+    <div id="roomMembers" class="room-members-panel">
+      <div class="side-panel-header">Members</div>
+      <div id="roomMembersList"></div>
+    </div>
+
+  </div>
+
+  <!-- TYPING INDICATOR -->
+  <div id="roomTyping" class="small muted" style="display:none; margin:6px 0 0 10px;"></div>
+
+  <!-- INPUT BAR -->
+  <div class="chat-input">
+    <input id="roomMessageInput" type="text" placeholder="Message room">
+    <button id="roomSendBtn" class="send-btn">Send</button>
+    <input type="file" id="roomImageInput" accept="image/*" style="display:none">
+<button id="roomImageBtn">📷</button>
+
+  </div>
+</div>
+
+<div id="modalRules" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <h3>Rules</h3>
+    <div id="rulesContent" class="modal-scroll">
+      <p>
+Public Chat Conduct Rules
+<br>
+These rules apply to everyone. They’re designed to keep the space fun, competitive, and safe.
+<br>
+---
+<br><br>
+1. Respect Comes First
+<br>
+Even in a wrestling‑themed environment, respect is non‑negotiable.
+<br><br>
+• Respect others — Treat every user like a real person with real feelings.<br>
+• No harassment — Repeated targeting, insults, or attempts to provoke someone are not allowed.<br>
+• No slurs or hate speech — Zero tolerance. Instant ban.<br>
+• No personal attacks — Critique the character, not the person behind the screen.<br>
+
+---
+<br><br>
+2. Banter vs Bullying
+<br>
+Wrestling culture thrives on trash talk — but it must stay in‑character, mutual, and fun.
+<br><br>
+✔ Banter (Allowed)
+<br><br>
+Banter is:
+<br>
+• Mutual<br>
+• Playful<br>
+• In‑character<br>
+• Not meant to harm<br>
+• Not repeated after someone asks you to stop<br>
+<br><br>
+
+Examples:
+<br>
+• “You’re stepping into the ring with the wrong guy.”<br>
+• “I’ll break your streak tonight.”<br>
+• “Nice try, rookie.”<br>
+<br>
+<br>
+✘ Bullying (Not Allowed)
+<br><br>
+Bullying is:
+<br>
+• Personal<br>
+• Repeated<br>
+• Intended to hurt<br>
+• Targeting someone who isn’t engaging back<br>
+• Bringing real‑life insults or trauma into the chat<br>
+<br><br>
+
+Examples:
+<br>
+• “Nobody likes you here.”<br>
+• “You’re pathetic.”<br>
+• “You’re too stupid to be in this chat.”<br>
+• Repeating insults after someone says “stop.”<br>
+<br>
+
+If someone says “stop,” “not cool,” “drop it,” or similar — the banter ends immediately.
+<br>
+---
+<br><br>
+3. Do’s and Don’ts
+<br><br>
+✔ Do
+<br>
+• Stay in character<br>
+• Use playful rivalry<br>
+• Keep competition fun<br>
+• Respect boundaries<br>
+• Report issues<br>
+• Encourage new users<br>
+• Keep cyber matches out of the public chat unless in designated areas<br>
+
+<br>
+✘ Don’t
+<br>
+• Don’t target individuals<br>
+• Don’t spam or flood chat<br>
+• Don’t impersonate staff<br>
+• Don’t post private info<br>
+• Don’t drag real‑life drama into chat<br>
+• Don’t use threats, even jokingly<br>
+<br>
+
+---
+<br><br>
+4. Zero‑Tolerance Behaviors
+<br><br>
+These result in immediate bans:
+<br>
+• Hate speech<br>
+• Threats of violence<br>
+• Sharing private information<br>
+• Sexual harassment<br>
+• Targeted harassment<br>
+• Encouraging self‑harm<br>
+• Evading blocks or bans<br>
+
+
+---
+<br><br>
+5. Conflict Resolution
+<br><br>
+If a situation escalates:
+<br>
+1. Stop engaging<br>
+2. Block the user<br>
+3. Report the behavior<br>
+4. Moderators will review chat logs and act accordingly
+<br>
+
+Blocking someone prevents them from DMing you, but moderators can still see interactions.
+<br>
+---
+<br><br>
+6. Moderator Authority
+<br><br>
+Moderators may:
+<br>
+• Issue warnings<br>
+• Mute users<br>
+• Remove messages<br>
+• Ban users<br>
+• Lock chat temporarily<br>
+<br>
+
+Moderator decisions are final. </p>
+    </div>
+    <button id="closeRules" class="ghost">Close</button>
+  </div>
+</div>
+<!-- TERMS OF SERVICE POPUP -->
+<div id="modalTOS" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <h3>Terms of Service</h3>
+    <div id="tosContent" class="modal-scroll">
+      <p>Updated at 2026-06-19
+
+<br>
+General Terms
+<br>
+By accessing and placing an order with Male Cyber Fighters, you confirm that you are in agreement with and bound by the terms of service contained in the Terms & Conditions outlined below. These terms apply to the entire website and any email or other type of communication between you and Male Cyber Fighters.
+
+Under no circumstances shall Male Cyber Fighters team be liable for any direct, indirect, special, incidental or consequential damages, including, but not limited to, loss of data or profit, arising out of the use, or the inability to use, the materials on this site, even if Male Cyber Fighters team or an authorized representative has been advised of the possibility of such damages. If your use of materials from this site results in the need for servicing, repair or correction of equipment or data, you assume any costs thereof.
+
+Male Cyber Fighters will not be responsible for any outcome that may occur during the course of usage of our resources. We reserve the rights to change prices and revise the resources usage policy in any moment. 
+<br>
+
+License
+<br>
+Male Cyber Fighters grants you a revocable, non-exclusive, non-transferable, limited license to download, install and use the website strictly in accordance with the terms of this Agreement.
+
+These Terms & Conditions are a contract between you and Male Cyber Fighters (referred to in these Terms & Conditions as "Male Cyber Fighters", "us", "we" or "our"), the provider of the Male Cyber Fighters website and the services accessible from the Male Cyber Fighters website (which are collectively referred to in these Terms & Conditions as the "Male Cyber Fighters Service").
+
+You are agreeing to be bound by these Terms & Conditions. If you do not agree to these Terms & Conditions, please do not use the Male Cyber Fighters Service. In these Terms & Conditions, "you" refers both to you as an individual and to the entity you represent. If you violate any of these Terms & Conditions, we reserve the right to cancel your account or block access to your account without notice.
+
+<br>
+Meanings
+<br>
+For this Terms & Conditions:
+<br>
+  -Cookie: small amount of data generated by a website and saved by your web browser. It is used to identify your browser, provide analytics, remember information about you such as your language preference or login information.
+  -Company: when this policy mentions “Company,” “we,” “us,” or “our,” it refers to Male Cyber Fighters, that is responsible for your information under this Terms & Conditions.
+  -Country: where Male Cyber Fighters or the owners/founders of Male Cyber Fighters are based, in this case is Canada
+  -Device: any internet connected device such as a phone, tablet, computer or any other device that can be used to visit Male Cyber Fighters and use the services.
+  -Service: refers to the service provided by Male Cyber Fighters as described in the relative terms (if available) and on this platform.
+  -Third-party service: refers to advertisers, contest sponsors, promotional and marketing partners, and others who provide our content or whose products or services we think may interest you.
+  -Website: Male Cyber Fighters."’s" site, which can be accessed via this URL: https://malecyberfighters-production.up.railway.app/
+  -You: a person or entity that is registered with Male Cyber Fighters to use the Services.
+<br>
+
+Restrictions
+<br>
+You agree not to, and you will not permit others to:
+<br>
+  -License, sell, rent, lease, assign, distribute, transmit, host, outsource, disclose or otherwise commercially exploit the website or make the platform available to any third party.
+  -Modify, make derivative works of, disassemble, decrypt, reverse compile or reverse engineer any part of the website.
+  -Remove, alter or obscure any proprietary notice (including any notice of copyright or trademark) of Male Cyber Fighters or its affiliates, partners, suppliers or the licensors of the website.
+  <br>
+
+Return and Refund Policy
+<br>
+Thanks for shopping at Male Cyber Fighters. We appreciate the fact that you like to buy the stuff we build. We also want to make sure you have a rewarding experience while you’re exploring, evaluating, and purchasing our products.
+
+As with any shopping experience, there are terms and conditions that apply to transactions at Male Cyber Fighters. We’ll be as brief as our attorneys will allow. The main thing to remember is that by placing an order or making a purchase at Male Cyber Fighters, you agree to the terms along with Male Cyber Fighters."’s" Privacy Policy.
+
+If, for any reason, You are not completely satisfied with any good or service that we provide, don't hesitate to contact us and we will discuss any of the issues you are going through with our product.
+<br>
+
+Your Suggestions
+<br>
+Any feedback, comments, ideas, improvements or suggestions (collectively, "Suggestions") provided by you to Male Cyber Fighters with respect to the website shall remain the sole and exclusive property of Male Cyber Fighters.
+
+Male Cyber Fighters shall be free to use, copy, modify, publish, or redistribute the Suggestions for any purpose and in any way without any credit or any compensation to you.
+<br>
+
+Your Consent
+<br>
+We've updated our Terms & Conditions to provide you with complete transparency into what is being set when you visit our site and how it's being used. By using our website, registering an account, or making a purchase, you hereby consent to our Terms & Conditions.
+
+<br>
+Links to Other Websites
+<br>
+This Terms & Conditions applies only to the Services. The Services may contain links to other websites not operated or controlled by Male Cyber Fighters. We are not responsible for the content, accuracy or opinions expressed in such websites, and such websites are not investigated, monitored or checked for accuracy or completeness by us. Please remember that when you use a link to go from the Services to another website, our Terms & Conditions are no longer in effect. Your browsing and interaction on any other website, including those that have a link on our platform, is subject to that website’s own rules and policies. Such third parties may use their own cookies or other methods to collect information about you.
+<br>
+
+Cookies
+<br>
+Male Cyber Fighters uses "Cookies" to identify the areas of our website that you have visited. A Cookie is a small piece of data stored on your computer or mobile device by your web browser. We use Cookies to enhance the performance and functionality of our website but are non-essential to their use. However, without these cookies, certain functionality like videos may become unavailable or you would be required to enter your login details every time you visit the website as we would not be able to remember that you had logged in previously. Most web browsers can be set to disable the use of Cookies. However, if you disable Cookies, you may not be able to access functionality on our website correctly or at all. We never place Personally Identifiable Information in Cookies.
+
+<br>
+Changes To Our Terms & Conditions
+<br>
+You acknowledge and agree that <?=Male Cyber Fighters;?> may stop (permanently or temporarily) providing the Service (or any features within the Service) to you or to users generally at <?=Male Cyber Fighters;?>’s sole discretion, without prior notice to you. You may stop using the Service at any time. You do not need to specifically inform <?=Male Cyber Fighters;?> when you stop using the Service. You acknowledge and agree that if <?=Male Cyber Fighters;?> disables access to your account, you may be prevented from accessing the Service, your account details or any files or other materials which is contained in your account.
+
+If we decide to change our Terms & Conditions, we will post those changes on this page, and/or update the Terms & Conditions modification date below.
+<br>
+
+Modifications to Our website
+<br>
+Male Cyber Fighters reserves the right to modify, suspend or discontinue, temporarily or permanently, the website or any service to which it connects, with or without notice and without liability to you.
+<br>
+
+Updates to Our website
+<br>
+Male Cyber Fighters may from time to time provide enhancements or improvements to the features/ functionality of the website, which may include patches, bug fixes, updates, upgrades and other modifications ("Updates").
+
+Updates may modify or delete certain features and/or functionalities of the website. You agree that Male Cyber Fighters has no obligation to (i) provide any Updates, or (ii) continue to provide or enable any particular features and/or functionalities of the website to you.
+
+You further agree that all Updates will be (i) deemed to constitute an integral part of the website, and (ii) subject to the terms and conditions of this Agreement.
+<br>
+
+Third-Party Services
+<br>
+We may display, include or make available third-party content (including data, information, applications and other products services) or provide links to third-party websites or services ("Third- Party Services").
+
+You acknowledge and agree that Male Cyber Fighters shall not be responsible for any Third-Party Services, including their accuracy, completeness, timeliness, validity, copyright compliance, legality, decency, quality or any other aspect thereof. Male Cyber Fighters does not assume and shall not have any liability or responsibility to you or any other person or entity for any Third-Party Services.
+
+Third-Party Services and links thereto are provided solely as a convenience to you and you access and use them entirely at your own risk and subject to such third parties' terms and conditions.
+<br>
+
+Term and Termination
+<br>
+This Agreement shall remain in effect until terminated by you or Male Cyber Fighters.
+
+Male Cyber Fighters may, in its sole discretion, at any time and for any or no reason, suspend or terminate this Agreement with or without prior notice.
+
+This Agreement will terminate immediately, without prior notice from Male Cyber Fighters, in the event that you fail to comply with any provision of this Agreement. You may also terminate this Agreement by deleting the website and all copies thereof from your computer.
+
+Upon termination of this Agreement, you shall cease all use of the website and delete all copies of the website from your computer.
+Termination of this Agreement will not limit any of Male Cyber Fighters's rights or remedies at law or in equity in case of breach by you (during the term of this Agreement) of any of your obligations under the present Agreement.
+
+<br>
+Copyright Infringement Notice
+<br>
+If you are a copyright owner or such owner’s agent and believe any material on our website constitutes an infringement on your copyright, please contact us setting forth the following information: (a) a physical or electronic signature of the copyright owner or a person authorized to act on his behalf; (b) identification of the material that is claimed to be infringing; (c) your contact information, including your address, telephone number, and an email; (d) a statement by you that you have a good faith belief that use of the material is not authorized by the copyright owners; and (e) the a statement that the information in the notification is accurate, and, under penalty of perjury you are authorized to act on behalf of the owner.
+
+<br>
+Indemnification
+<br>
+You agree to indemnify and hold Male Cyber Fighters and its parents, subsidiaries, affiliates, officers, employees, agents, partners and licensors (if any) harmless from any claim or demand, including reasonable attorneys' fees, due to or arising out of your: (a) use of the website; (b) violation of this Agreement or any law or regulation; or (c) violation of any right of a third party.
+<br>
+
+No Warranties
+<br>
+The website is provided to you "AS IS" and "AS AVAILABLE" and with all faults and defects without warranty of any kind. To the maximum extent permitted under applicable law, Male Cyber Fighters, on its own behalf and on behalf of its affiliates and its and their respective licensors and service providers, expressly disclaims all warranties, whether express, implied, statutory or otherwise, with respect to the website, including all implied warranties of merchantability, fitness for a particular purpose, title and non-infringement, and warranties that may arise out of course of dealing, course of performance, usage or trade practice. Without limitation to the foregoing, Male Cyber Fighters provides no warranty or undertaking, and makes no representation of any kind that the website will meet your requirements, achieve any intended results, be compatible or work with any other software, , systems or services, operate without interruption, meet any performance or reliability standards or be error free or that any errors or defects can or will be corrected.
+
+Without limiting the foregoing, neither Male Cyber Fighters nor any Male Cyber Fighters's provider makes any representation or warranty of any kind, express or implied: (i) as to the operation or availability of the website, or the information, content, and materials or products included thereon; (ii) that the website will be uninterrupted or error-free; (iii) as to the accuracy, reliability, or currency of any information or content provided through the website; or (iv) that the website, its servers, the content, or e-mails sent from or on behalf of Male Cyber Fighters are free of viruses, scripts, trojan horses, worms, malware, timebombs or other harmful components.
+
+Some jurisdictions do not allow the exclusion of or limitations on implied warranties or the limitations on the applicable statutory rights of a consumer, so some or all of the above exclusions and limitations may not apply to you.
+<br>
+
+Limitation of Liability
+<br>
+Notwithstanding any damages that you might incur, the entire liability of Male Cyber Fighters and any of its suppliers under any provision of this Agreement and your exclusive remedy for all of the foregoing shall be limited to the amount actually paid by you for the website.
+
+To the maximum extent permitted by applicable law, in no event shall Male Cyber Fighters or its suppliers be liable for any special, incidental, indirect, or consequential damages whatsoever (including, but not limited to, damages for loss of profits, for loss of data or other information, for business interruption, for personal injury, for loss of privacy arising out of or in any way related to the use of or inability to use the website, third-party software and/or third-party hardware used with the website, or otherwise in connection with any provision of this Agreement), even if Male Cyber Fighters or any supplier has been advised of the possibility of such damages and even if the remedy fails of its essential purpose.
+
+Some states/jurisdictions do not allow the exclusion or limitation of incidental or consequential damages, so the above limitation or exclusion may not apply to you.
+<br>
+
+Severability
+<br>
+If any provision of this Agreement is held to be unenforceable or invalid, such provision will be changed and interpreted to accomplish the objectives of such provision to the greatest extent possible under applicable law and the remaining provisions will continue in full force and effect.
+
+This Agreement, together with the Privacy Policy and any other legal notices published by Male Cyber Fighters on the Services, shall constitute the entire agreement between you and Male Cyber Fighters concerning the Services. If any provision of this Agreement is deemed invalid by a court of competent jurisdiction, the invalidity of such provision shall not affect the validity of the remaining provisions of this Agreement, which shall remain in full force and effect. No waiver of any term of this Agreement shall be deemed a further or continuing waiver of such term or any other term, and Male Cyber Fighters."’s" failure to assert any right or provision under this Agreement shall not constitute a waiver of such right or provision. YOU AND Male Cyber Fighters AGREE THAT ANY CAUSE OF ACTION ARISING OUT OF OR RELATED TO THE SERVICES MUST COMMENCE WITHIN ONE (1) YEAR AFTER THE CAUSE OF ACTION ACCRUES. OTHERWISE, SUCH CAUSE OF ACTION IS PERMANENTLY BARRED.
+<br>
+
+Waiver
+<br>
+Except as provided herein, the failure to exercise a right or to require performance of an obligation under this Agreement shall not effect a party's ability to exercise such right or require such performance at any time thereafter nor shall be the waiver of a breach constitute waiver of any subsequent breach.
+
+No failure to exercise, and no delay in exercising, on the part of either party, any right or any power under this Agreement shall operate as a waiver of that right or power. Nor shall any single or partial exercise of any right or power under this Agreement preclude further exercise of that or any other right granted herein. In the event of a conflict between this Agreement and any applicable purchase or other terms, the terms of this Agreement shall govern.
+
+<br>
+Amendments to this Agreement
+<br>
+Male Cyber Fighters reserves the right, at its sole discretion, to modify or replace this Agreement at any time. If a revision is material we will provide at least 30 days' notice prior to any new terms taking effect. What constitutes a material change will be determined at our sole discretion.
+By continuing to access or use our website after any revisions become effective, you agree to be bound by the revised terms. If you do not agree to the new terms, you are no longer authorized to use Male Cyber Fighters.
+
+<br>
+Entire Agreement
+<br>
+The Agreement constitutes the entire agreement between you and Male Cyber Fighters regarding your use of the website and supersedes all prior and contemporaneous written or oral agreements between you and Male Cyber Fighters.
+You may be subject to additional terms and conditions that apply when you use or purchase other Male Cyber Fighters's  services, which Male Cyber Fighters will provide to you at the time of such use or purchase.
+
+<br>
+Updates to Our Terms
+<br>
+We may change our Service and policies, and we may need to make changes to these Terms so that they accurately reflect our Service and policies. Unless otherwise required by law, we will notify you (for example, through our Service) before we make changes to these Terms and give you an opportunity to review them before they go into effect. Then, if you continue to use the Service, you will be bound by the updated Terms. If you do not want to agree to these or any updated Terms, you can delete your account.
+<br>
+
+Intellectual Property
+<br>
+The website and its entire contents, features and functionality (including but not limited to all information, software, text, displays, images, video and audio, and the design, selection and arrangement thereof), are owned by Male Cyber Fighters, its licensors or other providers of such material and are protected by Canada and international copyright, trademark, patent, trade secret and other intellectual property or proprietary rights laws. The material may not be copied, modified, reproduced, downloaded or distributed in any way, in whole or in part, without the express prior written permission of Male Cyber Fighters, unless and except as is expressly provided in these Terms & Conditions. Any unauthorized use of the material is prohibited.
+
+<br>
+Agreement to Arbitrate
+<br>
+This section applies to any dispute EXCEPT IT DOESN’T INCLUDE A DISPUTE RELATING TO CLAIMS FOR INJUNCTIVE OR EQUITABLE RELIEF REGARDING THE ENFORCEMENT OR VALIDITY OF YOUR OR Male Cyber Fighters."’s" INTELLECTUAL PROPERTY RIGHTS. The term “dispute” means any dispute, action, or other controversy between you and Male Cyber Fighters concerning the Services or this agreement, whether in contract, warranty, tort, statute, regulation, ordinance, or any other legal or equitable basis. “Dispute” will be given the broadest possible meaning allowable under law.
+
+<br>
+Notice of Dispute
+<br>
+In the event of a dispute, you or Male Cyber Fighters must give the other a Notice of Dispute, which is a written statement that sets forth the name, address, and contact information of the party giving it, the facts giving rise to the dispute, and the relief requested. You must send any Notice of Dispute via email to: . Male Cyber Fighters will send any Notice of Dispute to you by mail to your address if we have it, or otherwise to your email address. You and Male Cyber Fighters will attempt to resolve any dispute through informal negotiation within sixty (60) days from the date the Notice of Dispute is sent. After sixty (60) days, you or Male Cyber Fighters may commence arbitration.
+<br>
+
+Binding Arbitration
+<br>
+If you and Male Cyber Fighters don’t resolve any dispute by informal negotiation, any other effort to resolve the dispute will be conducted exclusively by binding arbitration as described in this section. You are giving up the right to litigate (or participate in as a party or class member) all disputes in court before a judge or jury. The dispute shall be settled by binding arbitration in accordance with the commercial arbitration rules of the American Arbitration Association. Either party may seek any interim or preliminary injunctive relief from any court of competent jurisdiction, as necessary to protect the party’s rights or property pending the completion of arbitration. Any and all legal, accounting, and other costs, fees, and expenses incurred by the prevailing party shall be borne by the non-prevailing party.
+<br>
+
+Submissions and Privacy
+<br>
+In the event that you submit or post any ideas, creative suggestions, designs, photographs, information, advertisements, data or proposals, including ideas for new or improved products, services, features, technologies or promotions, you expressly agree that such submissions will automatically be treated as non-confidential and non-proprietary and will become the sole property of Male Cyber Fighters without any compensation or credit to you whatsoever. Male Cyber Fighters and its affiliates shall have no obligations with respect to such submissions or posts and may use the ideas contained in such submissions or posts for any purposes in any medium in perpetuity, including, but not limited to, developing, manufacturing, and marketing products and services using such ideas.
+<br>
+
+Promotions
+<br>
+Male Cyber Fighters may, from time to time, include contests, promotions, sweepstakes, or other activities (“Promotions”) that require you to submit material or information concerning yourself. Please note that all Promotions may be governed by separate rules that may contain certain eligibility requirements, such as restrictions as to age and geographic location. You are responsible to read all Promotions rules to determine whether or not you are eligible to participate. If you enter any Promotion, you agree to abide by and to comply with all Promotions Rules.
+
+Additional terms and conditions may apply to purchases of goods or services on or through the Services, which terms and conditions are made a part of this Agreement by this reference.
+
+<br>
+Typographical Errors
+<br>
+In the event a product and/or service is listed at an incorrect price or with incorrect information due to typographical error, we shall have the right to refuse or cancel any orders placed for the product and/or service listed at the incorrect price. We shall have the right to refuse or cancel any such order whether or not the order has been confirmed and your credit card charged. If your credit card has already been charged for the purchase and your order is canceled, we shall immediately issue a credit to your credit card account or other payment account in the amount of the charge.
+
+<br>
+Miscellaneous
+<br>
+If for any reason a court of competent jurisdiction finds any provision or portion of these Terms & Conditions to be unenforceable, the remainder of these Terms & Conditions will continue in full force and effect. Any waiver of any provision of these Terms & Conditions will be effective only if in writing and signed by an authorized representative of Male Cyber Fighters. Male Cyber Fighters will be entitled to injunctive or other equitable relief (without the obligations of posting any bond or surety) in the event of any breach or anticipatory breach by you. Male Cyber Fighters operates and controls the Male Cyber Fighters Service from its offices in Canada. The Service is not intended for distribution to or use by any person or entity in any jurisdiction or country where such distribution or use would be contrary to law or regulation. Accordingly, those persons who choose to access the Male Cyber Fighters Service from other locations do so on their own initiative and are solely responsible for compliance with local laws, if and to the extent local laws are applicable. These Terms & Conditions (which include and incorporate the Male Cyber Fighters Privacy Policy) contains the entire understanding, and supersedes all prior understandings, between you and Male Cyber Fighters concerning its subject matter, and cannot be changed or modified by you. The section headings used in this Agreement are for convenience only and will not be given any legal import.
+
+<br>
+Disclaimer
+<br>
+Male Cyber Fighters is not responsible for any content, code or any other imprecision.
+
+Male Cyber Fighters does not provide warranties or guarantees.
+
+In no event shall Male Cyber Fighters be liable for any special, direct, indirect, consequential, or incidental damages or any damages whatsoever, whether in an action of contract, negligence or other tort, arising out of or in connection with the use of the Service or the contents of the Service. Male Cyber Fighters reserves the right to make additions, deletions, or modifications to the contents on the Service at any time without prior notice.
+
+The Male Cyber Fighters Service and its contents are provided "as is" and "as available" without any warranty or representations of any kind, whether express or implied. Male Cyber Fighters is a distributor and not a publisher of the content supplied by third parties; as such, Male Cyber Fighters exercises no editorial control over such content and makes no warranty or representation as to the accuracy, reliability or currency of any information, content, service or merchandise provided through or accessible via the Male Cyber Fighters Service. Without limiting the foregoing, Male Cyber Fighters specifically disclaims all warranties and representations in any content transmitted on or in connection with the Male Cyber Fighters Service or on sites that may appear as links on the Male Cyber Fighters Service, or in the products provided as a part of, or otherwise in connection with, the Male Cyber Fighters Service, including without limitation any warranties of merchantability, fitness for a particular purpose or non-infringement of third party rights. No oral advice or written information given by Male Cyber Fighters or any of its affiliates, employees, officers, directors, agents, or the like will create a warranty. Price and availability information is subject to change without notice. Without limiting the foregoing, Male Cyber Fighters does not warrant that the Male Cyber Fighters Service will be uninterrupted, uncorrupted, timely, or error-free.
+
+<br>
+Contact Us
+<br>
+Don't hesitate to contact us if you have any questions.
+<br>
+ -Via this Link:  https://malecyberfighters-production.up.railway.app/
+
+</p>
+    </div>
+    <button id="closeTOS" class="ghost">Close</button>
+  </div>
+</div>
+
+<!-- PRIVACY POLICY POPUP -->
+<div id="modalPrivacy" class="modal-overlay" style="display:none">
+  <div class="modal-box">
+    <h3>Privacy Policy</h3>
+    <div id="privacyContent" class="modal-scroll">
+      <p>Updated at 2026-06-19
+<br>
+
+Male Cyber Fighters (“we,” “our,” or “us”) is committed to protecting your privacy. This Privacy Policy explains how your personal information is collected, used, and disclosed by Male Cyber Fighters.
+<br>
+This Privacy Policy applies to our website, and its associated subdomains (collectively, our “Service”) alongside our application, Male Cyber Fighters. By accessing or using our Service, you signify that you have read, understood, and agree to our collection, storage, use, and disclosure of your personal information as described in this Privacy Policy and our Terms of Service.
+<br>
+Definitions and key terms
+<br>
+To help explain things as clearly as possible in this Privacy Policy, every time any of these terms are referenced, are strictly defined as:
+<br>
+  -Cookie: small amount of data generated by a website and saved by your web browser. It is used to identify your browser, provide analytics, remember information about you such as your language preference or login information.
+  -Company: when this policy mentions “Company,” “we,” “us,” or “our,” it refers to Male Cyber Fighters, that is responsible for your information under this Privacy Policy.
+  -Country: where Male Cyber Fighters or the owners/founders of Male Cyber Fighters are based, in this case is Canada
+  -Customer: refers to the company, organization or person that signs up to use the Male Cyber Fighters Service to manage the relationships with your consumers or service users.
+  -Device: any internet connected device such as a phone, tablet, computer or any other device that can be used to visit Male Cyber Fighters and use the services.
+  -IP address: Every device connected to the Internet is assigned a number known as an Internet protocol (IP) address. These numbers are usually assigned in geographic blocks. An IP address can often be used to identify the location from which a device is connecting to the Internet.
+  -Personnel: refers to those individuals who are employed by Male Cyber Fighters or are under contract to perform a service on behalf of one of the parties.
+  -Personal Data: any information that directly, indirectly, or in connection with other information — including a personal identification number — allows for the identification or identifiability of a natural person.
+  -Service: refers to the service provided by Male Cyber Fighters as described in the relative terms (if available) and on this platform.
+  -Third-party service: refers to advertisers, contest sponsors, promotional and marketing partners, and others who provide our content or whose products or services we think may interest you.
+  -Website: Male Cyber Fighters."’s" site, which can be accessed via this URL: https://malecyberfighters-production.up.railway.app/
+  -You: a person or entity that is registered with Male Cyber Fighters to use the Services.
+
+<br>
+
+  
+<br>
+
+What Information Do We Collect?
+<br>
+
+We collect information from you when you visit our website, register on our site, place an order, subscribe to our newsletter, respond to a survey or fill out a form.
+<br>
+
+  -Name / Username
+ -Email Addresses
+  -Age
+  -Password
+<br>
+  
+
+We also collect information from mobile devices for a better user experience, although these features are completely optional:
+<br>
+
+-Photo Gallery (Pictures): Granting photo gallery access allows the user to upload any picture from their photo gallery, you can safely deny photo gallery access for this website.
+  
+<br>
+
+How Do We Use The Information We Collect?
+<br>
+
+Any of the information we collect from you may be used in one of the following ways:
+<br>
+
+  -To personalize your experience (your information helps us to better respond to your individual needs)
+  -To improve our website (we continually strive to improve our website offerings based on the information and feedback we receive from you)
+  -To improve customer service (your information helps us to more effectively respond to your customer service requests and support needs)
+  -To process transactions
+  -To administer a contest, promotion, survey or other site feature
+  -To send periodic emails
+
+<br>
+
+When does Male Cyber Fighters use end user information from third parties?
+<br>
+
+Male Cyber Fighters will collect End User Data necessary to provide the Male Cyber Fighters services to our customers.
+
+End users may voluntarily provide us with information they have made available on social media websites. If you provide us with any such information, we may collect publicly available information from the social media websites you have indicated. You can control how much of your information social media websites make public by visiting these websites and changing your privacy settings.
+
+<br>
+
+When does Male Cyber Fighters use customer information from third parties?
+<br>
+
+We receive some information from the third parties when you contact us. For example, when you submit your email address to us to show interest in becoming a Male Cyber Fighters customer, we receive information from a third party that provides automated fraud detection services to Male Cyber Fighters. We also occasionally collect information that is made publicly available on social media websites. You can control how much of your information social media websites make public by visiting these websites and changing your privacy settings.
+
+<br>
+
+Do we share the information we collect with third parties?
+<br>
+
+We may share the information that we collect, both personal and non-personal, with third parties such as advertisers, contest sponsors, promotional and marketing partners, and others who provide our content or whose products or services we think may interest you. We may also share it with our current and future affiliated companies and business partners, and if we are involved in a merger, asset sale or other business reorganization, we may also share or transfer your personal and non-personal information to our successors-in-interest.
+<br>
+
+
+We may engage trusted third party service providers to perform functions and provide services to us, such as hosting and maintaining our servers and the website, database storage and management, e-mail management, storage marketing, credit card processing, customer service and fulfilling orders for products and services you may purchase through the website. We will likely share your personal information, and possibly some non-personal information, with these third parties to enable them to perform these services for us and for you.
+<br>
+
+
+We may share portions of our log file data, including IP addresses, for analytics purposes with third parties such as web analytics partners, application developers, and ad networks. If your IP address is shared, it may be used to estimate general location and other technographics such as connection speed, whether you have visited the website in a shared location, and type of the device used to visit the website. They may aggregate information about our advertising and what you see on the website and then provide auditing, research and reporting for us and our advertisers. 
+<br>
+
+
+We may also disclose personal and non-personal information about you to government or law enforcement officials or private parties as we, in our sole discretion, believe necessary or appropriate in order to respond to claims, legal process (including subpoenas), to protect our rights and interests or those of a third party, the safety of the public or any person, to prevent or stop any illegal, unethical, or legally actionable activity, or to otherwise comply with applicable court orders, laws, rules and regulations. 
+
+<br>
+
+Where and when is information collected from customers and end users?
+<br>
+
+Male Cyber Fighters will collect personal information that you submit to us. We may also receive personal information about you from third parties as described above.
+
+<br>
+
+How Do We Use Your Email Address?
+<br>
+
+By submitting your email address on this website, you agree to receive emails from us. You can cancel your participation in any of these email lists at any time by clicking on the opt-out link or other unsubscribe option that is included in the respective email. We only send emails to people who have authorized us to contact them, either directly, or through a third party. We do not send unsolicited commercial emails, because we hate spam as much as you do. By submitting your email address, you also agree to allow us to use your email address for customer audience targeting on sites like Facebook, where we display custom advertising to specific people who have opted-in to receive communications from us. Email addresses submitted only through the order processing page will be used for the sole purpose of sending you information and updates pertaining to your order. If, however, you have provided the same email to us through another method, we may use it for any of the purposes stated in this Policy. Note: If at any time you would like to unsubscribe from receiving future emails, we include detailed unsubscribe instructions at the bottom of each email.
+
+<br>
+
+How Long Do We Keep Your Information?
+<br>
+
+We keep your information only so long as we need it to provide Male Cyber Fighters to you and fulfill the purposes described in this policy. This is also the case for anyone that we share your information with and who carries out services on our behalf. When we no longer need to use your information and there is no need for us to keep it to comply with our legal or regulatory obligations, we’ll either remove it from our systems or depersonalize it so that we can't identify you.
+<br>
+
+
+How Do We Protect Your Information?
+<br>
+
+We implement a variety of security measures to maintain the safety of your personal information when you place an order or enter, submit, or access your personal information. We offer the use of a secure server. All supplied sensitive/credit information is transmitted via Secure Socket Layer (SSL) technology and then encrypted into our Payment gateway providers database only to be accessible by those authorized with special access rights to such systems, and are required to keep the information confidential. After a transaction, your private information (credit cards, social security numbers, financials, etc.) is never kept on file. We cannot, however, ensure or warrant the absolute security of any information you transmit to Male Cyber Fighters or guarantee that your information on the Service may not be accessed, disclosed, altered, or destroyed by a breach of any of our physical, technical, or managerial safeguards.
+
+<br>
+
+Could my information be transferred to other countries?
+<br>
+
+Male Cyber Fighters is incorporated in Canada. Information collected via our website, through direct interactions with you, or from use of our help services may be transferred from time to time to our offices or personnel, or to third parties, located throughout the world, and may be viewed and hosted anywhere in the world, including countries that may not have laws of general applicability regulating the use and transfer of such data. To the fullest extent allowed by applicable law, by using any of the above, you voluntarily consent to the trans-border transfer and hosting of such information.
+
+<br>
+
+Is the information collected through the Male Cyber Fighters Service secure?
+<br>
+
+We take precautions to protect the security of your information. We have physical, electronic, and managerial procedures to help safeguard, prevent unauthorized access, maintain data security, and correctly use your information. However, neither people nor security systems are foolproof, including encryption systems. In addition, people can commit intentional crimes, make mistakes or fail to follow policies. Therefore, while we use reasonable efforts to protect your personal information, we cannot guarantee its absolute security. If applicable law imposes any non-disclaimable duty to protect your personal information, you agree that intentional misconduct will be the standards used to measure our compliance with that duty.
+
+<br>
+
+Can I update or correct my information?
+<br>
+
+The rights you have to request updates or corrections to the information Male Cyber Fighters collects depend on your relationship with Male Cyber Fighters. Personnel may update or correct their information as detailed in our internal company employment policies.
+
+Customers have the right to request the restriction of certain uses and disclosures of personally identifiable information as follows. You can contact us in order to (1) update or correct your personally identifiable information, (2) change your preferences with respect to communications and other information you receive from us, or (3) delete the personally identifiable information maintained about you on our systems (subject to the following paragraph), by cancelling your account. Such updates, corrections, changes and deletions will have no effect on other information that we maintain, or information that we have provided to third parties in accordance with this Privacy Policy prior to such update, correction, change or deletion. To protect your privacy and security, we may take reasonable steps (such as requesting a unique password) to verify your identity before granting you profile access or making corrections. You are responsible for maintaining the secrecy of your unique password and account information at all times.
+
+You should be aware that it is not technologically possible to remove each and every record of the information you have provided to us from our system. The need to back up our systems to protect information from inadvertent loss means that a copy of your information may exist in a non-erasable form that will be difficult or impossible for us to locate. Promptly after receiving your request, all personal information stored in databases we actively use, and other readily searchable media will be updated, corrected, changed or deleted, as appropriate, as soon as and to the extent reasonably and technically practicable.
+
+If you are an end user and wish to update, delete, or receive any information we have about you, you may do so by contacting the organization of which you are a customer.
+
+<br>
+
+Sale of Business
+<br>
+
+We reserve the right to transfer information to a third party in the event of a sale, merger or other transfer of all or substantially all of the assets of Male Cyber Fighters or any of its Corporate Affiliates (as defined herein), or that portion of Male Cyber Fighters or any of its Corporate Affiliates to which the Service relates, or in the event that we discontinue our business or file a petition or have filed against us a petition in bankruptcy, reorganization or similar proceeding, provided that the third party agrees to adhere to the terms of this Privacy Policy.
+
+<br>
+
+Affiliates
+<br>
+
+We may disclose information (including personal information) about you to our Corporate Affiliates. For purposes of this Privacy Policy, "Corporate Affiliate" means any person or entity which directly or indirectly controls, is controlled by or is under common control with Male Cyber Fighters, whether by ownership or otherwise. Any information relating to you that we provide to our Corporate Affiliates will be treated by those Corporate Affiliates in accordance with the terms of this Privacy Policy.
+
+<br>
+
+Governing Law
+<br>
+
+This Privacy Policy is governed by the laws of Canada without regard to its conflict of laws provision. You consent to the exclusive jurisdiction of the courts in connection with any action or dispute arising between the parties under or in connection with this Privacy Policy except for those individuals who may have rights to make claims under Privacy Shield, or the Swiss-US framework.
+
+The laws of Canada, excluding its conflicts of law rules, shall govern this Agreement and your use of the website. Your use of the website may also be subject to other local, state, national, or international laws.
+
+By using Male Cyber Fighters or contacting us directly, you signify your acceptance of this Privacy Policy. If you do not agree to this Privacy Policy, you should not engage with our website, or use our services. Continued use of the website, direct engagement with us, or following the posting of changes to this Privacy Policy that do not significantly affect the use or disclosure of your personal information will mean that you accept those changes.
+
+<br>
+
+Your Consent
+<br>
+
+We've updated our Privacy Policy to provide you with complete transparency into what is being set when you visit our site and how it's being used. By using our website, registering an account, or making a purchase, you hereby consent to our Privacy Policy and agree to its terms.
+
+<br>
+
+Links to Other Websites
+<br>
+
+This Privacy Policy applies only to the Services. The Services may contain links to other websites not operated or controlled by Male Cyber Fighters. We are not responsible for the content, accuracy or opinions expressed in such websites, and such websites are not investigated, monitored or checked for accuracy or completeness by us. Please remember that when you use a link to go from the Services to another website, our Privacy Policy is no longer in effect. Your browsing and interaction on any other website, including those that have a link on our platform, is subject to that website’s own rules and policies. Such third parties may use their own cookies or other methods to collect information about you.
+
+<br>
+
+Cookies
+<br>
+
+Male Cyber Fighters uses "Cookies" to identify the areas of our website that you have visited. A Cookie is a small piece of data stored on your computer or mobile device by your web browser. We use Cookies to enhance the performance and functionality of our website but are non-essential to their use. However, without these cookies, certain functionality like videos may become unavailable or you would be required to enter your login details every time you visit the website as we would not be able to remember that you had logged in previously. Most web browsers can be set to disable the use of Cookies. However, if you disable Cookies, you may not be able to access functionality on our website correctly or at all. We never place Personally Identifiable Information in Cookies.
+
+<br>
+
+Blocking and disabling cookies and similar technologies
+<br>
+
+Wherever you're located you may also set your browser to block cookies and similar technologies, but this action may block our essential cookies and prevent our website from functioning properly, and you may not be able to fully utilize all of its features and services. You should also be aware that you may also lose some saved information (e.g. saved login details, site preferences) if you block cookies on your browser. Different browsers make different controls available to you. Disabling a cookie or category of cookie does not delete the cookie from your browser, you will need to do this yourself from within your browser, you should visit your browser's help menu for more information.
+
+<br>
+
+Kids' Privacy
+<br>
+
+We do not address anyone under the age of 18. We do not knowingly collect personally identifiable information from anyone under the age of 18. If You are a parent or guardian and You are aware that Your child has provided Us with Personal Data, please contact Us. If We become aware that We have collected Personal Data from anyone under the age of 13 without verification of parental consent, We take steps to remove that information from Our servers.
+
+<br>
+
+Changes To Our Privacy Policy
+<br>
+
+We may change our Service and policies, and we may need to make changes to this Privacy Policy so that they accurately reflect our Service and policies. Unless otherwise required by law, we will notify you (for example, through our Service) before we make changes to this Privacy Policy and give you an opportunity to review them before they go into effect. Then, if you continue to use the Service, you will be bound by the updated Privacy Policy. If you do not want to agree to this or any updated Privacy Policy, you can delete your account.
+
+<br>
+
+Third-Party Services
+<br>
+
+We may display, include or make available third-party content (including data, information, applications and other products services) or provide links to third-party websites or services ("Third- Party Services").
+You acknowledge and agree that Male Cyber Fighters shall not be responsible for any Third-Party Services, including their accuracy, completeness, timeliness, validity, copyright compliance, legality, decency, quality or any other aspect thereof. Male Cyber Fighters does not assume and shall not have any liability or responsibility to you or any other person or entity for any Third-Party Services.
+Third-Party Services and links thereto are provided solely as a convenience to you and you access and use them entirely at your own risk and subject to such third parties' terms and conditions.
+
+<br>
+
+Tracking Technologies
+<br>
+
+  -Cookies
+
+  We use Cookies to enhance the performance and functionality of our website but are non-essential to their use. However, without these cookies, certain functionality like videos may become unavailable or you would be required to enter your login details every time you visit the website as we would not be able to remember that you had logged in previously.
+
+  -Local Storage
+
+  Local Storage sometimes known as DOM storage, provides web apps with methods and protocols for storing client-side data. Web storage supports persistent data storage, similar to cookies but with a greatly enhanced capacity and no information stored in the HTTP request header.
+
+  -Sessions
+
+  Male Cyber Fighters uses "Sessions" to identify the areas of our website that you have visited. A Session is a small piece of data stored on your computer or mobile device by your web browser.
+
+<br>
+
+Information about General Data Protection Regulation (GDPR)
+<br>
+
+We may be collecting and using information from you if you are from the European Economic Area (EEA), and in this section of our Privacy Policy we are going to explain exactly how and why is this data collected, and how we maintain this data under protection from being replicated or used in the wrong way.
+
+<br>
+
+What is GDPR?
+<br>
+
+GDPR is an EU-wide privacy and data protection law that regulates how EU residents' data is protected by companies and enhances the control the EU residents have, over their personal data.
+
+The GDPR is relevant to any globally operating company and not just the EU-based businesses and EU residents. Our customers’ data is important irrespective of where they are located, which is why we have implemented GDPR controls as our baseline standard for all our operations worldwide.
+
+<br>
+
+What is personal data?
+<br>
+
+Any data that relates to an identifiable or identified individual. GDPR covers a broad spectrum of information that could be used on its own, or in combination with other pieces of information, to identify a person. Personal data extends beyond a person’s name or email address. Some examples include financial information, political opinions, genetic data, biometric data, IP addresses, physical address, sexual orientation, and ethnicity.
+
+<br>
+
+The Data Protection Principles include requirements such as:
+
+  -Personal data collected must be processed in a fair, legal, and transparent way and should only be used in a way that a person would reasonably expect.
+  -Personal data should only be collected to fulfil a specific purpose and it should only be used for that purpose. Organizations must specify why they need the personal data when they collect it.
+  -Personal data should be held no longer than necessary to fulfil its purpose.
+  -People covered by the GDPR have the right to access their own personal data. They can also request a copy of their data, and that their data be updated, deleted, restricted, or moved to another organization.
+
+<br>
+
+Why is GDPR important?
+<br>
+
+GDPR adds some new requirements regarding how companies should protect individuals' personal data that they collect and process. It also raises the stakes for compliance by increasing enforcement and imposing greater fines for breach. Beyond these facts it's simply the right thing to do. At Male Cyber Fighters we strongly believe that your data privacy is very important and we already have solid security and privacy practices in place that go beyond the requirements of this new regulation.
+
+<br>
+
+Individual Data Subject's Rights - Data Access, Portability and Deletion
+<br>
+
+We are committed to helping our customers meet the data subject rights requirements of GDPR. Male Cyber Fighters processes or stores all personal data in fully vetted, DPA compliant vendors. We do store all conversation and personal data for up to 6 years unless your account is deleted. In which case, we dispose of all data in accordance with our Terms of Service and Privacy Policy, but we will not hold it longer than 60 days.
+
+We are aware that if you are working with EU customers, you need to be able to provide them with the ability to access, update, retrieve and remove personal data. We got you! We've been set up as self service from the start and have always given you access to your data and your customers data. Our customer support team is here for you to answer any questions you might have about working with the API.
+
+<br>
+
+California Residents
+<br>
+
+The California Consumer Privacy Act (CCPA) requires us to disclose categories of Personal Information we collect and how we use it, the categories of sources from whom we collect Personal Information, and the third parties with whom we share it, which we have explained above.
+
+We are also required to communicate information about rights California residents have under California law. You may exercise the following rights:
+
+  -Right to Know and Access. You may submit a verifiable request for information regarding the: (1) categories of Personal Information we collect, use, or share; (2) purposes for which categories of Personal Information are collected or used by us; (3) categories of sources from which we collect Personal Information; and (4) specific pieces of Personal Information we have collected about you.
+  -Right to Equal Service. We will not discriminate against you if you exercise your privacy rights.
+  -Right to Delete. You may submit a verifiable request to close your account and we will delete Personal Information about you that we have collected.
+  -Request that a business that sells a consumer's personal data, not sell the consumer's personal data.
+
+If you make a request, we have one month to respond to you. If you would like to exercise any of these rights, please contact us.
+We do not sell the Personal Information of our users.
+For more information about these rights, please contact us.
+
+<br>
+
+Contact Us
+<br>
+
+Don't hesitate to contact us if you have any questions.
+<br>
+
+ -Via this Link:  https://malecyberfighters-production.up.railway.app/
+
+</p>
+    </div>
+    <button id="closePrivacy" class="ghost">Close</button>
+  </div>
+</div>
+
+<div id="storyPopup" class="modal">
+  <div class="modal-content">
+    <h2>Create Story</h2>
+
+    <label>Select start date:</label>
+    <input type="date" id="storyDate">
+
+    <button id="storyLoadBtn" class="small-btn">Load Messages</button>
+
+    <textarea id="storyEditor" placeholder="Your story will appear here..." style="height:300px;margin-top:20px;"></textarea>
+
+    <button id="storySaveBtn" class="small-btn">Save Story</button>
+    <button id="storyCloseBtn" class="small-btn ghost">Close</button>
+  </div>
+</div>
+
+<!-- JS FILES -->
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/utils.js"></script>
+<script src="/js/socket.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/register.js"></script>
+<script src="/js/chat.js"></script>
+<script src="/js/pm.js"></script>
+<script src="/js/admin.js"></script>
+  <script src="/js/admin-auth.js"></script>
+<script src="/js/analytics.js"></script>
+  <script src="/js/dm-toggle.js"></script>
+  <script src="/js/profile.js"></script>
+<script src="/js/landing.js"></script>
+
+
+</body>
+</html>
