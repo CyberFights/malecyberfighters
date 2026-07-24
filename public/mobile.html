@@ -8,7 +8,7 @@
 <style>
   :root {
     --bg: #05060d;
-    --panel: rgba(12,18,32,0.72);
+    --panel: rgba(12,18,32,0.78);
     --accent: #4fd1ff;
     --accent-glow: 0 0 22px rgba(79,209,255,0.7);
     --text: #e8f7ff;
@@ -16,7 +16,10 @@
     --radius: 14px;
     --border: 1px solid rgba(79,209,255,0.35);
     --glass: rgba(10,16,32,0.55);
+    --danger: #ff4f7b;
   }
+
+  * { box-sizing: border-box; }
 
   body {
     margin: 0;
@@ -27,7 +30,12 @@
     overflow: hidden;
   }
 
-  /* HEADER */
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
   header {
     padding: 14px;
     display: flex;
@@ -51,11 +59,71 @@
     color: var(--accent);
   }
 
-  /* MAIN PUBLIC CHAT */
-  #publicChat {
-    height: calc(100vh - 180px);
+  header .subtitle {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  #main {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .view {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+  }
+
+  .view.active {
+    display: flex;
+  }
+
+  #bottomNav {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding: 8px 6px;
+    background: var(--glass);
+    border-top: var(--border);
+    backdrop-filter: blur(18px);
+  }
+
+  .nav-btn {
+    flex: 1;
+    text-align: center;
+    padding: 6px 4px;
+    font-size: 0.75rem;
+    color: var(--muted);
+    cursor: pointer;
+  }
+
+  .nav-btn.active {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .panel {
+    background: var(--panel);
+    border-radius: var(--radius);
+    border: var(--border);
+    backdrop-filter: blur(18px);
+    margin: 10px;
+    padding: 10px;
+  }
+
+  .panel-title {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  #publicChatList {
+    flex: 1;
     overflow-y: auto;
-    padding: 12px;
+    padding: 10px;
   }
 
   .msg {
@@ -70,13 +138,14 @@
     border-radius: 50%;
     background: radial-gradient(circle at 30% 0, #4fd1ff, #1b9fff 40%, #050814 100%);
     box-shadow: var(--accent-glow);
+    flex-shrink: 0;
   }
 
   .msg-body {
-    background: var(--panel);
+    background: rgba(12,18,32,0.9);
     border-radius: var(--radius);
     padding: 8px 12px;
-    border: var(--border);
+    border: 1px solid rgba(255,255,255,0.06);
     flex: 1;
   }
 
@@ -90,173 +159,503 @@
     font-size: 0.9rem;
   }
 
-  /* INPUT BAR */
-  #inputBar {
-    padding: 10px;
+  .input-bar {
+    display: flex;
+    gap: 8px;
+    padding: 8px 10px;
     background: var(--glass);
     border-top: var(--border);
-    display: flex;
-    gap: 10px;
   }
 
-  #publicInput {
+  .input-bar input {
     flex: 1;
-    padding: 10px;
+    padding: 9px;
     border-radius: var(--radius);
     border: var(--border);
     background: rgba(5,8,20,0.9);
     color: var(--text);
+    font-size: 0.85rem;
   }
 
-  #publicSend {
-    padding: 10px 16px;
+  .input-bar button {
+    padding: 9px 14px;
     border-radius: var(--radius);
     background: linear-gradient(135deg, #4fd1ff, #1b9fff);
     border: none;
     color: #050814;
     font-weight: 600;
     box-shadow: var(--accent-glow);
+    font-size: 0.8rem;
   }
 
-  /* FLOATING DM BUTTON */
-  #dmButton {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background: var(--accent);
-    color: #050814;
-    padding: 14px 18px;
-    border-radius: 999px;
-    box-shadow: var(--accent-glow);
-    font-weight: 700;
-  }
-
-  /* DM SIDEBAR */
-  #dmSidebar {
-    position: fixed;
-    top: 0;
-    right: -100%;
-    width: 80%;
-    height: 100%;
-    background: var(--glass);
-    border-left: var(--border);
-    backdrop-filter: blur(18px);
-    transition: 0.3s;
-    padding: 14px;
+  #dmList {
+    flex: 1;
     overflow-y: auto;
-  }
-
-  #dmSidebar.open {
-    right: 0;
+    padding: 8px;
   }
 
   .dm-user {
     padding: 10px;
     border-radius: var(--radius);
-    background: var(--panel);
+    background: rgba(12,18,32,0.9);
     border: var(--border);
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+
+  #dmChatMessages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+  }
+
+  .dm-msg {
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border-radius: var(--radius);
+    background: rgba(12,18,32,0.9);
+    border: 1px solid rgba(255,255,255,0.06);
+    font-size: 0.85rem;
+  }
+
+  .dm-msg.me {
+    border-color: rgba(79,209,255,0.6);
+  }
+
+  .dm-author {
+    color: var(--accent);
+    font-size: 0.8rem;
+  }
+
+  .dm-text {
+    margin-top: 3px;
+  }
+
+  .typing-indicator {
+    font-size: 0.75rem;
+    color: var(--muted);
+    padding: 4px 10px;
+  }
+
+  #roomsList {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+
+  .room-item {
+    padding: 10px;
+    border-radius: var(--radius);
+    background: rgba(12,18,32,0.9);
+    border: var(--border);
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+
+  #roomChatMessages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+  }
+
+  .room-msg {
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border-radius: var(--radius);
+    background: rgba(12,18,32,0.9);
+    border: 1px solid rgba(255,255,255,0.06);
+    font-size: 0.85rem;
+  }
+
+  .form-field {
     margin-bottom: 10px;
   }
 
-  /* ROOM POPUP */
-  #roomPopup {
-    position: fixed;
-    bottom: -100%;
-    left: 0;
+  .form-field label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-bottom: 3px;
+  }
+
+  .form-field input,
+  .form-field textarea,
+  .form-field select {
     width: 100%;
-    height: 70%;
-    background: var(--glass);
-    border-top: var(--border);
-    backdrop-filter: blur(18px);
-    transition: 0.3s;
-    padding: 14px;
+    padding: 8px;
+    border-radius: var(--radius);
+    border: var(--border);
+    background: rgba(5,8,20,0.9);
+    color: var(--text);
+    font-size: 0.8rem;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .btn {
+    flex: 1;
+    padding: 8px;
+    border-radius: var(--radius);
+    border: none;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #4fd1ff, #1b9fff);
+    color: #050814;
+    box-shadow: var(--accent-glow);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    border: var(--border);
+    color: var(--accent);
+  }
+
+  .btn-danger {
+    background: var(--danger);
+    color: #050814;
+  }
+
+  #storyList {
+    flex: 1;
     overflow-y: auto;
+    padding: 8px;
   }
 
-  #roomPopup.open {
-    bottom: 0;
+  .story-item {
+    padding: 8px;
+    border-radius: var(--radius);
+    background: rgba(12,18,32,0.9);
+    border: var(--border);
+    margin-bottom: 8px;
+    font-size: 0.8rem;
   }
 
-  /* PROFILE POPUP */
-  #profilePopup {
+  #relationshipTimeline {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+
+  .rel-event {
+    padding: 8px;
+    border-radius: var(--radius);
+    background: rgba(12,18,32,0.9);
+    border: var(--border);
+    margin-bottom: 8px;
+    font-size: 0.8rem;
+  }
+
+  #adminPanel {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+
+  .admin-item {
+    padding: 8px;
+    border-radius: var(--radius);
+    background: rgba(12,18,32,0.9);
+    border: var(--border);
+    margin-bottom: 8px;
+    font-size: 0.8rem;
+  }
+
+  #legalView {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  #overlayIntro {
     position: fixed;
-    top: 0;
-    left: -100%;
-    width: 80%;
-    height: 100%;
-    background: var(--glass);
-    border-right: var(--border);
-    backdrop-filter: blur(18px);
-    transition: 0.3s;
-    padding: 14px;
-    overflow-y: auto;
+    inset: 0;
+    background: radial-gradient(circle at top, #101b3a, #05060d 50%, #02030a 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
   }
 
-  #profilePopup.open {
-    left: 0;
+  #overlayIntro.hidden {
+    display: none;
   }
 
+  #overlayIntro h2 {
+    margin-bottom: 8px;
+    color: var(--accent);
+  }
+
+  #overlayIntro p {
+    margin: 0 20px 12px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+
+  #overlayIntro input {
+    padding: 8px;
+    border-radius: var(--radius);
+    border: var(--border);
+    background: rgba(5,8,20,0.9);
+    color: var(--text);
+    margin-bottom: 8px;
+    width: 120px;
+    text-align: center;
+  }
+
+  #overlayIntro button {
+    padding: 8px 16px;
+    border-radius: var(--radius);
+    border: none;
+    background: linear-gradient(135deg, #4fd1ff, #1b9fff);
+    color: #050814;
+    font-weight: 600;
+    box-shadow: var(--accent-glow);
+    font-size: 0.85rem;
+  }
+
+  #toast {
+    position: fixed;
+    bottom: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(12,18,32,0.95);
+    border-radius: 999px;
+    border: var(--border);
+    padding: 8px 14px;
+    font-size: 0.8rem;
+    color: var(--accent);
+    display: none;
+    z-index: 30;
+  }
+
+  #toast.show {
+    display: block;
+  }
 </style>
 </head>
 
 <body>
+<div id="app">
+  <header>
+    <img src="./images/mcf.png" alt="NOVA">
+    <div>
+      <h1>NOVA OS Mobile</h1>
+      <div class="subtitle">Realtime Arena</div>
+    </div>
+  </header>
 
-<header>
-  <img src="./images/mcf.png">
-  <div>
-    <h1>NOVA OS Mobile</h1>
-    <div class="muted">Realtime Arena</div>
+  <div id="main">
+    <div id="view-public" class="view active">
+      <div class="panel">
+        <div class="panel-title">Public Chat</div>
+        <div id="publicChatList"></div>
+      </div>
+      <div class="input-bar">
+        <input id="publicInput" placeholder="Message the Arena…">
+        <button id="publicSend">Send</button>
+      </div>
+    </div>
+
+    <div id="view-dm" class="view">
+      <div class="panel">
+        <div class="panel-title">Direct Messages</div>
+        <div id="dmList"></div>
+      </div>
+    </div>
+
+    <div id="view-dm-chat" class="view">
+      <div class="panel">
+        <div class="panel-title" id="dmChatTitle">DM</div>
+        <div id="dmChatMessages"></div>
+        <div class="typing-indicator" id="dmTyping"></div>
+      </div>
+      <div class="input-bar">
+        <input id="dmInput" placeholder="Message…">
+        <button id="dmSend">Send</button>
+      </div>
+    </div>
+
+    <div id="view-rooms" class="view">
+      <div class="panel">
+        <div class="panel-title">Rooms</div>
+        <div id="roomsList"></div>
+      </div>
+    </div>
+
+    <div id="view-room-chat" class="view">
+      <div class="panel">
+        <div class="panel-title" id="roomChatTitle">Room</div>
+        <div id="roomChatMessages"></div>
+      </div>
+      <div class="input-bar">
+        <input id="roomInput" placeholder="Message room…">
+        <button id="roomSend">Send</button>
+      </div>
+    </div>
+
+    <div id="view-profile" class="view">
+      <div class="panel">
+        <div class="panel-title">Profile</div>
+        <div class="form-field">
+          <label>Display name</label>
+          <input id="profileDisplay">
+        </div>
+        <div class="form-field">
+          <label>Status</label>
+          <input id="profileStatus">
+        </div>
+        <div class="form-field">
+          <label>Bio</label>
+          <textarea id="profileBio" rows="3"></textarea>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="profileSave">Save</button>
+          <button class="btn btn-ghost" id="profileRefresh">Refresh</button>
+        </div>
+        <div class="btn-row" style="margin-top:10px;">
+          <button class="btn btn-danger" id="profileBlock">Block user</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-story" class="view">
+      <div class="panel">
+        <div class="panel-title">Stories</div>
+        <div id="storyList"></div>
+        <div class="form-field" style="margin-top:10px;">
+          <label>New story</label>
+          <textarea id="storyText" rows="3" placeholder="Share something…"></textarea>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="storyPost">Post story</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-relationship" class="view">
+      <div class="panel">
+        <div class="panel-title">Relationship Timeline</div>
+        <div id="relationshipTimeline"></div>
+      </div>
+    </div>
+
+    <div id="view-admin" class="view">
+      <div class="panel">
+        <div class="panel-title">Admin Panel</div>
+        <div id="adminPanel"></div>
+      </div>
+    </div>
+
+    <div id="view-legal" class="view">
+      <div class="panel">
+        <div class="panel-title">Support · TOS · Privacy</div>
+        <div id="legalView">
+          <p>Support: contact the operator via DM or the support channel.</p>
+          <p>TOS: Be respectful, no harassment, no illegal content.</p>
+          <p>Privacy: Messages are stored in the system database for moderation and history.</p>
+        </div>
+      </div>
+    </div>
   </div>
-</header>
 
-<div id="publicChat"></div>
-
-<div id="inputBar">
-  <input id="publicInput" placeholder="Message the Arena…">
-  <button id="publicSend">Send</button>
+  <div id="bottomNav">
+    <div class="nav-btn active" data-view="public">Public</div>
+    <div class="nav-btn" data-view="dm">DMs</div>
+    <div class="nav-btn" data-view="rooms">Rooms</div>
+    <div class="nav-btn" data-view="profile">Profile</div>
+    <div class="nav-btn" data-view="story">Story</div>
+    <div class="nav-btn" data-view="relationship">Rel</div>
+    <div class="nav-btn" data-view="admin">Admin</div>
+    <div class="nav-btn" data-view="legal">Legal</div>
+  </div>
 </div>
 
-<button id="dmButton">DMs</button>
+<div id="overlayIntro">
+  <h2>Welcome to NOVA OS</h2>
+  <p>Realtime Arena. Please confirm you are 18+ to continue.</p>
+  <input id="ageInput" type="number" placeholder="Age">
+  <button id="ageConfirm">Enter Arena</button>
+</div>
 
-<!-- DM SIDEBAR -->
-<div id="dmSidebar"></div>
-
-<!-- ROOM POPUP -->
-<div id="roomPopup"></div>
-
-<!-- PROFILE POPUP -->
-<div id="profilePopup"></div>
+<div id="toast"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
   const socket = io();
 
-  const chat = document.getElementById("publicChat");
-  const input = document.getElementById("publicInput");
-  const send = document.getElementById("publicSend");
+  const views = {
+    public: document.getElementById("view-public"),
+    dm: document.getElementById("view-dm"),
+    "dm-chat": document.getElementById("view-dm-chat"),
+    rooms: document.getElementById("view-rooms"),
+    "room-chat": document.getElementById("view-room-chat"),
+    profile: document.getElementById("view-profile"),
+    story: document.getElementById("view-story"),
+    relationship: document.getElementById("view-relationship"),
+    admin: document.getElementById("view-admin"),
+    legal: document.getElementById("view-legal")
+  };
 
-  const dmSidebar = document.getElementById("dmSidebar");
-  const dmButton = document.getElementById("dmButton");
+  function setView(name) {
+    Object.values(views).forEach(v => v.classList.remove("active"));
+    if (views[name]) views[name].classList.add("active");
+    document.querySelectorAll(".nav-btn").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.view === name);
+    });
+  }
 
-  const roomPopup = document.getElementById("roomPopup");
-  const profilePopup = document.getElementById("profilePopup");
+  document.querySelectorAll(".nav-btn").forEach(btn => {
+    btn.addEventListener("click", () => setView(btn.dataset.view));
+  });
 
-  let msgCount = 0;
+  const toastEl = document.getElementById("toast");
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    setTimeout(() => toastEl.classList.remove("show"), 2500);
+  }
 
-  function addMsg({ from, text, avatar }) {
+  const overlayIntro = document.getElementById("overlayIntro");
+  document.getElementById("ageConfirm").addEventListener("click", () => {
+    const age = parseInt(document.getElementById("ageInput").value, 10);
+    if (!age || age < 18) {
+      toast("You must be 18+ to enter.");
+      return;
+    }
+    overlayIntro.classList.add("hidden");
+    toast("Welcome to the Arena.");
+  });
+
+  const publicChatList = document.getElementById("publicChatList");
+  const publicInput = document.getElementById("publicInput");
+  const publicSend = document.getElementById("publicSend");
+
+  function addPublicMsg({ from, display, text, time }) {
     const wrap = document.createElement("div");
     wrap.className = "msg";
 
     const av = document.createElement("div");
     av.className = "msg-avatar";
-    if (avatar) av.style.backgroundImage = `url(${avatar})`;
 
     const body = document.createElement("div");
     body.className = "msg-body";
 
     const author = document.createElement("div");
     author.className = "msg-author";
-    author.textContent = from;
+    author.textContent = display || from || "Unknown";
 
     const txt = document.createElement("div");
     txt.className = "msg-text";
@@ -267,66 +666,343 @@
     wrap.appendChild(av);
     wrap.appendChild(body);
 
-    chat.appendChild(wrap);
-    chat.scrollTop = chat.scrollHeight;
+    publicChatList.appendChild(wrap);
+    publicChatList.scrollTop = publicChatList.scrollHeight;
   }
 
-  /* PUBLIC CHAT */
-  socket.on("publicMessage", msg => addMsg(msg));
-  socket.on("externalPublicMessage", msg => addMsg(msg));
+  fetch("/api/public-messages")
+    .then(r => r.json())
+    .then(list => {
+      list.forEach(addPublicMsg);
+    })
+    .catch(() => {});
 
-  send.onclick = () => {
-    const text = input.value.trim();
+  socket.on("publicMessage", msg => addPublicMsg(msg));
+
+  publicSend.addEventListener("click", () => {
+    const text = publicInput.value.trim();
     if (!text) return;
-
+    fetch("/api/chatMessage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text })
+    }).catch(() => {});
     socket.emit("publicMessage", {
-      from: "You",
-      display: "You",
       text
     });
-
-    addMsg({ from: "You", text });
-    input.value = "";
-  };
-
-  /* DM SIDEBAR */
-  dmButton.onclick = () => {
-    dmSidebar.classList.toggle("open");
-  };
-
-  socket.on("dmPartners", list => {
-    dmSidebar.innerHTML = "<h2>Direct Messages</h2>";
-    list.forEach(u => {
-      const div = document.createElement("div");
-      div.className = "dm-user";
-      div.textContent = u;
-      div.onclick = () => openDM(u);
-      dmSidebar.appendChild(div);
-    });
+    addPublicMsg({ from: "You", display: "You", text });
+    publicInput.value = "";
   });
+
+  publicInput.addEventListener("keydown", e => {
+    if (e.key === "Enter") publicSend.click();
+  });
+
+  const dmList = document.getElementById("dmList");
+  const dmChatMessages = document.getElementById("dmChatMessages");
+  const dmChatTitle = document.getElementById("dmChatTitle");
+  const dmTyping = document.getElementById("dmTyping");
+  const dmInput = document.getElementById("dmInput");
+  const dmSend = document.getElementById("dmSend");
+  let currentDM = null;
+
+  function loadDMPartners() {
+    fetch("/api/dm/partners", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    })
+      .then(r => r.json())
+      .then(list => {
+        dmList.innerHTML = "";
+        list.forEach(u => {
+          const div = document.createElement("div");
+          div.className = "dm-user";
+          div.textContent = u;
+          div.addEventListener("click", () => openDM(u));
+          dmList.appendChild(div);
+        });
+      })
+      .catch(() => {});
+  }
 
   function openDM(username) {
-    alert("Open DM window for " + username);
+    currentDM = username;
+    dmChatTitle.textContent = "DM · " + username;
+    dmChatMessages.innerHTML = "";
+    dmTyping.textContent = "";
+    setView("dm-chat");
+    fetch("/api/dm/history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ partner: username })
+    })
+      .then(r => r.json())
+      .then(msgs => {
+        dmChatMessages.innerHTML = "";
+        msgs.forEach(addDMMsg);
+      })
+      .catch(() => {});
   }
 
-  /* ROOMS */
-  socket.on("roomsList", rooms => {
-    roomPopup.innerHTML = "<h2>Rooms</h2>";
-    rooms.forEach(r => {
-      const div = document.createElement("div");
-      div.className = "dm-user";
-      div.textContent = (r.private ? "🔒 " : "") + r.name;
-      div.onclick = () => openRoom(r._id, r.name);
-      roomPopup.appendChild(div);
+  function addDMMsg({ from, to, text }) {
+    const wrap = document.createElement("div");
+    wrap.className = "dm-msg" + (from === "You" ? " me" : "");
+    const author = document.createElement("div");
+    author.className = "dm-author";
+    author.textContent = from;
+    const txt = document.createElement("div");
+    txt.className = "dm-text";
+    txt.textContent = text;
+    wrap.appendChild(author);
+    wrap.appendChild(txt);
+    dmChatMessages.appendChild(wrap);
+    dmChatMessages.scrollTop = dmChatMessages.scrollHeight;
+  }
+
+  socket.on("privateMessage", pm => {
+    if (!currentDM) return;
+    const other = pm.from === currentDM || pm.to === currentDM;
+    if (!other) return;
+    addDMMsg(pm);
+  });
+
+  socket.on("typingDM", ({ from }) => {
+    if (from === currentDM) dmTyping.textContent = from + " is typing…";
+  });
+
+  socket.on("stopTypingDM", ({ from }) => {
+    if (from === currentDM) dmTyping.textContent = "";
+  });
+
+  dmInput.addEventListener("input", () => {
+    if (!currentDM) return;
+    socket.emit("typingDM", {
+      to: currentDM
     });
   });
 
-  function openRoom(id, name) {
-    roomPopup.classList.add("open");
-    roomPopup.innerHTML = `<h2>${name}</h2>`;
+  dmSend.addEventListener("click", () => {
+    const text = dmInput.value.trim();
+    if (!text || !currentDM) return;
+    fetch("/api/send-dm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to: currentDM, text })
+    }).catch(() => {});
+    socket.emit("privateMessage", {
+      to: currentDM,
+      text
+    });
+    addDMMsg({ from: "You", to: currentDM, text });
+    dmInput.value = "";
+    socket.emit("stopTypingDM", { to: currentDM });
+  });
+
+  dmInput.addEventListener("keydown", e => {
+    if (e.key === "Enter") dmSend.click();
+  });
+
+  const roomsList = document.getElementById("roomsList");
+  const roomChatMessages = document.getElementById("roomChatMessages");
+  const roomChatTitle = document.getElementById("roomChatTitle");
+  const roomInput = document.getElementById("roomInput");
+  const roomSend = document.getElementById("roomSend");
+  let currentRoomId = null;
+
+  function loadRooms() {
+    fetch("/api/allUsers") // you may have a dedicated rooms endpoint; adjust if needed
+      .catch(() => {});
+    socket.emit("requestRoomMembers", { room: null });
   }
 
-</script>
+  socket.on("roomsList", rooms => {
+    roomsList.innerHTML = "";
+    rooms.forEach(r => {
+      const div = document.createElement("div");
+      div.className = "room-item";
+      div.textContent = (r.private ? "🔒 " : "") + r.name;
+      div.addEventListener("click", () => openRoom(r));
+      roomsList.appendChild(div);
+    });
+  });
 
+  function openRoom(room) {
+    currentRoomId = room._id || room.room;
+    roomChatTitle.textContent = "Room · " + (room.name || room.room);
+    roomChatMessages.innerHTML = "";
+    setView("room-chat");
+    socket.emit("joinRoom", { room: currentRoomId });
+  }
+
+  socket.on("roomMessage", msg => {
+    if (!currentRoomId) return;
+    if (msg.room !== currentRoomId && msg.roomId !== currentRoomId) return;
+    addRoomMsg(msg);
+  });
+
+  function addRoomMsg({ from, display, text }) {
+    const wrap = document.createElement("div");
+    wrap.className = "room-msg";
+    const author = document.createElement("div");
+    author.className = "dm-author";
+    author.textContent = display || from;
+    const txt = document.createElement("div");
+    txt.className = "dm-text";
+    txt.textContent = text;
+    wrap.appendChild(author);
+    wrap.appendChild(txt);
+    roomChatMessages.appendChild(wrap);
+    roomChatMessages.scrollTop = roomChatMessages.scrollHeight;
+  }
+
+  roomInput.addEventListener("input", () => {
+    if (!currentRoomId) return;
+    socket.emit("typingRoom", { room: currentRoomId });
+  });
+
+  roomSend.addEventListener("click", () => {
+    const text = roomInput.value.trim();
+    if (!text || !currentRoomId) return;
+    socket.emit("roomMessage", {
+      room: currentRoomId,
+      text
+    });
+    addRoomMsg({ from: "You", display: "You", text });
+    roomInput.value = "";
+    socket.emit("stopTypingRoom", { room: currentRoomId });
+  });
+
+  roomInput.addEventListener("keydown", e => {
+    if (e.key === "Enter") roomSend.click();
+  });
+
+  const profileDisplay = document.getElementById("profileDisplay");
+  const profileStatus = document.getElementById("profileStatus");
+  const profileBio = document.getElementById("profileBio");
+  const profileSave = document.getElementById("profileSave");
+  const profileRefresh = document.getElementById("profileRefresh");
+  const profileBlock = document.getElementById("profileBlock");
+
+  function loadProfile() {
+    fetch("/api/update-profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ load: true })
+    })
+      .then(r => r.json())
+      .then(data => {
+        profileDisplay.value = data.display || "";
+        profileStatus.value = data.status || "";
+        profileBio.value = data.bio || "";
+      })
+      .catch(() => {});
+  }
+
+  profileRefresh.addEventListener("click", loadProfile);
+
+  profileSave.addEventListener("click", () => {
+    fetch("/api/update-profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        display: profileDisplay.value.trim(),
+        status: profileStatus.value.trim(),
+        bio: profileBio.value.trim()
+      })
+    }).catch(() => {});
+    toast("Profile saved.");
+  });
+
+  profileBlock.addEventListener("click", () => {
+    fetch("/api/block-user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    }).catch(() => {});
+    socket.emit("forceLogout", {});
+    toast("User blocked (per backend logic).");
+  });
+
+  const storyList = document.getElementById("storyList");
+  const storyText = document.getElementById("storyText");
+  const storyPost = document.getElementById("storyPost");
+
+  function loadStories() {
+    fetch("/api/story/list")
+      .then(r => r.json())
+      .then(stories => {
+        storyList.innerHTML = "";
+        stories.forEach(s => {
+          const div = document.createElement("div");
+          div.className = "story-item";
+          div.textContent =
+            s.story || s.text || "" +
+            " · " +
+            (s.approved ? "Approved" : "Pending");
+          storyList.appendChild(div);
+        });
+      })
+      .catch(() => {});
+  }
+
+  storyPost.addEventListener("click", () => {
+    const text = storyText.value.trim();
+    if (!text) return;
+    fetch("/api/story/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ story: text })
+    }).catch(() => {});
+    storyText.value = "";
+    toast("Story submitted.");
+    loadStories();
+  });
+
+  const relationshipTimeline = document.getElementById("relationshipTimeline");
+
+  function loadRelationshipTimeline() {
+    fetch("/api/relationship/timeline")
+      .then(r => r.json())
+      .then(events => {
+        relationshipTimeline.innerHTML = "";
+        events.forEach(e => {
+          const div = document.createElement("div");
+          div.className = "rel-event";
+          div.textContent = e.text || e.event || "";
+          relationshipTimeline.appendChild(div);
+        });
+      })
+      .catch(() => {});
+  }
+
+  const adminPanel = document.getElementById("adminPanel");
+
+  function loadAdmin() {
+    fetch("/api/admin/users")
+      .then(r => r.json())
+      .then(users => {
+        adminPanel.innerHTML = "";
+        users.forEach(u => {
+          const div = document.createElement("div");
+          div.className = "admin-item";
+          div.textContent = u.username + " · " + (u.status || "");
+          adminPanel.appendChild(div);
+        });
+      })
+      .catch(() => {});
+  }
+
+  socket.on("presence", users => {
+    toast("Online: " + users.length);
+  });
+
+  loadDMPartners();
+  loadRooms();
+  loadProfile();
+  loadStories();
+  loadRelationshipTimeline();
+  loadAdmin();
+</script>
 </body>
 </html>
