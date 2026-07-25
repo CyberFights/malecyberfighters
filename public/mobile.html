@@ -574,7 +574,7 @@ button.small-btn {
 <div id="introGif"></div>
 
 <!-- FIRST SCREEN: LOGIN / REGISTER -->
-<div id="authScreen" class="auth-screen" styl="display:none;">
+<div id="authScreen" class="auth-screen" style="display:none;">
   <div class="auth-box">
 
     <img src="./images/mcf.png" class="holo-avatar" style="width:90px;height:90px;border-radius:10px;margin:auto;display:block">
@@ -582,11 +582,11 @@ button.small-btn {
     <h2 style="text-align:center;margin-top:10px;">NOVA OS Mobile</h2>
     <p class="muted" style="text-align:center;">Realtime Arena</p>
 
-    <button id="btnLogin" class="auth-btn">Login</button>
-    <button id="btnRegister" class="auth-btn ghost">Register</button>
+    <button id="btnLogin" class="auth-btn" type="button">Login</button>
+    <button id="btnRegister" class="auth-btn ghost" type="button">Register</button>
 
     <!-- DISCORD LOGIN -->
-    <button id="btnDiscordLogin" class="auth-btn discord">
+    <button id="btnDiscordLogin" class="auth-btn discord" type="button">
       <img src="./images/discord.svg" style="width:20px;margin-right:8px;">
       Login with Discord
     </button>
@@ -628,7 +628,19 @@ button.small-btn {
   </div>
 
 </div>
+<div id="modalLogin" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);align-items:center;justify-content:center">
+  <div>
 
+    <h3>Login</h3>
+    <input id="loginUser" type="text" placeholder="Username">
+    <input id="loginPass" type="password" placeholder="Password">
+    <div id="loginError" style="display:none"></div>
+    <div>
+      <button id="loginCancel" class="ghost">Cancel</button>
+      <button id="loginSubmit">Login</button>
+    </div>
+  </div>
+</div>
 <!-- REGISTER MODAL -->
 <div id="modalRegister" class="modal" style="display:none;">
   <div class="modal-box">
