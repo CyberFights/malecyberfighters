@@ -177,10 +177,19 @@ function updateUIForSession() {
    Initial visibility normalization
    --------------------------- */
 function ensureStartupVisibility() {
+  // If a session exists, do not force the age gate visible
+  if (getSession()) {
+    // still normalize overlays so hidden ones don't block clicks
+    document.querySelectorAll('.modal, .popup, .modal-overlay, #introGif').forEach(el => {
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.opacity === '0') el.style.pointerEvents = 'none';
+    });
+    return;
+  }
+
   // Fix common HTML typo: styl -> style on authScreen
   const authScreen = document.querySelector('[id="authScreen"]');
   if (authScreen && !authScreen.hasAttribute('style') && authScreen.getAttribute('styl')) {
-    // move styl -> style
     authScreen.setAttribute('style', authScreen.getAttribute('styl'));
     authScreen.removeAttribute('styl');
   }
@@ -195,7 +204,6 @@ function ensureStartupVisibility() {
     ageGate.dataset.display = 'flex';
   }
   if (authScreen) {
-    // if authScreen has inline style set to none, keep it hidden until age gate passes
     if (!authScreen.style.display || authScreen.style.display === '') authScreen.style.display = 'none';
     authScreen.dataset.display = authScreen.dataset.display || 'flex';
   }
@@ -204,7 +212,6 @@ function ensureStartupVisibility() {
     mainUI.dataset.display = 'block';
   }
 
-  // Ensure hidden overlays don't block clicks
   document.querySelectorAll('.modal, .popup, .modal-overlay, #introGif').forEach(el => {
     const cs = getComputedStyle(el);
     if (cs.display === 'none' || cs.opacity === '0') el.style.pointerEvents = 'none';
