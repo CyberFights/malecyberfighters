@@ -1,9 +1,9 @@
 /* =========================================================================
-   mobile.js — Patched full client
-   - Defensive bindings for AgeGate, Login, Register, Discord
-   - Robust socket init with logging and fallback
+   mobile.js — Patched full client (updated)
+   - Fixes authScreen inline-style typo at runtime
+   - Ensures Login/Register/Discord buttons open modals reliably
+   - Defensive bindings and robust socket init with logging and fallback
    - All UI handlers attached after DOMContentLoaded
-   - Minimal, safe fallbacks if server endpoints are missing
    ========================================================================= */
 
 /* ---------------------------
@@ -177,8 +177,15 @@ function updateUIForSession() {
    Initial visibility normalization
    --------------------------- */
 function ensureStartupVisibility() {
+  // Fix common HTML typo: styl -> style on authScreen
+  const authScreen = document.querySelector('[id="authScreen"]');
+  if (authScreen && !authScreen.hasAttribute('style') && authScreen.getAttribute('styl')) {
+    // move styl -> style
+    authScreen.setAttribute('style', authScreen.getAttribute('styl'));
+    authScreen.removeAttribute('styl');
+  }
+
   const ageGate = $("ageGate");
-  const authScreen = $("authScreen");
   const mainUI = $("mainUI");
 
   if (ageGate) {
@@ -188,8 +195,9 @@ function ensureStartupVisibility() {
     ageGate.dataset.display = 'flex';
   }
   if (authScreen) {
-    authScreen.style.display = 'none';
-    authScreen.dataset.display = 'flex';
+    // if authScreen has inline style set to none, keep it hidden until age gate passes
+    if (!authScreen.style.display || authScreen.style.display === '') authScreen.style.display = 'none';
+    authScreen.dataset.display = authScreen.dataset.display || 'flex';
   }
   if (mainUI) {
     mainUI.style.display = 'none';
@@ -609,6 +617,21 @@ async function logout() {
 }
 
 /* ---------------------------
+   Modal helpers (show/hide by id)
+   --------------------------- */
+function showModalById(id) {
+  const m = document.getElementById(id);
+  if (!m) return console.warn('showModal: not found', id);
+  m.dataset.display = m.dataset.display || (getComputedStyle(m).display === 'none' ? 'flex' : getComputedStyle(m).display);
+  m.style.display = m.dataset.display;
+}
+function hideModalById(id) {
+  const m = document.getElementById(id);
+  if (!m) return;
+  m.style.display = 'none';
+}
+
+/* ---------------------------
    Defensive bindings (AgeGate, Login, Register, Discord, UI)
    --------------------------- */
 document.addEventListener('DOMContentLoaded', () => {
@@ -646,7 +669,66 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   })();
 
-  // Helper to find element by id or selector
+  // Wire Login/Register buttons to open modals (explicit)
+  (function bindAuthModals() {
+    const btnLogin = document.getElementById('btnLogin') || document.querySelector('.btn-login') || document.querySelector('[data-open-login]');
+    const btnRegister = document.getElementById('btnRegister') || document.querySelector('.btn-register') || document.querySelector('[data-open-register]');
+    const btnDiscord = document.getElementById('btnDiscordLogin') || document.querySelector('.discord-login') || document.querySelector('[data-discord-login]');
+
+    if (btnLogin) {
+      btnLogin.type = 'button';
+      const fresh = btnLogin.cloneNode(true);
+      btnLogin.parentNode.replaceChild(fresh, btnLogin);
+      fresh.addEventListener('click', (e) => {
+        e.preventDefault();
+        showModalById('modalLogin');
+      });
+      console.log('btnLogin bound to modalLogin');
+    } else console.warn('btnLogin not found');
+
+    if (btnRegister) {
+      btnRegister.type = 'button';
+      const fresh = btnRegister.cloneNode(true);
+      btnRegister.parentNode.replaceChild(fresh, btnRegister);
+      fresh.addEventListener('click', (e) => {
+        e.preventDefault();
+        showModalById('modalRegister');
+      });
+      console.log('btnRegister bound to modalRegister');
+    } else console.warn('btnRegister not found');
+
+    if (btnDiscord) {
+      btnDiscord.type = 'button';
+      const fresh = btnDiscord.cloneNode(true);
+      btnDiscord.parentNode.replaceChild(fresh, btnDiscord);
+      fresh.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.location.href = '/auth/discord';
+      });
+      console.log('btnDiscordLogin bound to /auth/discord');
+    } else console.warn('btnDiscordLogin not found');
+
+    // Wire cancel buttons inside modals
+    const loginCancel = document.getElementById('loginCancel');
+    if (loginCancel) {
+      loginCancel.type = 'button';
+      loginCancel.addEventListener('click', (e) => { e.preventDefault(); hideModalById('modalLogin'); });
+    }
+    const regCancel = document.getElementById('regCancel');
+    if (regCancel) {
+      regCancel.type = 'button';
+      regCancel.addEventListener('click', (e) => { e.preventDefault(); hideModalById('modalRegister'); });
+    }
+
+    // clicking outside modal content closes it (if modal markup supports it)
+    document.querySelectorAll('.modal').forEach(modal => {
+      modal.addEventListener('click', (ev) => {
+        if (ev.target === modal) hideModalById(modal.id);
+      });
+    });
+  })();
+
+  // Helper to find element by id or selector (used by other bindings)
   const find = (ids) => {
     for (const id of ids) {
       let el = document.getElementById(id);
@@ -657,98 +739,81 @@ document.addEventListener('DOMContentLoaded', () => {
     return null;
   };
 
-  // Login binding
+  // Login binding (submit)
   (function bindLogin() {
     const loginBtn = find(['loginSubmit', '#loginSubmit', '.login-submit', '[data-login-submit]']);
-    if (!loginBtn) console.warn('loginSubmit not found');
-    else {
-      if (loginBtn.tagName.toLowerCase() === 'button') loginBtn.type = 'button';
-      const freshLogin = loginBtn.cloneNode(true);
-      loginBtn.parentNode.replaceChild(freshLogin, loginBtn);
-      freshLogin.addEventListener('click', async (e) => {
-        e.preventDefault();
-        console.log('loginSubmit clicked');
-        try {
-          if (typeof handleLoginClick === 'function') return handleLoginClick();
-          const username = document.getElementById('loginUser')?.value?.trim();
-          const password = document.getElementById('loginPass')?.value?.trim();
-          if (!username || !password) {
-            const errEl = document.getElementById('loginError'); if (errEl) { errEl.textContent = 'Enter username and password'; errEl.style.display='block'; }
-            return;
-          }
-          const res = await fetch('/api/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username,password}) });
-          const data = await res.json().catch(()=>({ok:false}));
-          if (!data.ok) {
-            const errEl = document.getElementById('loginError'); if (errEl) { errEl.textContent = data.error || 'Login failed'; errEl.style.display='block'; }
-            return;
-          }
-          setSession(data.user || data);
-          updateUIForSession();
-        } catch (err) {
-          console.error('login handler error', err);
-          alert('Login error: ' + (err.message || 'unknown'));
+    console.log('login selector matched:', loginBtn ? (loginBtn.id || loginBtn.className || loginBtn.tagName) : null);
+    if (!loginBtn) return console.warn('loginSubmit not found');
+    if (loginBtn.tagName.toLowerCase() === 'button') loginBtn.type = 'button';
+    const freshLogin = loginBtn.cloneNode(true);
+    loginBtn.parentNode.replaceChild(freshLogin, loginBtn);
+    freshLogin.addEventListener('click', async (e) => {
+      e.preventDefault();
+      console.log('loginSubmit clicked');
+      try {
+        if (typeof handleLoginClick === 'function') return handleLoginClick();
+        const username = document.getElementById('loginUser')?.value?.trim();
+        const password = document.getElementById('loginPass')?.value?.trim();
+        if (!username || !password) {
+          const errEl = document.getElementById('loginError'); if (errEl) { errEl.textContent = 'Enter username and password'; errEl.style.display='block'; }
+          return;
         }
-      });
-    }
+        const res = await fetch('/api/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username,password}) });
+        const data = await res.json().catch(()=>({ok:false}));
+        if (!data.ok) {
+          const errEl = document.getElementById('loginError'); if (errEl) { errEl.textContent = data.error || 'Login failed'; errEl.style.display='block'; }
+          return;
+        }
+        setSession(data.user || data);
+        hideModalById('modalLogin');
+        updateUIForSession();
+      } catch (err) {
+        console.error('login handler error', err);
+        alert('Login error: ' + (err.message || 'unknown'));
+      }
+    });
   })();
 
-  // Register binding
+  // Register binding (submit)
   (function bindRegister() {
     const regBtn = find(['regSubmit', '#regSubmit', '.reg-submit', '[data-reg-submit]']);
-    if (!regBtn) console.warn('regSubmit not found');
-    else {
-      if (regBtn.tagName.toLowerCase() === 'button') regBtn.type = 'button';
-      const freshReg = regBtn.cloneNode(true);
-      regBtn.parentNode.replaceChild(freshReg, regBtn);
-      freshReg.addEventListener('click', async (e) => {
-        e.preventDefault();
-        console.log('regSubmit clicked');
-        try {
-          if (typeof handleRegisterClick === 'function') return handleRegisterClick();
-          const payload = {
-            username: document.getElementById('regUser')?.value?.trim(),
-            email: document.getElementById('regEmail')?.value?.trim(),
-            display: document.getElementById('regDisplay')?.value?.trim(),
-            password: document.getElementById('regPass')?.value?.trim(),
-            age: Number(document.getElementById('regAge')?.value || 0),
-            imageUrl: document.getElementById('uploadStatus')?.dataset?.url || null
-          };
-          const res = await fetch('/api/register', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-          const data = await res.json().catch(()=>({ok:false}));
-          if (!data.ok) {
-            const errEl = document.getElementById('regError'); if (errEl) { errEl.textContent = data.error || 'Registration failed'; errEl.style.display='block'; }
-            return;
-          }
-          setSession(data.user || data);
-          updateUIForSession();
-        } catch (err) {
-          console.error('register handler error', err);
-          alert('Registration error: ' + (err.message || 'unknown'));
+    console.log('register selector matched:', regBtn ? (regBtn.id || regBtn.className || regBtn.tagName) : null);
+    if (!regBtn) return console.warn('regSubmit not found');
+    if (regBtn.tagName.toLowerCase() === 'button') regBtn.type = 'button';
+    const freshReg = regBtn.cloneNode(true);
+    regBtn.parentNode.replaceChild(freshReg, regBtn);
+    freshReg.addEventListener('click', async (e) => {
+      e.preventDefault();
+      console.log('regSubmit clicked');
+      try {
+        if (typeof handleRegisterClick === 'function') return handleRegisterClick();
+        const payload = {
+          username: document.getElementById('regUser')?.value?.trim(),
+          email: document.getElementById('regEmail')?.value?.trim(),
+          display: document.getElementById('regDisplay')?.value?.trim(),
+          password: document.getElementById('regPass')?.value?.trim(),
+          age: Number(document.getElementById('regAge')?.value || 0),
+          color: document.getElementById('regColor')?.value || null,
+          language: document.getElementById('regLanguage')?.value || null,
+          wins: Number(document.getElementById('regWins')?.value || 0),
+          losses: Number(document.getElementById('regLosses')?.value || 0),
+          info: document.getElementById('regInfo')?.value?.trim(),
+          imageUrl: document.getElementById('uploadStatus')?.dataset?.url || null
+        };
+        const res = await fetch('/api/register', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        const data = await res.json().catch(()=>({ok:false}));
+        if (!data.ok) {
+          const errEl = document.getElementById('regError'); if (errEl) { errEl.textContent = data.error || 'Registration failed'; errEl.style.display='block'; }
+          return;
         }
-      });
-    }
-  })();
-
-  // Discord OAuth binding
-  (function bindDiscord() {
-    const discordBtn = find(['btnDiscordLogin', '#btnDiscordLogin', '.discord-login', '[data-discord-login]']);
-    if (!discordBtn) console.warn('btnDiscordLogin not found');
-    else {
-      if (discordBtn.tagName.toLowerCase() === 'button') discordBtn.type = 'button';
-      const freshDiscord = discordBtn.cloneNode(true);
-      discordBtn.parentNode.replaceChild(freshDiscord, discordBtn);
-      freshDiscord.addEventListener('click', (e) => {
-        e.preventDefault();
-        console.log('btnDiscordLogin clicked');
-        try {
-          if (typeof handleDiscordLogin === 'function') return handleDiscordLogin();
-          window.location.href = '/auth/discord';
-        } catch (err) {
-          console.error('discord login handler error', err);
-          alert('Discord login error: ' + (err.message || 'unknown'));
-        }
-      });
-    }
+        setSession(data.user || data);
+        hideModalById('modalRegister');
+        updateUIForSession();
+      } catch (err) {
+        console.error('register handler error', err);
+        alert('Registration error: ' + (err.message || 'unknown'));
+      }
+    });
   })();
 
   // Other UI bindings (open/close modals, chat, rooms, support)
