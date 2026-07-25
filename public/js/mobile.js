@@ -1,17 +1,18 @@
 /* =========================================================================
-   mobile.js — Patched full client (updated)
-   - Fixes authScreen inline-style typo at runtime
-   - Ensures Login/Register/Discord buttons open modals reliably
-   - Defensive bindings and robust socket init with logging and fallback
-   - All UI handlers attached after DOMContentLoaded
+   mobile.js — Full patched client
+   - Integrated auth handlers (login/register) and optional image upload
+   - AgeGate gating with global flag to prevent mainUI leakage
+   - Defensive bindings for AgeGate, Login, Register, Discord
+   - Robust socket init with logging and REST fallback
+   - Modal helpers and UI utilities
    ========================================================================= */
 
 /* ---------------------------
    Lightweight DOM helpers
    --------------------------- */
 const $ = id => document.getElementById(id);
-const show = el => { if (!el) return; el.style.display = el.dataset.display || "flex"; };
-const hide = el => { if (!el) return; el.style.display = "none"; };
+const show = el => { if (!el) return; el.style.display = el.dataset.display || "flex"; el.style.visibility = 'visible'; el.style.pointerEvents = ''; };
+const hide = el => { if (!el) return; el.style.display = "none"; el.style.visibility = 'hidden'; el.style.pointerEvents = 'none'; };
 const on = (el, ev, fn) => { if (!el) return; el.addEventListener(ev, fn); };
 
 /* ---------------------------
@@ -62,6 +63,268 @@ function fileToBase64(file) {
     reader.onerror = err => reject(err);
     reader.readAsDataURL(file);
   });
+}
+
+/* ---------------------------
+   Auth handlers to integrate
+   - handleLoginClick, handleRegisterClick, uploadImageFile
+   - Place these above DOMContentLoaded so bindings call them
+   --------------------------- */
+
+async function handleLoginClick(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  console.log('handleLoginClick running');
+
+  const userEl = document.getElementById('loginUser');
+  const passEl = document.getElementById('loginPass');
+  const errEl  = document.getElementById('loginError');
+
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+
+  const username = userEl?.value?.trim();
+  const password = passEl?.value?.trim();
+
+  if (!username || !password) {
+    if (errEl) { errEl.textContent = 'Enter username and password'; errEl.style.display = 'block'; }
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+
+    const data = await res.json().catch(() => ({ ok: false, error: 'Invalid response' }));
+
+    if (!res.ok || !data.ok) {
+      const message = data.error || (data.message) || 'Login failed';
+      if (errEl) { errEl.textContent = message; errEl.style.display = 'block'; }
+      console.warn('login failed', message);
+      return;
+    }
+
+    // success: persist session, hide modal, update UI
+    setSession(data.user || data);
+    hideModalById('modalLogin');
+    // If age gate already passed, show main UI; otherwise authScreen will be shown by confirm flow
+    updateUIForSession();
+    console.log('login successful', data.user || data);
+  } catch (err) {
+    console.error('login error', err);
+    if (errEl) { errEl.textContent = 'Network error during login'; errEl.style.display = 'block'; }
+  }
+}
+
+async function handleRegisterClick(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  console.log('handleRegisterClick running');
+
+  const errEl = document.getElementById('regError');
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+
+  const payload = {
+    username: document.getElementById('regUser')?.value?.trim(),
+    email: document.getElementById('regEmail')?.value?.trim(),
+    display: document.getElementById('regDisplay')?.value?.trim(),
+    password: document.getElementById('regPass')?.value?.trim(),
+    age: Number(document.getElementById('regAge')?.value || 0),
+    color: document.getElementById('regColor')?.value || null,
+    language: document.getElementById('regLanguage')?.value || null,
+    wins: Number(document.getElementById('regWins')?.value || 0),
+    losses: Number(document.getElementById('regLosses')?.value || 0),
+    info: document.getElementById('regInfo')?.value?.trim() || ''
+  };
+
+  // Basic validation
+  if (!payload.username || !payload.password || !payload.email) {
+    if (errEl) { errEl.textContent = 'Username, email and password are required'; errEl.style.display = 'block'; }
+    return;
+  }
+  if (payload.age && payload.age < 13) {
+    if (errEl) { errEl.textContent = 'You must be at least 13 to register'; errEl.style.display = 'block'; }
+    return;
+  }
+
+  try {
+    // If an image file was selected, convert to base64 and include as imageUrl
+    const fileInput = document.getElementById('regImageFile');
+    if (fileInput && fileInput.files && fileInput.files.length > 0) {
+      try {
+        // Prefer server upload if your backend supports it:
+        // const url = await uploadImageFile(fileInput.files[0]);
+        // payload.imageUrl = url;
+        const b64 = await fileToBase64(fileInput.files[0]);
+        payload.imageUrl = b64;
+        const statusEl = document.getElementById('uploadStatus');
+        if (statusEl) { statusEl.textContent = 'Image attached'; statusEl.dataset.url = 'data:image'; }
+      } catch (imgErr) {
+        console.warn('image conversion failed', imgErr);
+      }
+    }
+
+    const res = await fetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json().catch(() => ({ ok: false, error: 'Invalid response' }));
+
+    if (!res.ok || !data.ok) {
+      const message = data.error || data.message || 'Registration failed';
+      if (errEl) { errEl.textContent = message; errEl.style.display = 'block'; }
+      console.warn('register failed', message);
+      return;
+    }
+
+    // success: persist session, hide modal, update UI
+    setSession(data.user || data);
+    hideModalById('modalRegister');
+    updateUIForSession();
+    console.log('registration successful', data.user || data);
+  } catch (err) {
+    console.error('register error', err);
+    if (errEl) { errEl.textContent = 'Network error during registration'; errEl.style.display = 'block'; }
+  }
+}
+
+async function uploadImageFile(file) {
+  if (!file) return null;
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch('/api/upload', { method: 'POST', body: form });
+    if (!res.ok) return null;
+    const data = await res.json().catch(()=>null);
+    return data?.url || null;
+  } catch (err) {
+    console.warn('uploadImageFile error', err);
+    return null;
+  }
+}
+
+/* ---------------------------
+   Age gate state flag (global)
+   --------------------------- */
+window.__ageGatePassed = window.__ageGatePassed || false;
+
+/* ---------------------------
+   ensureStartupVisibility (respects session and ageGate flag)
+   --------------------------- */
+function ensureStartupVisibility() {
+  // Fix common HTML typo: styl -> style on authScreen if present
+  const authScreenFix = document.querySelector('[id="authScreen"]');
+  if (authScreenFix && !authScreenFix.hasAttribute('style') && authScreenFix.getAttribute('styl')) {
+    authScreenFix.setAttribute('style', authScreenFix.getAttribute('styl'));
+    authScreenFix.removeAttribute('styl');
+  }
+
+  const ageGate = $("ageGate");
+  const auth = $("authScreen");
+  const mainUI = $("mainUI");
+
+  // If session exists and age gate already passed, show main UI and return
+  if (getSession() && window.__ageGatePassed) {
+    if (ageGate) hide(ageGate);
+    if (auth) hide(auth);
+    if (mainUI) {
+      mainUI.style.display = mainUI.dataset.display || 'block';
+      mainUI.style.visibility = 'visible';
+      mainUI.style.pointerEvents = '';
+    }
+    // normalize overlays
+    document.querySelectorAll('.modal, .popup, .modal-overlay, #introGif').forEach(el => {
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.opacity === '0') el.style.pointerEvents = 'none';
+    });
+    return;
+  }
+
+  // Default: keep age gate visible for new visitors (unless gate already passed)
+  if (ageGate && !window.__ageGatePassed) {
+    ageGate.style.display = 'flex';
+    ageGate.style.opacity = '1';
+    ageGate.style.pointerEvents = 'auto';
+    ageGate.dataset.display = 'flex';
+  } else if (ageGate && window.__ageGatePassed) {
+    hide(ageGate);
+  }
+
+  // Keep auth screen hidden until age gate passes
+  if (auth) {
+    auth.style.display = 'none';
+    auth.dataset.display = auth.dataset.display || 'flex';
+  }
+
+  // Ensure main UI is hidden and not interactable until gate passes
+  if (mainUI) {
+    mainUI.style.display = 'none';
+    mainUI.dataset.display = mainUI.dataset.display || 'block';
+    mainUI.style.visibility = 'hidden';
+    mainUI.style.pointerEvents = 'none';
+  }
+
+  // Normalize overlays so hidden ones don't block clicks
+  document.querySelectorAll('.modal, .popup, .modal-overlay, #introGif').forEach(el => {
+    const cs = getComputedStyle(el);
+    if (cs.display === 'none' || cs.opacity === '0') el.style.pointerEvents = 'none';
+  });
+}
+
+/* ---------------------------
+   confirmAgeAndProceed (set flag and reveal UI in correct order)
+   --------------------------- */
+function confirmAgeAndProceed() {
+  // mark gate passed
+  window.__ageGatePassed = true;
+
+  const ageGate = $("ageGate");
+  const introGif = $("introGif");
+  const authScreen = $("authScreen");
+  const mainUI = $("mainUI");
+
+  // show intro GIF if present
+  if (introGif) {
+    introGif.style.backgroundImage = "url('/images/intro.gif')";
+    introGif.style.opacity = '1';
+    introGif.style.display = 'block';
+  }
+
+  // hide age gate with fade
+  if (ageGate) {
+    ageGate.style.transition = 'opacity 0.6s';
+    ageGate.style.opacity = '0';
+    setTimeout(() => { ageGate.style.display = 'none'; }, 650);
+  }
+
+  // After gate hides, show auth screen (or mainUI if session exists)
+  setTimeout(() => {
+    if (getSession()) {
+      // user already logged in — show main UI
+      if (mainUI) {
+        mainUI.style.display = mainUI.dataset.display || 'block';
+        mainUI.style.visibility = 'visible';
+        mainUI.style.pointerEvents = '';
+      }
+      if (authScreen) hide(authScreen);
+      // initialize realtime now that UI is visible
+      initSocket();
+      requestInitialRealtimeState();
+      fetchInitialData();
+    } else {
+      // show auth screen for login/register
+      if (authScreen) {
+        authScreen.dataset.display = 'flex';
+        authScreen.style.display = 'flex';
+        authScreen.style.opacity = '1';
+      }
+    }
+
+    // hide introGif after a short delay
+    if (introGif) setTimeout(() => { introGif.style.opacity = '0'; setTimeout(()=> introGif.style.display='none',600); }, 5000);
+  }, 700);
 }
 
 /* ---------------------------
@@ -150,7 +413,7 @@ function initSocket() {
 }
 
 /* ---------------------------
-   UI state management
+   UI state management (respect age gate)
    --------------------------- */
 function updateUIForSession() {
   const s = getSession();
@@ -160,92 +423,36 @@ function updateUIForSession() {
   const chatLabel = $("chatUserLabel");
 
   if (s) {
+    // If age gate hasn't been passed yet, do not show main UI
+    if (!window.__ageGatePassed) {
+      if (mainUI) {
+        mainUI.style.display = 'none';
+        mainUI.style.visibility = 'hidden';
+        mainUI.style.pointerEvents = 'none';
+      }
+      if (authScreen) authScreen.style.display = 'none';
+      return;
+    }
+
+    // age gate passed — show main UI
     if (ageGate) hide(ageGate);
     if (authScreen) hide(authScreen);
-    if (mainUI) show(mainUI);
+    if (mainUI) {
+      show(mainUI);
+      mainUI.style.visibility = 'visible';
+      mainUI.style.pointerEvents = '';
+    }
     if (chatLabel) chatLabel.textContent = s.display || s.username || "You";
     initSocket();
     requestInitialRealtimeState();
     fetchInitialData();
   } else {
-    if (mainUI) hide(mainUI);
-    // authScreen remains controlled by age gate flow
-  }
-}
-
-/* ---------------------------
-   Initial visibility normalization
-   --------------------------- */
-function ensureStartupVisibility() {
-  // If a session exists, do not force the age gate visible
-  if (getSession()) {
-    // still normalize overlays so hidden ones don't block clicks
-    document.querySelectorAll('.modal, .popup, .modal-overlay, #introGif').forEach(el => {
-      const cs = getComputedStyle(el);
-      if (cs.display === 'none' || cs.opacity === '0') el.style.pointerEvents = 'none';
-    });
-    return;
-  }
-
-  // Fix common HTML typo: styl -> style on authScreen
-  const authScreen = document.querySelector('[id="authScreen"]');
-  if (authScreen && !authScreen.hasAttribute('style') && authScreen.getAttribute('styl')) {
-    authScreen.setAttribute('style', authScreen.getAttribute('styl'));
-    authScreen.removeAttribute('styl');
-  }
-
-  const ageGate = $("ageGate");
-  const mainUI = $("mainUI");
-
-  if (ageGate) {
-    ageGate.style.display = 'flex';
-    ageGate.style.opacity = '1';
-    ageGate.style.pointerEvents = 'auto';
-    ageGate.dataset.display = 'flex';
-  }
-  if (authScreen) {
-    if (!authScreen.style.display || authScreen.style.display === '') authScreen.style.display = 'none';
-    authScreen.dataset.display = authScreen.dataset.display || 'flex';
-  }
-  if (mainUI) {
-    mainUI.style.display = 'none';
-    mainUI.dataset.display = 'block';
-  }
-
-  document.querySelectorAll('.modal, .popup, .modal-overlay, #introGif').forEach(el => {
-    const cs = getComputedStyle(el);
-    if (cs.display === 'none' || cs.opacity === '0') el.style.pointerEvents = 'none';
-  });
-}
-
-/* ---------------------------
-   AgeGate flow
-   --------------------------- */
-function confirmAgeAndProceed() {
-  const ageGate = $("ageGate");
-  const introGif = $("introGif");
-  const authScreen = $("authScreen");
-
-  if (introGif) {
-    introGif.style.backgroundImage = "url('/images/intro.gif')";
-    introGif.style.opacity = '1';
-    introGif.style.display = 'block';
-  }
-
-  if (ageGate) {
-    ageGate.style.transition = 'opacity 0.6s';
-    ageGate.style.opacity = '0';
-    setTimeout(() => { ageGate.style.display = 'none'; }, 650);
-  }
-
-  setTimeout(() => {
-    if (authScreen) {
-      authScreen.dataset.display = 'flex';
-      authScreen.style.display = 'flex';
-      authScreen.style.opacity = '1';
+    if (mainUI) {
+      mainUI.style.display = 'none';
+      mainUI.style.visibility = 'hidden';
+      mainUI.style.pointerEvents = 'none';
     }
-    if (introGif) setTimeout(() => { introGif.style.opacity = '0'; setTimeout(()=> introGif.style.display='none',600); }, 5000);
-  }, 700);
+  }
 }
 
 /* ---------------------------
@@ -314,8 +521,10 @@ function sendPublicMessage() {
 }
 
 /* ---------------------------
-   Online list rendering
+   Rooms, roster, profile, support, etc.
+   (kept concise — functions referenced by UI remain available)
    --------------------------- */
+
 function renderOnlineList() {
   const el = $("onlineList");
   if (!el) return;
@@ -343,9 +552,6 @@ function renderOnlineList() {
   });
 }
 
-/* ---------------------------
-   DM / Private window (mobile)
-   --------------------------- */
 function openPrivateWindow(username) {
   const dmPopup = $("dmPopup");
   if (dmPopup) {
@@ -385,9 +591,6 @@ async function loadDMHistory(username) {
   }
 }
 
-/* ---------------------------
-   Rooms: render, open, join, leave
-   --------------------------- */
 function renderRoomsSidebar() {
   const list = $("roomsList");
   if (!list) return;
@@ -449,9 +652,6 @@ function appendRoomMessage(msg) {
   feed.scrollTop = feed.scrollHeight;
 }
 
-/* ---------------------------
-   Roster and profile loaders
-   --------------------------- */
 async function loadRoster() {
   try {
     const res = await fetch("/api/roster");
@@ -497,9 +697,6 @@ async function loadProfile(username) {
   }
 }
 
-/* ---------------------------
-   Support / admin helpers
-   --------------------------- */
 async function submitSupportReport() {
   const me = getSession();
   if (!me) return alert("You must be logged in to submit a report.");
@@ -631,17 +828,22 @@ function showModalById(id) {
   if (!m) return console.warn('showModal: not found', id);
   m.dataset.display = m.dataset.display || (getComputedStyle(m).display === 'none' ? 'flex' : getComputedStyle(m).display);
   m.style.display = m.dataset.display;
+  m.style.visibility = 'visible';
+  m.style.pointerEvents = '';
 }
 function hideModalById(id) {
   const m = document.getElementById(id);
   if (!m) return;
   m.style.display = 'none';
+  m.style.visibility = 'hidden';
+  m.style.pointerEvents = 'none';
 }
 
 /* ---------------------------
    Defensive bindings (AgeGate, Login, Register, Discord, UI)
    --------------------------- */
 document.addEventListener('DOMContentLoaded', () => {
+  // Ensure startup visibility respects session and age gate
   ensureStartupVisibility();
 
   // AgeGate confirm binding (defensive)
@@ -664,6 +866,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
           if (typeof confirmAgeAndProceed === 'function') return confirmAgeAndProceed();
           // fallback
+          window.__ageGatePassed = true;
           const ageGate = $("ageGate");
           const authScreen = $("authScreen");
           if (ageGate) { ageGate.style.opacity = '0'; setTimeout(()=> ageGate.style.display = 'none', 600); }
@@ -746,7 +949,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return null;
   };
 
-  // Login binding (submit)
+  // Login binding (submit) — uses handleLoginClick if present
   (function bindLogin() {
     const loginBtn = find(['loginSubmit', '#loginSubmit', '.login-submit', '[data-login-submit]']);
     console.log('login selector matched:', loginBtn ? (loginBtn.id || loginBtn.className || loginBtn.tagName) : null);
@@ -758,7 +961,8 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       console.log('loginSubmit clicked');
       try {
-        if (typeof handleLoginClick === 'function') return handleLoginClick();
+        if (typeof handleLoginClick === 'function') return handleLoginClick(e);
+        // fallback inline (shouldn't be reached because handleLoginClick exists)
         const username = document.getElementById('loginUser')?.value?.trim();
         const password = document.getElementById('loginPass')?.value?.trim();
         if (!username || !password) {
@@ -781,7 +985,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   })();
 
-  // Register binding (submit)
+  // Register binding (submit) — uses handleRegisterClick if present
   (function bindRegister() {
     const regBtn = find(['regSubmit', '#regSubmit', '.reg-submit', '[data-reg-submit]']);
     console.log('register selector matched:', regBtn ? (regBtn.id || regBtn.className || regBtn.tagName) : null);
@@ -793,18 +997,14 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       console.log('regSubmit clicked');
       try {
-        if (typeof handleRegisterClick === 'function') return handleRegisterClick();
+        if (typeof handleRegisterClick === 'function') return handleRegisterClick(e);
+        // fallback inline (shouldn't be reached because handleRegisterClick exists)
         const payload = {
           username: document.getElementById('regUser')?.value?.trim(),
           email: document.getElementById('regEmail')?.value?.trim(),
           display: document.getElementById('regDisplay')?.value?.trim(),
           password: document.getElementById('regPass')?.value?.trim(),
           age: Number(document.getElementById('regAge')?.value || 0),
-          color: document.getElementById('regColor')?.value || null,
-          language: document.getElementById('regLanguage')?.value || null,
-          wins: Number(document.getElementById('regWins')?.value || 0),
-          losses: Number(document.getElementById('regLosses')?.value || 0),
-          info: document.getElementById('regInfo')?.value?.trim(),
           imageUrl: document.getElementById('uploadStatus')?.dataset?.url || null
         };
         const res = await fetch('/api/register', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
@@ -921,8 +1121,8 @@ document.addEventListener("visibilitychange", () => {
 });
 
 /* ---------------------------
-   If session exists on load, initialize
+   If session exists on load, initialize (but respect age gate)
    --------------------------- */
-if (getSession()) {
+if (getSession() && window.__ageGatePassed) {
   updateUIForSession();
 }
