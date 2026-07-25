@@ -40,24 +40,42 @@ function escapeHtml(s) {
 }
 
 /* Ensure main UI hidden until login and age gate shown first */
+// Ensure AgeGate is visible first and everything else hidden until flow proceeds
 document.addEventListener("DOMContentLoaded", () => {
-  const mainUI = $("mainUI");
-  if (mainUI) mainUI.style.display = "none";
-
-  const ageGate = $("ageGate");
-  const authScreen = $("authScreen");
+  const ageGate = document.getElementById("ageGate");
+  const authScreen = document.getElementById("authScreen");
+  const mainUI = document.getElementById("mainUI");
 
   if (ageGate) {
-     show(ageGate);
-  } else {
-    if (!getSession() && authScreen) show(authScreen);
+    ageGate.style.display = "flex";
+    ageGate.style.opacity = "1";
+    ageGate.style.pointerEvents = "auto";
+    ageGate.dataset.display = "flex";
   }
 
-  if (getSession()) {
-    if (ageGate) hide(ageGate);
-    if (authScreen) hide(authScreen);
+  if (authScreen) {
+    authScreen.style.display = "none";
+    authScreen.dataset.display = "flex"; // so show() can restore to flex later
+  }
+
+  if (mainUI) {
+    mainUI.style.display = "none";
+    mainUI.dataset.display = "block"; // preserve intended display for later
   }
 });
+function normalizeHiddenOverlays() {
+  document.querySelectorAll('.modal, .popup, .modal-overlay, #introGif').forEach(el => {
+    const cs = getComputedStyle(el);
+    if (cs.display === 'none' || cs.opacity === '0') {
+      el.style.pointerEvents = 'none';
+    } else {
+      el.style.pointerEvents = '';
+    }
+  });
+}
+document.addEventListener('DOMContentLoaded', normalizeHiddenOverlays);
+document.addEventListener('visibilitychange', normalizeHiddenOverlays);
+
 /* mobile.js — Section 2: Socket.IO Initialization and Presence
    - Initializes socket connection
    - Handles connect/identify, presence updates, and core realtime events
