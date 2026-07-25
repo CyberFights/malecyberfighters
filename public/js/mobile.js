@@ -48,7 +48,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const authScreen = $("authScreen");
 
   if (ageGate) {
-     ageGate.style.display = "flex";
+     show(ageGate);
   } else {
     if (!getSession() && authScreen) show(authScreen);
   }
