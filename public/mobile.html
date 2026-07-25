@@ -53,16 +53,14 @@ button.small-btn {
 /* ============================================================
    AGE GATE (FIRST SCREEN)
    ============================================================ */
+/* Force AgeGate visible on initial load; JS will hide it when appropriate */
 #ageGate {
-  position: fixed;
-  inset: 0;
-  background: rgba(2, 6, 23, 0.95);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 99999;
-  transition: opacity 0.6s;
+  display: flex !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  z-index: 99999 !important;
 }
+
 
 #ageBox {
   background: #0f172a;
