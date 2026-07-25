@@ -63,6 +63,78 @@ document.addEventListener("DOMContentLoaded", () => {
     mainUI.dataset.display = "block"; // preserve intended display for later
   }
 });
+// Defensive AgeGate binding — paste into mobile.js inside DOMContentLoaded or at end of file
+document.addEventListener('DOMContentLoaded', () => {
+  const selectorCandidates = [
+    'confirmBtn',
+    '[data-age-confirm]',
+    '.age-confirm',
+    '#ageGate button'
+  ];
+  let btn = null;
+  for (const sel of selectorCandidates) {
+    btn = document.getElementById(sel) || document.querySelector(sel);
+    if (btn) break;
+  }
+  if (!btn) return console.warn('AgeGate confirm button not found');
+
+  // Ensure it's a button and not a submit that reloads the page
+  if (btn.tagName.toLowerCase() === 'button') btn.type = 'button';
+
+  // Replace node with clone to remove stale listeners, then attach fresh handler
+  const fresh = btn.cloneNode(true);
+  btn.parentNode.replaceChild(fresh, btn);
+
+  fresh.addEventListener('click', (e) => {
+    e.preventDefault();
+    console.log('AgeGate confirm clicked (defensive)');
+    try {
+      if (typeof confirmAgeAndProceed === 'function') {
+        return confirmAgeAndProceed();
+      }
+      // Fallback: hide age gate, show auth screen
+      const ageGate = document.getElementById('ageGate');
+      const authScreen = document.getElementById('authScreen');
+      if (ageGate) { ageGate.style.opacity = '0'; setTimeout(()=> ageGate.style.display = 'none', 600); }
+      if (authScreen) { authScreen.dataset.display = 'flex'; authScreen.style.display = 'flex'; }
+    } catch (err) {
+      console.error('confirm handler error', err);
+      alert('Error during age confirmation: ' + (err && err.message ? err.message : 'unknown'));
+    }
+  });
+});
+function confirmAgeAndProceed() {
+  console.log('confirmAgeAndProceed running');
+  const ageGate = document.getElementById('ageGate');
+  const introGif = document.getElementById('introGif');
+  const authScreen = document.getElementById('authScreen');
+
+  // show intro GIF briefly
+  if (introGif) {
+    introGif.style.backgroundImage = "url('/images/intro.gif')";
+    introGif.style.opacity = '1';
+    introGif.style.display = 'block';
+  }
+
+  // hide age gate with fade
+  if (ageGate) {
+    ageGate.style.transition = 'opacity 0.6s';
+    ageGate.style.opacity = '0';
+    setTimeout(() => { ageGate.style.display = 'none'; }, 650);
+  }
+
+  // show auth screen after short delay
+  setTimeout(() => {
+    if (authScreen) {
+      authScreen.dataset.display = 'flex';
+      authScreen.style.display = 'flex';
+      authScreen.style.opacity = '1';
+    }
+    // hide introGif after a few seconds
+    if (introGif) setTimeout(() => { introGif.style.opacity = '0'; setTimeout(()=> introGif.style.display='none',600); }, 5000);
+  }, 700);
+}
+
 function normalizeHiddenOverlays() {
   document.querySelectorAll('.modal, .popup, .modal-overlay, #introGif').forEach(el => {
     const cs = getComputedStyle(el);
