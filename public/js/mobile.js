@@ -276,6 +276,7 @@ function ensureStartupVisibility() {
 /* ---------------------------
    confirmAgeAndProceed (set flag and reveal UI in correct order)
    --------------------------- */
+// Replace existing confirmAgeAndProceed with this
 function confirmAgeAndProceed() {
   // mark gate passed
   window.__ageGatePassed = true;
@@ -299,33 +300,29 @@ function confirmAgeAndProceed() {
     setTimeout(() => { ageGate.style.display = 'none'; }, 650);
   }
 
-  // After gate hides, show auth screen (or mainUI if session exists)
+  // After gate hides, always show the auth screen (login/register/discord)
   setTimeout(() => {
-    if (getSession()) {
-      // user already logged in — show main UI
-      if (mainUI) {
-        mainUI.style.display = mainUI.dataset.display || 'block';
-        mainUI.style.visibility = 'visible';
-        mainUI.style.pointerEvents = '';
-      }
-      if (authScreen) hide(authScreen);
-      // initialize realtime now that UI is visible
-      initSocket();
-      requestInitialRealtimeState();
-      fetchInitialData();
-    } else {
-      // show auth screen for login/register
-      if (authScreen) {
-        authScreen.dataset.display = 'flex';
-        authScreen.style.display = 'flex';
-        authScreen.style.opacity = '1';
-      }
+    // Always show auth screen so user can login/register/discord
+    if (authScreen) {
+      authScreen.dataset.display = 'flex';
+      authScreen.style.display = 'flex';
+      authScreen.style.opacity = '1';
+      authScreen.style.visibility = 'visible';
+      authScreen.style.pointerEvents = '';
+    }
+
+    // Ensure mainUI remains hidden until a session is set and updateUIForSession runs
+    if (mainUI) {
+      mainUI.style.display = 'none';
+      mainUI.style.visibility = 'hidden';
+      mainUI.style.pointerEvents = 'none';
     }
 
     // hide introGif after a short delay
     if (introGif) setTimeout(() => { introGif.style.opacity = '0'; setTimeout(()=> introGif.style.display='none',600); }, 5000);
   }, 700);
 }
+
 
 /* ---------------------------
    Socket.IO (defensive)
