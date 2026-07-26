@@ -651,7 +651,7 @@ function appendRoomMessage(msg) {
 
 async function loadRoster() {
   try {
-    const res = await fetch("/api/roster");
+    const res = await fetch("/api/allUsers");
     if (!res.ok) return;
     const data = await res.json();
     const list = $("rosterList");
