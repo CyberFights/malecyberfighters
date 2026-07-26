@@ -1,11 +1,9 @@
 /* =========================================================================
-   mobile.js — Complete patched client
-   - Integrated auth handlers (login/register) and optional image upload
-   - AgeGate gating with global flag to prevent mainUI leakage
-   - Defensive bindings for AgeGate, Login, Register, Discord
-   - Roster and View Profile wiring (IDs matched to provided markup)
-   - Robust socket init with logging and REST fallback
-   - Modal helpers and UI utilities
+   mobile.js — Complete patched client (final)
+   - All handlers defined before DOMContentLoaded to avoid ReferenceError
+   - submitSupportReport exposed on window
+   - btnRegister binding fixed and defensive
+   - AgeGate gating, auth handlers, roster/profile, sockets, UI helpers
    ========================================================================= */
 
 /* ---------------------------
@@ -20,7 +18,6 @@ const on = (el, ev, fn) => { if (!el) return; el.addEventListener(ev, fn); };
    Session helpers
    --------------------------- */
 const SESSION_KEY = "cw_session_v1";
-
 function getSession() {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
@@ -29,7 +26,6 @@ function getSession() {
     return null;
   }
 }
-
 function setSession(obj) {
   if (!obj) {
     localStorage.removeItem(SESSION_KEY);
@@ -47,7 +43,6 @@ function escapeHtml(s) {
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   })[c]);
 }
-
 function debounce(fn, wait = 250) {
   let t;
   return function (...args) {
@@ -55,7 +50,6 @@ function debounce(fn, wait = 250) {
     t = setTimeout(() => fn.apply(this, args), wait);
   };
 }
-
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     if (!file) return resolve(null);
@@ -67,13 +61,52 @@ function fileToBase64(file) {
 }
 
 /* ---------------------------
+   Support / admin helpers
+   - Exposed on window to avoid ReferenceError
+   --------------------------- */
+async function submitSupportReport() {
+  const me = getSession();
+  if (!me) {
+    alert("You must be logged in to submit a report.");
+    return;
+  }
+
+  const payload = {
+    from: me.username,
+    type: $("srType")?.value || "general",
+    user: $("srUser")?.value || null,
+    where: $("srWhere")?.value || null,
+    when: $("srWhen")?.value || null,
+    info: $("srInfo")?.value || ""
+  };
+
+  try {
+    const res = await fetch("/api/support", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(()=>({ok:false}));
+    if (data && data.ok) {
+      alert("Support request submitted.");
+      hide($("supportPopup"));
+    } else {
+      alert(data.error || "Failed to submit support request.");
+    }
+  } catch (err) {
+    alert("Network error while submitting support request.");
+  }
+}
+window.submitSupportReport = submitSupportReport;
+
+/* ---------------------------
    Auth handlers to integrate
    --------------------------- */
 async function handleLoginClick(e) {
   if (e && e.preventDefault) e.preventDefault();
-  const userEl = document.getElementById('loginUser');
-  const passEl = document.getElementById('loginPass');
-  const errEl  = document.getElementById('loginError');
+  const userEl = $("loginUser");
+  const passEl = $("loginPass");
+  const errEl  = $("loginError");
   if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
 
   const username = userEl?.value?.trim();
@@ -90,15 +123,12 @@ async function handleLoginClick(e) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
-
     const data = await res.json().catch(() => ({ ok: false, error: 'Invalid response' }));
-
     if (!res.ok || !data.ok) {
       const message = data.error || data.message || 'Login failed';
       if (errEl) { errEl.textContent = message; errEl.style.display = 'block'; }
       return;
     }
-
     setSession(data.user || data);
     hideModalById('modalLogin');
     updateUIForSession();
@@ -106,23 +136,24 @@ async function handleLoginClick(e) {
     if (errEl) { errEl.textContent = 'Network error during login'; errEl.style.display = 'block'; }
   }
 }
+window.handleLoginClick = handleLoginClick;
 
 async function handleRegisterClick(e) {
   if (e && e.preventDefault) e.preventDefault();
-  const errEl = document.getElementById('regError');
+  const errEl = $("regError");
   if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
 
   const payload = {
-    username: document.getElementById('regUser')?.value?.trim(),
-    email: document.getElementById('regEmail')?.value?.trim(),
-    display: document.getElementById('regDisplay')?.value?.trim(),
-    password: document.getElementById('regPass')?.value?.trim(),
-    age: Number(document.getElementById('regAge')?.value || 0),
-    color: document.getElementById('regColor')?.value || null,
-    language: document.getElementById('regLanguage')?.value || null,
-    wins: Number(document.getElementById('regWins')?.value || 0),
-    losses: Number(document.getElementById('regLosses')?.value || 0),
-    info: document.getElementById('regInfo')?.value?.trim() || ''
+    username: $("regUser")?.value?.trim(),
+    email: $("regEmail")?.value?.trim(),
+    display: $("regDisplay")?.value?.trim(),
+    password: $("regPass")?.value?.trim(),
+    age: Number($("regAge")?.value || 0),
+    color: $("regColor")?.value || null,
+    language: $("regLanguage")?.value || null,
+    wins: Number($("regWins")?.value || 0),
+    losses: Number($("regLosses")?.value || 0),
+    info: $("regInfo")?.value?.trim() || ''
   };
 
   if (!payload.username || !payload.password || !payload.email) {
@@ -135,12 +166,12 @@ async function handleRegisterClick(e) {
   }
 
   try {
-    const fileInput = document.getElementById('regImageFile');
+    const fileInput = $("regImageFile");
     if (fileInput && fileInput.files && fileInput.files.length > 0) {
       try {
         const b64 = await fileToBase64(fileInput.files[0]);
         payload.imageUrl = b64;
-        const statusEl = document.getElementById('uploadStatus');
+        const statusEl = $("uploadStatus");
         if (statusEl) { statusEl.textContent = 'Image attached'; statusEl.dataset.url = 'data:image'; }
       } catch (imgErr) {
         // ignore image conversion error
@@ -152,15 +183,12 @@ async function handleRegisterClick(e) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-
     const data = await res.json().catch(() => ({ ok: false, error: 'Invalid response' }));
-
     if (!res.ok || !data.ok) {
       const message = data.error || data.message || 'Registration failed';
       if (errEl) { errEl.textContent = message; errEl.style.display = 'block'; }
       return;
     }
-
     setSession(data.user || data);
     hideModalById('modalRegister');
     updateUIForSession();
@@ -168,7 +196,11 @@ async function handleRegisterClick(e) {
     if (errEl) { errEl.textContent = 'Network error during registration'; errEl.style.display = 'block'; }
   }
 }
+window.handleRegisterClick = handleRegisterClick;
 
+/* ---------------------------
+   Image upload helper (optional)
+   --------------------------- */
 async function uploadImageFile(file) {
   if (!file) return null;
   try {
@@ -249,7 +281,6 @@ function ensureStartupVisibility() {
    --------------------------- */
 function confirmAgeAndProceed() {
   window.__ageGatePassed = true;
-
   const ageGate = $("ageGate");
   const introGif = $("introGif");
   const authScreen = $("authScreen");
@@ -275,29 +306,26 @@ function confirmAgeAndProceed() {
       authScreen.style.visibility = 'visible';
       authScreen.style.pointerEvents = '';
     }
-
     if (mainUI) {
       mainUI.style.display = 'none';
       mainUI.style.visibility = 'hidden';
       mainUI.style.pointerEvents = 'none';
     }
-
     if (introGif) setTimeout(() => { introGif.style.opacity = '0'; setTimeout(()=> introGif.style.display='none',600); }, 5000);
   }, 700);
 }
+window.confirmAgeAndProceed = confirmAgeAndProceed;
 
 /* ---------------------------
    Socket.IO (defensive)
    --------------------------- */
 let socket = null;
-
 function initSocket() {
   if (socket) return;
   if (typeof io === "undefined") {
     console.warn('socket.io client not loaded');
     return;
   }
-
   try {
     socket = io({
       path: '/socket.io',
@@ -417,13 +445,11 @@ async function loadPublicMessages() {
     // ignore
   }
 }
-
 function appendPublicMessage(msg) {
   const feed = $("publicFeed");
   if (!feed) return;
   const s = getSession();
   const isMe = s && msg.from === s.username;
-
   const row = document.createElement("div");
   row.className = "message-row";
   row.innerHTML = `
@@ -441,7 +467,6 @@ function appendPublicMessage(msg) {
   feed.appendChild(row);
   feed.scrollTop = feed.scrollHeight;
 }
-
 function sendPublicMessage() {
   const input = $("publicMessage");
   if (!input) return;
@@ -449,7 +474,6 @@ function sendPublicMessage() {
   if (!text) return;
   const s = getSession();
   if (!s) return alert("You must be logged in to send messages.");
-
   const msg = {
     from: s.username,
     display: s.display || s.username,
@@ -458,10 +482,8 @@ function sendPublicMessage() {
     imageUrl: s.imageUrl || null,
     color: s.color || null
   };
-
   if (socket) socket.emit("publicMessage", msg);
   else fetch("/api/public-messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(msg) });
-
   appendPublicMessage(msg);
   input.value = "";
 }
@@ -469,7 +491,6 @@ function sendPublicMessage() {
 /* ---------------------------
    Rooms, roster, profile, support, etc.
    --------------------------- */
-
 function renderOnlineList() {
   const el = $("onlineList");
   if (!el) return;
@@ -597,68 +618,31 @@ function appendRoomMessage(msg) {
   feed.scrollTop = feed.scrollHeight;
 }
 
-async function loadRoster() {
-  try {
-    const res = await fetch("/api/allUsers");
-    if (!res.ok) return;
-    const data = await res.json();
-    window.__rosterCache = data.users || [];
-  } catch (err) {
-    window.__rosterCache = window.__rosterCache || [];
-  }
-}
-
-async function loadProfile(username) {
-  try {
-    const res = await fetch(`/api/user/${encodeURIComponent(username)}`);
-    if (!res.ok) return;
-    const data = await res.json();
-    if (!data.user) return;
-    const profile = data.user;
-    if ($("vpName")) $("vpName").textContent = profile.display || profile.username;
-    if ($("vpAvatar")) $("vpAvatar").src = profile.imageUrl || '/images/default-avatar.png';
-    if ($("vpUsername")) $("vpUsername").textContent = profile.username || '';
-    if ($("vpBio")) $("vpBio").textContent = profile.info || '';
-    if ($("vpWins")) $("vpWins").textContent = profile.wins != null ? String(profile.wins) : '0';
-    if ($("vpLosses")) $("vpLosses").textContent = profile.losses != null ? String(profile.losses) : '0';
-    if ($("vpColorBox")) $("vpColorBox").style.background = profile.color || 'transparent';
-    if ($("vpLang")) $("vpLang").textContent = profile.language || '';
-    if ($("vpAge")) $("vpAge").textContent = profile.age != null ? String(profile.age) : '';
-    if ($("modalViewProfile")) {
-      $("modalViewProfile").dataset.username = profile.username || '';
-      show($("modalViewProfile"));
-    }
-  } catch (err) {
-    // ignore
-  }
-}
-
 /* ---------------------------
-   Roster + View Profile wiring
-   (IDs matched to provided markup)
+   Roster / View Profile (IDs matched to provided markup)
    --------------------------- */
 (function bindRosterAndProfile() {
-  const rosterModal = document.getElementById('modalRoster');
-  const rosterSearch = document.getElementById('rosterSearch');
-  const rosterPageEl = document.getElementById('rosterPage');
-  const rosterClose = document.getElementById('rosterClose');
-  const rosterPrev = document.getElementById('rosterPrev');
-  const rosterNext = document.getElementById('rosterNext');
-  const rosterPageNumber = document.getElementById('rosterPageNumber');
+  const rosterModal = $("modalRoster");
+  const rosterSearch = $("rosterSearch");
+  const rosterPageEl = $("rosterPage");
+  const rosterClose = $("rosterClose");
+  const rosterPrev = $("rosterPrev");
+  const rosterNext = $("rosterNext");
+  const rosterPageNumber = $("rosterPageNumber");
 
-  const vpModal = document.getElementById('modalViewProfile');
-  const vpName = document.getElementById('vpName');
-  const vpClose = document.getElementById('vpClose');
-  const vpAvatar = document.getElementById('vpAvatar');
-  const vpUsername = document.getElementById('vpUsername');
-  const vpBio = document.getElementById('vpBio');
-  const vpWins = document.getElementById('vpWins');
-  const vpLosses = document.getElementById('vpLosses');
-  const vpColorBox = document.getElementById('vpColorBox');
-  const vpLang = document.getElementById('vpLang');
-  const vpAge = document.getElementById('vpAge');
-  const vpDMButton = document.getElementById('vpDMButton');
-  const vpBlockButton = document.getElementById('vpBlockButton');
+  const vpModal = $("modalViewProfile");
+  const vpName = $("vpName");
+  const vpClose = $("vpClose");
+  const vpAvatar = $("vpAvatar");
+  const vpUsername = $("vpUsername");
+  const vpBio = $("vpBio");
+  const vpWins = $("vpWins");
+  const vpLosses = $("vpLosses");
+  const vpColorBox = $("vpColorBox");
+  const vpLang = $("vpLang");
+  const vpAge = $("vpAge");
+  const vpDMButton = $("vpDMButton");
+  const vpBlockButton = $("vpBlockButton");
 
   if (!rosterPageEl) return;
 
@@ -711,7 +695,7 @@ async function loadProfile(username) {
 
   async function fetchRoster(query = '') {
     try {
-      const url = query ? `/api/allUsers?search=${encodeURIComponent(query)}` : '/api/allUsers';
+      const url = query ? `/api/roster?search=${encodeURIComponent(query)}` : '/api/roster';
       const res = await fetch(url);
       if (!res.ok) return;
       const data = await res.json().catch(()=>({users:[]}));
@@ -785,7 +769,7 @@ async function loadProfile(username) {
       if (vpModal) hide(vpModal);
       return;
     }
-    const dmPopup = document.getElementById('dmPopup');
+    const dmPopup = $("dmPopup");
     if (dmPopup) {
       dmPopup.dataset.partner = username;
       show(dmPopup);
@@ -891,7 +875,7 @@ async function logout() {
    Modal helpers (show/hide by id)
    --------------------------- */
 function showModalById(id) {
-  const m = document.getElementById(id);
+  const m = $(id);
   if (!m) return;
   m.dataset.display = m.dataset.display || (getComputedStyle(m).display === 'none' ? 'flex' : getComputedStyle(m).display);
   m.style.display = m.dataset.display;
@@ -899,7 +883,7 @@ function showModalById(id) {
   m.style.pointerEvents = '';
 }
 function hideModalById(id) {
-  const m = document.getElementById(id);
+  const m = $(id);
   if (!m) return;
   m.style.display = 'none';
   m.style.visibility = 'hidden';
@@ -912,62 +896,109 @@ function hideModalById(id) {
 document.addEventListener('DOMContentLoaded', () => {
   ensureStartupVisibility();
 
+  // AgeGate confirm binding
   (function bindAgeGate() {
     const candidates = ['confirmBtn', '[data-age-confirm]', '.age-confirm', '#ageGate button'];
     let btn = null;
     for (const sel of candidates) {
-      btn = document.getElementById(sel) || document.querySelector(sel);
+      btn = document.getElementById(sel.replace(/^#/, '')) || document.querySelector(sel);
       if (btn) break;
     }
-    if (!btn) {
-      // no age gate button found
-    } else {
-      if (btn.tagName.toLowerCase() === 'button') btn.type = 'button';
-      const fresh = btn.cloneNode(true);
-      btn.parentNode.replaceChild(fresh, btn);
-      fresh.addEventListener('click', (e) => {
-        e.preventDefault();
-        if (typeof confirmAgeAndProceed === 'function') return confirmAgeAndProceed();
-        window.__ageGatePassed = true;
-        const ageGate = $("ageGate");
-        const authScreen = $("authScreen");
-        if (ageGate) { ageGate.style.opacity = '0'; setTimeout(()=> ageGate.style.display = 'none', 600); }
-        if (authScreen) { authScreen.dataset.display = 'flex'; authScreen.style.display = 'flex'; }
-      });
-    }
+    if (!btn) return;
+    if (btn.tagName.toLowerCase() === 'button') btn.type = 'button';
+    const fresh = btn.cloneNode(true);
+    btn.parentNode.replaceChild(fresh, btn);
+    fresh.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (typeof confirmAgeAndProceed === 'function') return confirmAgeAndProceed();
+      window.__ageGatePassed = true;
+      const ageGate = $("ageGate");
+      const authScreen = $("authScreen");
+      if (ageGate) { ageGate.style.opacity = '0'; setTimeout(()=> ageGate.style.display = 'none', 600); }
+      if (authScreen) { authScreen.dataset.display = 'flex'; authScreen.style.display = 'flex'; }
+    });
   })();
 
+  // Auth modal openers (defensive)
   (function bindAuthModals() {
-    const btnLogin = document.getElementById('btnLogin') || document.querySelector('.btn-login') || document.querySelector('[data-open-login]');
-    const btnRegister = document.getElementById('btnRegister') || document.querySelector('.btn-register') || document.querySelector('[data-open-register]');
-    const btnDiscord = document.getElementById('btnDiscordLogin') || document.querySelector('.discord-login') || document.querySelector('[data-discord-login]');
-
-    if (btnLogin) {
-      btnLogin.type = 'button';
-      const fresh = btnLogin.cloneNode(true);
-      btnLogin.parentNode.replaceChild(fresh, btnLogin);
-      fresh.addEventListener('click', (e) => { e.preventDefault(); showModalById('modalLogin'); });
+    // Register: robust selector and binding
+    const registerSelectors = ['#btnRegister', '#registerBtn', '.btn-register', '[data-open-register]'];
+    let regBtn = null;
+    for (const s of registerSelectors) {
+      regBtn = document.getElementById(s.replace(/^#/, '')) || document.querySelector(s);
+      if (regBtn) { console.log('register selector matched:', s); break; }
+    }
+    if (regBtn) {
+      try {
+        if (regBtn.tagName.toLowerCase() === 'button') regBtn.type = 'button';
+        const fresh = regBtn.cloneNode(true);
+        regBtn.parentNode.replaceChild(fresh, regBtn);
+        fresh.addEventListener('click', (e) => {
+          e.preventDefault();
+          const modal = $("modalRegister") || document.querySelector('.modal-register');
+          if (!modal) return console.error('modalRegister not found');
+          modal.dataset.display = modal.dataset.display || (getComputedStyle(modal).display === 'none' ? 'flex' : getComputedStyle(modal).display);
+          modal.style.display = modal.dataset.display;
+          modal.style.visibility = 'visible';
+          modal.style.pointerEvents = '';
+          const auth = $("authScreen");
+          if (auth && getComputedStyle(auth).display === 'none') { auth.dataset.display = 'flex'; auth.style.display = 'flex'; }
+        });
+      } catch (err) {
+        console.error('Error binding register button', err);
+      }
+    } else {
+      console.warn('Register open button not found. Tried:', registerSelectors.join(', '));
     }
 
-    if (btnRegister) {
-      btnRegister.type = 'button';
-      const fresh = btnRegister.cloneNode(true);
-      btnRegister.parentNode.replaceChild(fresh, btnRegister);
-      fresh.addEventListener('click', (e) => { e.preventDefault(); showModalById('modalRegister'); });
+    // Login
+    const loginSelectors = ['#btnLogin', '#loginBtn', '.btn-login', '[data-open-login]'];
+    let loginBtn = null;
+    for (const s of loginSelectors) {
+      loginBtn = document.getElementById(s.replace(/^#/, '')) || document.querySelector(s);
+      if (loginBtn) break;
+    }
+    if (loginBtn) {
+      if (loginBtn.tagName.toLowerCase() === 'button') loginBtn.type = 'button';
+      const fresh = loginBtn.cloneNode(true);
+      loginBtn.parentNode.replaceChild(fresh, loginBtn);
+      fresh.addEventListener('click', (e) => {
+        e.preventDefault();
+        const modal = $("modalLogin") || document.querySelector('.modal-login');
+        if (!modal) return console.error('modalLogin not found');
+        modal.dataset.display = modal.dataset.display || (getComputedStyle(modal).display === 'none' ? 'flex' : getComputedStyle(modal).display);
+        modal.style.display = modal.dataset.display;
+        modal.style.visibility = 'visible';
+        modal.style.pointerEvents = '';
+        const auth = $("authScreen");
+        if (auth && getComputedStyle(auth).display === 'none') { auth.dataset.display = 'flex'; auth.style.display = 'flex'; }
+      });
     }
 
-    if (btnDiscord) {
-      btnDiscord.type = 'button';
-      const fresh = btnDiscord.cloneNode(true);
-      btnDiscord.parentNode.replaceChild(fresh, btnDiscord);
-      fresh.addEventListener('click', (e) => { e.preventDefault(); window.location.href = '/auth/discord'; });
+    // Discord
+    const discordSelectors = ['#btnDiscordLogin', '.discord-login', '[data-discord-login]'];
+    let discordBtn = null;
+    for (const s of discordSelectors) {
+      discordBtn = document.getElementById(s.replace(/^#/, '')) || document.querySelector(s);
+      if (discordBtn) break;
+    }
+    if (discordBtn) {
+      if (discordBtn.tagName.toLowerCase() === 'button') discordBtn.type = 'button';
+      const fresh = discordBtn.cloneNode(true);
+      discordBtn.parentNode.replaceChild(fresh, discordBtn);
+      fresh.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.location.href = '/auth/discord';
+      });
     }
 
-    const loginCancel = document.getElementById('loginCancel');
+    // Cancel buttons inside modals
+    const loginCancel = $("loginCancel");
     if (loginCancel) { loginCancel.type = 'button'; loginCancel.addEventListener('click', (e) => { e.preventDefault(); hideModalById('modalLogin'); }); }
-    const regCancel = document.getElementById('regCancel');
+    const regCancel = $("regCancel");
     if (regCancel) { regCancel.type = 'button'; regCancel.addEventListener('click', (e) => { e.preventDefault(); hideModalById('modalRegister'); }); }
 
+    // clicking outside modal content closes it
     document.querySelectorAll('.modal').forEach(modal => {
       modal.addEventListener('click', (ev) => {
         if (ev.target === modal) hideModalById(modal.id);
@@ -975,6 +1006,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   })();
 
+  // Helper to find element by id or selector
   const find = (ids) => {
     for (const id of ids) {
       let el = document.getElementById(id);
@@ -985,6 +1017,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return null;
   };
 
+  // Login submit binding
   (function bindLogin() {
     const loginBtn = find(['loginSubmit', '#loginSubmit', '.login-submit', '[data-login-submit]']);
     if (!loginBtn) return;
@@ -997,6 +1030,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   })();
 
+  // Register submit binding
   (function bindRegister() {
     const regBtn = find(['regSubmit', '#regSubmit', '.reg-submit', '[data-reg-submit]']);
     if (!regBtn) return;
@@ -1009,6 +1043,28 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   })();
 
+  // Defensive binding for support submit (avoid ReferenceError)
+  const srBtn = $("srSubmit");
+  if (srBtn) {
+    srBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      try {
+        if (typeof window.submitSupportReport === 'function') {
+          await window.submitSupportReport();
+        } else if (typeof submitSupportReport === 'function') {
+          await submitSupportReport();
+        } else {
+          console.warn('submitSupportReport is not defined. Support submit aborted.');
+          const err = $("srError");
+          if (err) { err.textContent = 'Support feature temporarily unavailable.'; err.style.display = 'block'; }
+        }
+      } catch (err) {
+        console.error('Error running submitSupportReport:', err);
+      }
+    });
+  }
+
+  // Other UI bindings
   on($("btnOpenChat"), "click", () => { show($("chatPopup")); loadPublicMessages(); renderOnlineList(); });
   on($("btnCloseChat"), "click", () => hide($("chatPopup")));
   on($("btnMinimize"), "click", () => {
@@ -1026,7 +1082,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   on($("openSupport"), "click", () => show($("supportPopup")));
   on($("closeSupport"), "click", () => hide($("supportPopup")));
-  if ($("srSubmit")) on($("srSubmit"), "click", submitSupportReport);
 
   on($("roomSendBtn"), "click", () => {
     const text = $("roomMessageInput")?.value?.trim();
@@ -1110,48 +1165,3 @@ document.addEventListener("visibilitychange", () => {
 if (getSession() && window.__ageGatePassed) {
   updateUIForSession();
 }
-
-// Defensive binding for Register open button
-(function ensureRegisterOpensModal() {
-  const trySelectors = ['#btnRegister', '#registerBtn', '.btn-register', '[data-open-register]'];
-  let btn = null;
-  for (const s of trySelectors) {
-    btn = document.getElementById(s.replace(/^#/, '')) || document.querySelector(s);
-    if (btn) { console.log('register selector matched:', s); break; }
-  }
-  if (!btn) {
-    console.warn('Register open button not found. Tried:', trySelectors.join(', '));
-    return;
-  }
-
-  try {
-    if (btn.tagName.toLowerCase() === 'button') btn.type = 'button';
-    // replace node to clear stale listeners then rebind
-    const fresh = btn.cloneNode(true);
-    btn.parentNode.replaceChild(fresh, btn);
-    fresh.addEventListener('click', (e) => {
-      e.preventDefault();
-      console.log('btnRegister clicked — attempting to open modalRegister');
-      const modal = document.getElementById('modalRegister') || document.querySelector('.modal-register');
-      if (!modal) {
-        console.error('modalRegister element not found. Ensure id="modalRegister" exists.');
-        return;
-      }
-      // ensure modal is visible and not blocked
-      modal.dataset.display = modal.dataset.display || (getComputedStyle(modal).display === 'none' ? 'flex' : getComputedStyle(modal).display);
-      modal.style.display = modal.dataset.display;
-      modal.style.visibility = 'visible';
-      modal.style.pointerEvents = '';
-      // if authScreen is hidden by ageGate, ensure authScreen is visible
-      const auth = document.getElementById('authScreen');
-      if (auth && getComputedStyle(auth).display === 'none') {
-        auth.dataset.display = auth.dataset.display || 'flex';
-        auth.style.display = 'flex';
-      }
-      console.log('modalRegister shown');
-    });
-  } catch (err) {
-    console.error('Error binding btnRegister:', err);
-  }
-})();
-
