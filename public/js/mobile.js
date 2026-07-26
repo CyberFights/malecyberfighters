@@ -714,7 +714,7 @@ function appendRoomMessage(msg) {
 
   async function fetchRoster(query = '') {
     try {
-      const url = query ? `/api/roster?search=${encodeURIComponent(query)}` : '/api/roster';
+      const url = query ? `/api/allUsers?search=${encodeURIComponent(query)}` : '/api/allUsers';
       const res = await fetch(url);
       if (!res.ok) return;
       const data = await res.json().catch(()=>({users:[]}));
