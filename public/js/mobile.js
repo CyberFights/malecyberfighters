@@ -1,9 +1,9 @@
 /* =========================================================================
-   mobile.js — Complete patched client (final)
-   - All handlers defined before DOMContentLoaded to avoid ReferenceError
-   - submitSupportReport exposed on window
-   - btnRegister binding fixed and defensive
-   - AgeGate gating, auth handlers, roster/profile, sockets, UI helpers
+   mobile.js — Final integrated client
+   - Ensures Register button reliably opens #modalRegister
+   - All handlers defined and exposed before DOMContentLoaded
+   - Defensive bindings, age gate, auth, roster/profile, sockets, UI helpers
+   - Designed to be dropped in as a single file
    ========================================================================= */
 
 /* ---------------------------
@@ -61,8 +61,27 @@ function fileToBase64(file) {
 }
 
 /* ---------------------------
+   Modal helper (centralized)
+   --------------------------- */
+function showModalById(id) {
+  const m = document.getElementById(id);
+  if (!m) return console.warn('showModalById: not found', id);
+  m.dataset.display = m.dataset.display || (getComputedStyle(m).display === 'none' ? 'flex' : getComputedStyle(m).display);
+  m.style.display = m.dataset.display;
+  m.style.visibility = 'visible';
+  m.style.pointerEvents = 'auto';
+  m.style.zIndex = 99999;
+}
+function hideModalById(id) {
+  const m = document.getElementById(id);
+  if (!m) return;
+  m.style.display = 'none';
+  m.style.visibility = 'hidden';
+  m.style.pointerEvents = 'none';
+}
+
+/* ---------------------------
    Support / admin helpers
-   - Exposed on window to avoid ReferenceError
    --------------------------- */
 async function submitSupportReport() {
   const me = getSession();
@@ -89,7 +108,7 @@ async function submitSupportReport() {
     const data = await res.json().catch(()=>({ok:false}));
     if (data && data.ok) {
       alert("Support request submitted.");
-      hide($("supportPopup"));
+      hideModalById("supportPopup");
     } else {
       alert(data.error || "Failed to submit support request.");
     }
@@ -100,7 +119,7 @@ async function submitSupportReport() {
 window.submitSupportReport = submitSupportReport;
 
 /* ---------------------------
-   Auth handlers to integrate
+   Auth handlers (exposed)
    --------------------------- */
 async function handleLoginClick(e) {
   if (e && e.preventDefault) e.preventDefault();
@@ -199,7 +218,7 @@ async function handleRegisterClick(e) {
 window.handleRegisterClick = handleRegisterClick;
 
 /* ---------------------------
-   Image upload helper (optional)
+   Optional image upload helper
    --------------------------- */
 async function uploadImageFile(file) {
   if (!file) return null;
@@ -216,12 +235,12 @@ async function uploadImageFile(file) {
 }
 
 /* ---------------------------
-   Age gate state flag (global)
+   Age gate state flag
    --------------------------- */
 window.__ageGatePassed = window.__ageGatePassed || false;
 
 /* ---------------------------
-   ensureStartupVisibility (respects session and ageGate flag)
+   ensureStartupVisibility
    --------------------------- */
 function ensureStartupVisibility() {
   const authScreenFix = document.querySelector('[id="authScreen"]');
@@ -389,7 +408,7 @@ function initSocket() {
 }
 
 /* ---------------------------
-   UI state management (respect age gate)
+   UI state management
    --------------------------- */
 function updateUIForSession() {
   const s = getSession();
@@ -430,7 +449,7 @@ function updateUIForSession() {
 }
 
 /* ---------------------------
-   Public messages (arena)
+   Public messages
    --------------------------- */
 async function loadPublicMessages() {
   try {
@@ -489,7 +508,7 @@ function sendPublicMessage() {
 }
 
 /* ---------------------------
-   Rooms, roster, profile, support, etc.
+   Rooms, roster, profile
    --------------------------- */
 function renderOnlineList() {
   const el = $("onlineList");
@@ -872,26 +891,7 @@ async function logout() {
 }
 
 /* ---------------------------
-   Modal helpers (show/hide by id)
-   --------------------------- */
-function showModalById(id) {
-  const m = $(id);
-  if (!m) return;
-  m.dataset.display = m.dataset.display || (getComputedStyle(m).display === 'none' ? 'flex' : getComputedStyle(m).display);
-  m.style.display = m.dataset.display;
-  m.style.visibility = 'visible';
-  m.style.pointerEvents = '';
-}
-function hideModalById(id) {
-  const m = $(id);
-  if (!m) return;
-  m.style.display = 'none';
-  m.style.visibility = 'hidden';
-  m.style.pointerEvents = 'none';
-}
-
-/* ---------------------------
-   Defensive bindings (AgeGate, Login, Register, Discord, UI)
+   Defensive bindings and startup
    --------------------------- */
 document.addEventListener('DOMContentLoaded', () => {
   ensureStartupVisibility();
@@ -921,76 +921,75 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Auth modal openers (defensive)
   (function bindAuthModals() {
-    // Register: robust selector and binding
-    const registerSelectors = ['#btnRegister', '#registerBtn', '.btn-register', '[data-open-register]'];
-    let regBtn = null;
-    for (const s of registerSelectors) {
-      regBtn = document.getElementById(s.replace(/^#/, '')) || document.querySelector(s);
-      if (regBtn) { console.log('register selector matched:', s); break; }
-    }
-    if (regBtn) {
+    // Register opener (robust)
+    (function rebindRegisterOpener() {
+      const selectors = ['#btnRegister', '#registerBtn', '.btn-register', '[data-open-register]'];
+      let btn = null;
+      for (const s of selectors) {
+        btn = document.getElementById(s.replace(/^#/, '')) || document.querySelector(s);
+        if (btn) { console.log('register selector matched:', s); break; }
+      }
+      if (!btn) return console.warn('Register open button not found');
       try {
-        if (regBtn.tagName.toLowerCase() === 'button') regBtn.type = 'button';
-        const fresh = regBtn.cloneNode(true);
-        regBtn.parentNode.replaceChild(fresh, regBtn);
+        if (btn.tagName.toLowerCase() === 'button') btn.type = 'button';
+        const fresh = btn.cloneNode(true);
+        btn.parentNode.replaceChild(fresh, btn);
         fresh.addEventListener('click', (e) => {
           e.preventDefault();
-          const modal = $("modalRegister") || document.querySelector('.modal-register');
-          if (!modal) return console.error('modalRegister not found');
-          modal.dataset.display = modal.dataset.display || (getComputedStyle(modal).display === 'none' ? 'flex' : getComputedStyle(modal).display);
-          modal.style.display = modal.dataset.display;
-          modal.style.visibility = 'visible';
-          modal.style.pointerEvents = '';
-          const auth = $("authScreen");
-          if (auth && getComputedStyle(auth).display === 'none') { auth.dataset.display = 'flex'; auth.style.display = 'flex'; }
+          const auth = document.getElementById('authScreen');
+          if (auth && getComputedStyle(auth).display === 'none') {
+            auth.style.display = 'flex';
+            auth.style.visibility = 'visible';
+            auth.style.pointerEvents = 'auto';
+          }
+          showModalById('modalRegister');
         });
       } catch (err) {
-        console.error('Error binding register button', err);
+        console.error('Error binding register opener', err);
       }
-    } else {
-      console.warn('Register open button not found. Tried:', registerSelectors.join(', '));
-    }
+    })();
 
-    // Login
-    const loginSelectors = ['#btnLogin', '#loginBtn', '.btn-login', '[data-open-login]'];
-    let loginBtn = null;
-    for (const s of loginSelectors) {
-      loginBtn = document.getElementById(s.replace(/^#/, '')) || document.querySelector(s);
-      if (loginBtn) break;
-    }
-    if (loginBtn) {
-      if (loginBtn.tagName.toLowerCase() === 'button') loginBtn.type = 'button';
-      const fresh = loginBtn.cloneNode(true);
-      loginBtn.parentNode.replaceChild(fresh, loginBtn);
+    // Login opener
+    (function bindLoginOpener() {
+      const selectors = ['#btnLogin', '#loginBtn', '.btn-login', '[data-open-login]'];
+      let btn = null;
+      for (const s of selectors) {
+        btn = document.getElementById(s.replace(/^#/, '')) || document.querySelector(s);
+        if (btn) break;
+      }
+      if (!btn) return;
+      if (btn.tagName.toLowerCase() === 'button') btn.type = 'button';
+      const fresh = btn.cloneNode(true);
+      btn.parentNode.replaceChild(fresh, btn);
       fresh.addEventListener('click', (e) => {
         e.preventDefault();
-        const modal = $("modalLogin") || document.querySelector('.modal-login');
-        if (!modal) return console.error('modalLogin not found');
-        modal.dataset.display = modal.dataset.display || (getComputedStyle(modal).display === 'none' ? 'flex' : getComputedStyle(modal).display);
-        modal.style.display = modal.dataset.display;
-        modal.style.visibility = 'visible';
-        modal.style.pointerEvents = '';
-        const auth = $("authScreen");
-        if (auth && getComputedStyle(auth).display === 'none') { auth.dataset.display = 'flex'; auth.style.display = 'flex'; }
+        const auth = document.getElementById('authScreen');
+        if (auth && getComputedStyle(auth).display === 'none') {
+          auth.style.display = 'flex';
+          auth.style.visibility = 'visible';
+          auth.style.pointerEvents = 'auto';
+        }
+        showModalById('modalLogin');
       });
-    }
+    })();
 
-    // Discord
-    const discordSelectors = ['#btnDiscordLogin', '.discord-login', '[data-discord-login]'];
-    let discordBtn = null;
-    for (const s of discordSelectors) {
-      discordBtn = document.getElementById(s.replace(/^#/, '')) || document.querySelector(s);
-      if (discordBtn) break;
-    }
-    if (discordBtn) {
-      if (discordBtn.tagName.toLowerCase() === 'button') discordBtn.type = 'button';
-      const fresh = discordBtn.cloneNode(true);
-      discordBtn.parentNode.replaceChild(fresh, discordBtn);
+    // Discord opener
+    (function bindDiscordOpener() {
+      const selectors = ['#btnDiscordLogin', '.discord-login', '[data-discord-login]'];
+      let btn = null;
+      for (const s of selectors) {
+        btn = document.getElementById(s.replace(/^#/, '')) || document.querySelector(s);
+        if (btn) break;
+      }
+      if (!btn) return;
+      if (btn.tagName.toLowerCase() === 'button') btn.type = 'button';
+      const fresh = btn.cloneNode(true);
+      btn.parentNode.replaceChild(fresh, btn);
       fresh.addEventListener('click', (e) => {
         e.preventDefault();
         window.location.href = '/auth/discord';
       });
-    }
+    })();
 
     // Cancel buttons inside modals
     const loginCancel = $("loginCancel");
@@ -1030,8 +1029,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   })();
 
-  // Register submit binding
-  (function bindRegister() {
+  // Register submit binding (ensures regSubmit calls handler)
+  (function bindRegisterSubmit() {
     const regBtn = find(['regSubmit', '#regSubmit', '.reg-submit', '[data-reg-submit]']);
     if (!regBtn) return;
     if (regBtn.tagName.toLowerCase() === 'button') regBtn.type = 'button';
@@ -1040,10 +1039,11 @@ document.addEventListener('DOMContentLoaded', () => {
     freshReg.addEventListener('click', async (e) => {
       e.preventDefault();
       if (typeof handleRegisterClick === 'function') return handleRegisterClick(e);
+      alert('Registration handler missing.');
     });
   })();
 
-  // Defensive binding for support submit (avoid ReferenceError)
+  // Defensive binding for support submit
   const srBtn = $("srSubmit");
   if (srBtn) {
     srBtn.addEventListener('click', async (e) => {
@@ -1076,12 +1076,21 @@ document.addEventListener('DOMContentLoaded', () => {
   on($("publicMessage"), "keydown", e => { if (e.key === "Enter") sendPublicMessage(); });
 
   on($("btnDMs"), "click", () => show($("dmSidebar")));
-  on($("btnRoster"), "click", () => { show($("modalRoster")); loadRoster(); window.openRosterModal && window.openRosterModal(); });
+  on($("btnRoster"), "click", () => {
+    show($("modalRoster"));
+    try {
+      if (typeof window.loadRoster === 'function') window.loadRoster();
+      else if (typeof loadRoster === 'function') loadRoster();
+    } catch (err) {
+      console.error('Error calling loadRoster:', err);
+    }
+    if (typeof window.openRosterModal === 'function') window.openRosterModal();
+  });
 
   on($("btnRooms"), "click", () => { show($("roomsPanel")); if (socket) socket.emit("requestRooms"); else fetchInitialData(); });
 
-  on($("openSupport"), "click", () => show($("supportPopup")));
-  on($("closeSupport"), "click", () => hide($("supportPopup")));
+  on($("openSupport"), "click", () => showModalById("supportPopup"));
+  on($("closeSupport"), "click", () => hideModalById("supportPopup"));
 
   on($("roomSendBtn"), "click", () => {
     const text = $("roomMessageInput")?.value?.trim();
@@ -1109,13 +1118,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   on($("closeRoomChat"), "click", closeRoomPopup);
 
-  on($("openProfile"), "click", () => show($("modalViewProfile")));
-  on($("closeViewProfile"), "click", () => hide($("modalViewProfile")));
-  on($("openEditProfile"), "click", () => show($("modalEditProfile")));
-  on($("closeEditProfile"), "click", () => hide($("modalEditProfile")));
+  on($("openProfile"), "click", () => showModalById("modalViewProfile"));
+  on($("closeViewProfile"), "click", () => hideModalById("modalViewProfile"));
+  on($("openEditProfile"), "click", () => showModalById("modalEditProfile"));
+  on($("closeEditProfile"), "click", () => hideModalById("modalEditProfile"));
 
-  on($("btnAdmin"), "click", () => { show($("modalAdmin")); loadAdminData(); });
-  on($("closeAdmin"), "click", () => hide($("modalAdmin")));
+  on($("btnAdmin"), "click", () => { showModalById("modalAdmin"); loadAdminData(); });
+  on($("closeAdmin"), "click", () => hideModalById("modalAdmin"));
 
   if ($("btnLogout")) on($("btnLogout"), "click", logout);
 
@@ -1132,7 +1141,7 @@ function requestInitialRealtimeState() {
 }
 
 /* ---------------------------
-   Expose debug API
+   Expose debug API and ensure functions available globally
    --------------------------- */
 window.__cw = window.__cw || {};
 Object.assign(window.__cw, {
@@ -1143,12 +1152,13 @@ Object.assign(window.__cw, {
   hide,
   initSocket,
   fetchInitialData,
-  loadRoster,
-  loadProfile,
+  loadRoster: window.loadRoster || (typeof loadRoster === 'function' ? loadRoster : undefined),
+  loadProfile: window.loadProfile || (typeof loadProfile === 'function' ? loadProfile : undefined),
   openRoomPopup,
   renderOnlineList,
   renderRoomsSidebar
 });
+if (typeof loadRoster === 'function') window.loadRoster = loadRoster;
 
 /* ---------------------------
    Visibility change handling
