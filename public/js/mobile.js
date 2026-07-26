@@ -1110,3 +1110,48 @@ document.addEventListener("visibilitychange", () => {
 if (getSession() && window.__ageGatePassed) {
   updateUIForSession();
 }
+
+// Defensive binding for Register open button
+(function ensureRegisterOpensModal() {
+  const trySelectors = ['#btnRegister', '#registerBtn', '.btn-register', '[data-open-register]'];
+  let btn = null;
+  for (const s of trySelectors) {
+    btn = document.getElementById(s.replace(/^#/, '')) || document.querySelector(s);
+    if (btn) { console.log('register selector matched:', s); break; }
+  }
+  if (!btn) {
+    console.warn('Register open button not found. Tried:', trySelectors.join(', '));
+    return;
+  }
+
+  try {
+    if (btn.tagName.toLowerCase() === 'button') btn.type = 'button';
+    // replace node to clear stale listeners then rebind
+    const fresh = btn.cloneNode(true);
+    btn.parentNode.replaceChild(fresh, btn);
+    fresh.addEventListener('click', (e) => {
+      e.preventDefault();
+      console.log('btnRegister clicked — attempting to open modalRegister');
+      const modal = document.getElementById('modalRegister') || document.querySelector('.modal-register');
+      if (!modal) {
+        console.error('modalRegister element not found. Ensure id="modalRegister" exists.');
+        return;
+      }
+      // ensure modal is visible and not blocked
+      modal.dataset.display = modal.dataset.display || (getComputedStyle(modal).display === 'none' ? 'flex' : getComputedStyle(modal).display);
+      modal.style.display = modal.dataset.display;
+      modal.style.visibility = 'visible';
+      modal.style.pointerEvents = '';
+      // if authScreen is hidden by ageGate, ensure authScreen is visible
+      const auth = document.getElementById('authScreen');
+      if (auth && getComputedStyle(auth).display === 'none') {
+        auth.dataset.display = auth.dataset.display || 'flex';
+        auth.style.display = 'flex';
+      }
+      console.log('modalRegister shown');
+    });
+  } catch (err) {
+    console.error('Error binding btnRegister:', err);
+  }
+})();
+
