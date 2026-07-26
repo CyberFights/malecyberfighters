@@ -666,12 +666,130 @@ button.small-btn {
     max-width: 520px;
   }
 }
+/* Modal overlay */
+.modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2,6,23,0.6);
+  z-index: 99999;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Modal inner box */
+.modal-box {
+  width: 92%;
+  max-width: 760px;
+  max-height: 86vh;
+  overflow: auto;
+  background: linear-gradient(180deg, #0b1220 0%, #0f1724 100%);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6), 0 2px 6px rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,255,255,0.04);
+  color: #e6eef8;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+/* Modal header and content spacing */
+.modal-box h3 {
+  margin: 0 0 12px 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+/* Buttons row */
+.modal-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+/* Make inputs full width on mobile */
+.modal-box input,
+.modal-box select,
+.modal-box textarea,
+.modal-box button {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 8px;
+}
+
+/* Smaller controls inline on wide screens */
+@media (min-width: 720px) {
+  .modal-box input[type="color"],
+  .modal-box input[type="number"] {
+    width: auto;
+    display: inline-block;
+  }
+  .modal-buttons button {
+    width: auto;
+  }
+}
+
+/* Ensure modal content is tappable */
+.modal,
+.modal-box {
+  pointer-events: auto;
+}
+
+/* Simple show animation */
+.modal.show {
+  display: flex;
+  animation: modalFade 180ms ease-out;
+}
+@keyframes modalFade {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 </style>
 </head>
 
 <body>
+<!-- REGISTER MODAL -->
+<div id="modalRegister" class="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);align-items:center;justify-content:center">
+  <div class="modal-box">
+    <h3>Register</h3>
 
+    <input id="regUser" type="text" placeholder="Username" required>
+    <input id="regEmail" type="email" placeholder="Email" required>
+
+    <input id="regDisplay" type="text" placeholder="Display name" required>
+    <input id="regAge" type="number" min="13" placeholder="Age" required>
+
+    <input id="regPass" type="password" placeholder="Password" required>
+
+    <input id="regColor" type="color" required>
+
+    <select id="regLanguage">
+      <option value="en">English</option>
+      <option value="es">Spanish</option>
+      <option value="fr">French</option>
+      <option value="de">German</option>
+    </select>
+
+    <input id="regWins" type="number" placeholder="Wins">
+    <input id="regLosses" type="number" placeholder="Losses">
+
+    <textarea id="regInfo" placeholder="Short bio / info" rows="3"></textarea>
+
+    <input id="regImageFile" type="file" accept="image/*">
+    <button id="btnUploadImage" class="small-btn">Upload Image</button>
+    <div id="uploadStatus">No image uploaded</div>
+
+    <div class="modal-buttons">
+      <button id="regCancel" class="ghost">Cancel</button>
+      <button id="regSubmit">Create Account</button>
+    </div>
+
+    <div id="regError" class="error"></div>
+  </div>
+</div>
 <!-- AGE GATE -->
 <div id="ageGate" style="display:flex;">
   <div id="ageBox" style="display:flex;">
@@ -751,45 +869,7 @@ button.small-btn {
     </div>
   </div>
 </div>
-<!-- REGISTER MODAL -->
-<div id="modalRegister" class="modal" style="display:none;">
-  <div class="modal-box">
-    <h3>Register</h3>
 
-    <input id="regUser" type="text" placeholder="Username" required>
-    <input id="regEmail" type="email" placeholder="Email" required>
-
-    <input id="regDisplay" type="text" placeholder="Display name" required>
-    <input id="regAge" type="number" min="13" placeholder="Age" required>
-
-    <input id="regPass" type="password" placeholder="Password" required>
-
-    <input id="regColor" type="color" required>
-
-    <select id="regLanguage">
-      <option value="en">English</option>
-      <option value="es">Spanish</option>
-      <option value="fr">French</option>
-      <option value="de">German</option>
-    </select>
-
-    <input id="regWins" type="number" placeholder="Wins">
-    <input id="regLosses" type="number" placeholder="Losses">
-
-    <textarea id="regInfo" placeholder="Short bio / info" rows="3"></textarea>
-
-    <input id="regImageFile" type="file" accept="image/*">
-    <button id="btnUploadImage" class="small-btn">Upload Image</button>
-    <div id="uploadStatus">No image uploaded</div>
-
-    <div class="modal-buttons">
-      <button id="regCancel" class="ghost">Cancel</button>
-      <button id="regSubmit">Create Account</button>
-    </div>
-
-    <div id="regError" class="error"></div>
-  </div>
-</div>
 
 <!-- CHAT POPUP -->
 <div id="chatPopup" class="chat-popup" style="display:none">
