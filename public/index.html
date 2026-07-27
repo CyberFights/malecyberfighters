@@ -65,7 +65,17 @@ header{display:flex;align-items:center;justify-content:space-between;gap:16px}
   box-shadow:0 0 12px #7fd8ff, 0 0 24px #7fd8ff;
 }
 
-.actions{display:flex;gap:10px;flex-wrap:wrap}
+.actions {
+  position: fixed;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 18px; /* evenly spaced */
+  width: 200px;
+}
+
 
 button{
   background:linear-gradient(135deg,#7fd8ff,#b0c4ff);
@@ -80,7 +90,14 @@ button.ghost{
   color:var(--muted);
 }
 
-.grid{display:grid;grid-template-columns:1fr 320px;gap:18px;margin-top:22px}
+.grid{display:grid;
+      grid-template-columns:1fr 320px;
+      gap:18px;
+      margin-top:22px;
+       margin-left: 240px; /* leave room for left buttons */
+  margin-right: 300px; /* leave room for right profile */
+}
+     }
 
 .card{
   background:var(--card);
@@ -164,26 +181,28 @@ button.ghost{
 }
 
 /* DM SIDEBAR --------------------------------------------------------------- */
-#dmSidebar {
+/* POPUP BASE */
+.dm-panel,
+.rooms-panel {
   position: fixed;
-  top: 0;
-  left: -300px; /* hidden by default */
-  width: 240px;
-  height: 100vh;
-
-  background: rgba(160,200,255,0.06);
-  border-right: 1px solid rgba(160,200,255,0.15);
-  backdrop-filter: blur(12px);
-
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  overflow-y: auto;
-
-  box-shadow: 0 0 25px rgba(120,180,255,0.25);
-  transition: left 0.35s ease;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 6, 23, 0.7);
   z-index: 9999;
+}
+
+/* POPUP CONTENT BOX */
+.dm-panel .side-panel-header,
+.rooms-panel .side-panel-header {
+  background: rgba(15, 23, 42, 0.9);
+  padding: 20px;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 420px;
+  border: 1px solid #38bdf8;
+  backdrop-filter: blur(12px);
 }
 
 #dmSidebar.open {
@@ -475,32 +494,6 @@ table tr:hover {
     max-height:90vh;
     overflow:auto
   }
-
-  #roomsSidebar {
-  position: fixed;
-  top: 0;
-  right: -320px; /* hidden by default */
-  width: 220px;
-  height: 100vh;
-
-  background: rgba(160,200,255,0.06);
-  border-left: 1px solid rgba(160,200,255,0.15);
-  backdrop-filter: blur(12px);
-
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
-
-  box-shadow: 0 0 25px rgba(127,216,255,0.25);
-  transition: right 0.35s ease;
-  z-index: 9999;
-}
-
-#roomsSidebar.open {
-  right: 0;
-}
 
 .rooms-header {
   display: flex;
@@ -1387,6 +1380,18 @@ table tr:hover {
 
 #supportPopup #srSubmit:hover {
   background: #5ab0ff;
+}
+#userProfileCard {
+  position: fixed;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 260px;
+  background: rgba(15, 23, 42, 0.8);
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid #38bdf8;
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
 }
 
 </style>
