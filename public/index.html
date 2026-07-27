@@ -91,12 +91,17 @@ button.ghost{
 }
 
 .grid{  
-   display: grid;
-  grid-template-columns: 200px 1fr 300px;
-  gap: 20px;
+ display: grid;
+  grid-template-columns: 1fr; /* single horizontal content area */
+  width: 100%;
   position: relative;
 }
-     }
+ .gridContent {
+  display: flex;
+  flex-direction: row;
+  gap: 20px;
+}
+
 
 .card{
   background:var(--card);
@@ -1386,16 +1391,17 @@ table tr:hover {
 }
 #userProfileCard {
   position: absolute;
-  right: -320px; /* moves it OUTSIDE the grid */
   top: 0;
+  right: -300px; /* pushes it OUTSIDE the grid */
   width: 260px;
+   height: 100%;
+   overflow-y: auto;
   background: rgba(15, 23, 42, 0.8);
   padding: 20px;
   border-radius: 12px;
   border: 1px solid #38bdf8;
   box-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
-}
-
+   
 #layoutWrapper {
   position: relative;
   width: 100%;
@@ -1466,6 +1472,7 @@ table tr:hover {
 </header>
 <div id="layoutWrapper">
 <div class="grid">
+ <div class="gridContent">  
   <div class="card hero">
     <h2>Welcome to the Arena</h2>
     <p class="muted">This website connects discord cyber fighters with non discord users. Now you can chat in real time with anyone on the United Gay Cyber Wrestling discord server without needing a discord account.</p>
@@ -1483,7 +1490,12 @@ table tr:hover {
     <div class="muted">- avatar images - dm chats - fix user roster button  - working on public/private rooms - private room invites - support system - image uploads in dm and custom rooms - story creation - user relationships - relationship timeline - story/relationship approval
         </div>
     </div>
-      </div>
+  <aside class="card">
+    <h3>Quick Roster</h3>
+    <div id="quickRoster" class="roster-list"></div>
+  </aside>
+</div>
+</div>
     <div class="user-profile-card" id="userProfileCard">
             <button id="btnEditProfile" class="ghost">Edit Profile</button>
       <div>🔒 Not logged in</div>
@@ -1492,11 +1504,7 @@ table tr:hover {
 
   </div>
 
-  <aside class="card">
-    <h3>Quick Roster</h3>
-    <div id="quickRoster" class="roster-list"></div>
-  </aside>
-</div>
+  
 
 <footer>Male Cyber Fighters</footer>
 </div>
