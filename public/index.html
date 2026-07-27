@@ -990,24 +990,21 @@ footer{
 #userProfileCard > * {
     display: flex;
     flex-direction: column;
-    position: absolute;
-    gap: 6px;
-    top: 0;
-    right: -30px;
-    width: 220px;
-    height: 80%;
-    overflow-x: auto;
+    gap: 12px;
     background: rgba(15, 23, 42, 0.8);
     padding: 20px;
     border-radius: 12px;
     border: 1px solid #38bdf8;
     box-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
+    width: 100%;
+    position: relative;
 }
 
 #layoutWrapper {
     position: relative;
     width: 100%;
 }
+
 
 
 </style>
@@ -1029,8 +1026,7 @@ footer{
 <!-- INTRO GIF -->
 <div id="introGif"></div>
 
-<!-- DM SIDEBAR (hidden until toggled) -->
-<div id="dmSidebar"></div>
+
 
 <div class="container">
 
@@ -1113,7 +1109,7 @@ footer{
 </div>
 
 <!-- LOGIN MODAL -->
-<div id="modalLogin" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);align-items:center;justify-content:center">
+<div id="modalLogin" style="display:none;position:fixed;inset:0;background:black;align-items:center;justify-content:center">
   <div>
 
     <h3>Login</h3>
@@ -1191,7 +1187,7 @@ footer{
 </div>
 
 <!-- REGISTER MODAL -->
-<div id="modalRegister" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.6);align-items:center;justify-content:center">
+<div id="modalRegister" style="display:none;position:fixed;inset:0;background:black;align-items:center;justify-content:center">
   <div>
 
     <h3>Register - click upload image before create account</h3>
