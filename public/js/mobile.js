@@ -670,33 +670,104 @@ function appendRoomMessage(msg) {
   const PAGE_SIZE = 12;
 
   function renderRosterPage() {
-    rosterPageEl.innerHTML = '';
-    const start = rosterPageIndex * PAGE_SIZE;
-    const pageItems = rosterItems.slice(start, start + PAGE_SIZE);
-    pageItems.forEach(u => {
-      const row = document.createElement('div');
-      row.className = 'roster-row';
-      row.style.display = 'flex';
-      row.style.alignItems = 'center';
-      row.style.justifyContent = 'space-between';
-      row.style.padding = '8px';
-      row.style.borderBottom = '1px solid rgba(255,255,255,0.03)';
-      row.innerHTML = `
-        <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0">
-          <div style="width:44px;height:44px;border-radius:8px;overflow:hidden;flex:0 0 44px">
-            ${u.imageUrl ? `<img src="${u.imageUrl}" style="width:44px;height:44px;object-fit:cover">` : `<div style="width:44px;height:44px;background:#0f172a;display:flex;align-items:center;justify-content:center;color:#9fb7ff">${(u.display||u.username||'U').charAt(0)}</div>`}
-          </div>
-          <div style="flex:1;min-width:0">
-            <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(u.display || u.username)}</div>
-            <div class="small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">@${escapeHtml(u.username)}</div>
-          </div>
+  const el = $('rosterPage');
+  if (!el) return;
+
+  // Clear existing content
+  el.innerHTML = '';
+
+  // Source of users (try the caches you use)
+  const source = window.allUsers || window.users || window.__users || [];
+  const users = Array.isArray(source) ? [...source] : [];
+
+  // Optional search filter (if rosterSearch exists)
+  const searchInput = $('rosterSearch');
+  const search = (searchInput?.value || '').trim().toLowerCase();
+
+  // Sort newest first if createdAt exists
+  users.sort((a, b) => {
+    const ta = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const tb = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return tb - ta;
+  });
+
+  // Apply search filter
+  const filtered = users.filter(u => {
+    if (!search) return true;
+    const uname = (u.username || '').toLowerCase();
+    const display = (u.display || '').toLowerCase();
+    return uname.includes(search) || display.includes(search);
+  });
+
+  // Pagination (uses rosterPage and rosterPerPage from mobile.js)
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / rosterPerPage || 1));
+  if (typeof rosterPage === 'undefined' || rosterPage < 1) rosterPage = 1;
+  if (rosterPage > totalPages) rosterPage = totalPages;
+
+  const start = (rosterPage - 1) * rosterPerPage;
+  const end = start + rosterPerPage;
+  const pageItems = filtered.slice(start, end);
+
+  // Render each user row
+  pageItems.forEach(u => {
+    const div = document.createElement('div');
+    div.className = 'roster-user';
+    div.dataset.username = u.username || '';
+
+    const avatarHtml = u.imageUrl
+      ? `<img src="${escapeHtml(u.imageUrl)}" class="roster-avatar" alt="${escapeHtml(u.display || u.username)} avatar">`
+      : `<div class="avatar-fallback roster-avatar" aria-hidden="true">${escapeHtml((u.display || u.username || 'U').charAt(0))}</div>`;
+
+    div.innerHTML = `
+      <div style="display:flex;gap:12px;align-items:center;flex:1;min-width:0">
+        <div style="flex:0 0 auto">${avatarHtml}</div>
+        <div style="flex:1;min-width:0;overflow:hidden">
+          <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(u.display || u.username)}</div>
+          <div class="roster-username small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">@${escapeHtml(u.username)}</div>
         </div>
-        <div style="flex:0 0 auto;margin-left:12px">
-          <button class="small-btn roster-view-btn" data-username="${escapeHtml(u.username)}">View</button>
-        </div>
-      `;
-      rosterPageEl.appendChild(row);
-    });
+      </div>
+      <div style="flex:0 0 auto;margin-left:8px;display:flex;gap:8px;align-items:center">
+        <button class="small-btn roster-msg-btn" data-user="${escapeHtml(u.username)}" type="button" aria-label="Message ${escapeHtml(u.display || u.username)}">Message</button>
+        <button class="small-btn roster-view-btn" data-user="${escapeHtml(u.username)}" type="button" aria-label="View ${escapeHtml(u.display || u.username)}">View</button>
+      </div>
+    `;
+
+    el.appendChild(div);
+  });
+
+  // Update page label if present
+  const pageLabel = $('rosterPageNumber');
+  if (pageLabel) pageLabel.textContent = `Page ${rosterPage} / ${totalPages}`;
+
+  // Event delegation: single handler for message/view/profile open
+  // Replace previous handler to avoid duplicates
+  el.onclick = function (e) {
+    const btn = e.target.closest('button[data-user]');
+    if (btn) {
+      const username = btn.dataset.user;
+      if (!username) return;
+      if (btn.classList.contains('roster-msg-btn')) {
+        // Message button
+        if (typeof openPrivateWindow === 'function') openPrivateWindow(username);
+        return;
+      }
+      if (btn.classList.contains('roster-view-btn')) {
+        // View profile button
+        if (typeof openUserProfile === 'function') openUserProfile(username);
+        return;
+      }
+    }
+
+    // If user tapped the row (not a button), open profile
+    const row = e.target.closest('.roster-user');
+    if (row && !e.target.closest('button')) {
+      const username = row.dataset.username;
+      if (username && typeof openUserProfile === 'function') openUserProfile(username);
+    }
+  };
+}
+
 
     const totalPages = Math.max(1, Math.ceil(rosterItems.length / PAGE_SIZE));
     if (rosterPageNumber) rosterPageNumber.textContent = `${rosterPageIndex + 1} / ${totalPages}`;
