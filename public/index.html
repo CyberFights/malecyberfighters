@@ -1005,6 +1005,21 @@ footer{
     width: 100%;
 }
 
+  #modalLogin > div {
+    background:#111;
+    padding:20px;
+    border-radius:10px;
+    width:360px
+  }
+
+  #modalRegister > div {
+    background:#111;
+    padding:18px;
+    border-radius:10px;
+    width:520px;
+    max-height:90vh;
+    overflow:auto
+  }
 
 
 </style>
@@ -1098,7 +1113,6 @@ footer{
     <div class="user-profile-card" id="userProfileCard">
             <button id="btnEditProfile" class="ghost">Edit Profile</button>
       <div>🔒 Not logged in</div>
-      <p>Login or register to see your profile</p>
    </div>
 
   </div>
@@ -1494,7 +1508,7 @@ footer{
   </div>
 </div>
 
-<div id="dmSidebar" class="dm-panel">
+<div id="dmSidebar" class="dm-panel" style="background:#111;padding:18px;border-radius:10px;width:760px;max-height:80vh;overflow:auto">
   <div class="side-panel-header">
     <span>Direct Messages</span>
     <button id="closeDmSidebar" class="side-close-btn">✕</button>
@@ -1546,7 +1560,7 @@ footer{
     <button id="adminClose" class="ghost">Close</button>
   </div>
 </div>
-<div id="roomsSidebar" class="rooms-panel">
+<div id="roomsSidebar" class="rooms-panel" style="background:#111;padding:18px;border-radius:10px;width:760px;max-height:80vh;overflow:auto">
   <div class="side-panel-header">
     <span>Rooms</span>
     <button id="closeRoomsSidebar" class="side-close-btn">✕</button>
