@@ -299,53 +299,28 @@ button.ghost{
   font-weight:bold;
 }
 
+
 .roster-list{
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-  max-height:420px;
-  overflow:auto;
-  padding-right:6px;
+  display:flex;flex-direction:column;gap:8px;
+  max-height:420px;overflow:auto;padding-right:6px;
 }
-
 .user-row{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  background:var(--glass);
-  border:1px solid var(--panel-border);
-  border-radius:10px;
-  padding:10px;
-  transition:0.2s;
+  display:flex;align-items:center;gap:12px;
+background:var(--glass);
+  border:1px solid rgba(160,200,255,0.12);
 }
-
-.user-row:hover{
-  background:rgba(0,255,255,0.12);
-  box-shadow:var(--accent-glow);
-}
-
 .avatar{
-  width:44px;
-  height:44px;
-  border-radius:8px;
-  background:rgba(0,255,255,0.15);
-  border:1px solid var(--accent);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-weight:900;
-  color:var(--accent);
-  text-shadow:var(--accent-glow);
+  width:44px;height:44px;border-radius:8px;
+  background:linear-gradient(135deg,#1a2233,#0d1320);
+  display:flex;align-items:center;justify-content:center;
+  color:#dff6ff;font-weight:700;
+  border:1px solid rgba(160,200,255,0.25);
 }
+.status{width:10px;height:10px;border-radius:50%}
+.status.online{background:var(--success)}
+.status.offline{background:var(--muted)}
 
-.status{
-  width:10px;
-  height:10px;
-  border-radius:50%;
-}
-
-.status.online{background:var(--success);}
-.status.offline{background:var(--muted);}
+.small{font-size:13px;color:var(--muted)}
 
 .chat-popup{
   position:fixed;
