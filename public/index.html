@@ -90,12 +90,11 @@ button.ghost{
   color:var(--muted);
 }
 
-.grid{display:grid;
-      grid-template-columns:1fr 320px;
-      gap:18px;
-      margin-top:22px;
-       margin-left: 240px; /* leave room for left buttons */
-  margin-right: 300px; /* leave room for right profile */
+.grid{  
+   display: grid;
+  grid-template-columns: 200px 1fr 300px;
+  gap: 20px;
+  position: relative;
 }
      }
 
@@ -182,8 +181,9 @@ button.ghost{
 
 /* DM SIDEBAR --------------------------------------------------------------- */
 /* POPUP BASE */
-.dm-panel,
-.rooms-panel {
+/* POPUP OVERLAY */
+#dmSidebar,
+#roomsSidebar {
   position: fixed;
   inset: 0;
   display: none;
@@ -194,8 +194,8 @@ button.ghost{
 }
 
 /* POPUP CONTENT BOX */
-.dm-panel .side-panel-header,
-.rooms-panel .side-panel-header {
+#dmSidebar .side-panel-header,
+#roomsSidebar .side-panel-header {
   background: rgba(15, 23, 42, 0.9);
   padding: 20px;
   border-radius: 12px;
@@ -1385,16 +1385,20 @@ table tr:hover {
   background: #5ab0ff;
 }
 #userProfileCard {
-  position: fixed;
-  right: 20px;
-  top: 50%;
-  transform: translateY(-50%);
+  position: absolute;
+  right: -320px; /* moves it OUTSIDE the grid */
+  top: 0;
   width: 260px;
   background: rgba(15, 23, 42, 0.8);
   padding: 20px;
   border-radius: 12px;
   border: 1px solid #38bdf8;
   box-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
+}
+
+#layoutWrapper {
+  position: relative;
+  width: 100%;
 }
 
 </style>
@@ -1460,7 +1464,7 @@ table tr:hover {
 
   </div>
 </header>
-
+<div id="layoutWrapper">
 <div class="grid">
   <div class="card hero">
     <h2>Welcome to the Arena</h2>
@@ -1478,13 +1482,13 @@ table tr:hover {
      <div class="muted">COMPLETED UPDATES</div>
     <div class="muted">- avatar images - dm chats - fix user roster button  - working on public/private rooms - private room invites - support system - image uploads in dm and custom rooms - story creation - user relationships - relationship timeline - story/relationship approval
         </div>
-    <br>
+    </div>
+      </div>
     <div class="user-profile-card" id="userProfileCard">
             <button id="btnEditProfile" class="ghost">Edit Profile</button>
       <div>🔒 Not logged in</div>
       <p>Login or register to see your profile</p>
-
-    </div>
+   </div>
 
   </div>
 
