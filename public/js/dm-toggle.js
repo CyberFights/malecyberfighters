@@ -1,18 +1,17 @@
 document.getElementById("btnDMs").addEventListener("click", () => {
   const panel = document.getElementById("dmSidebar");
-  const chat = document.getElementById("chatPopup");
-
-  panel.classList.toggle("open");
-  chat.classList.toggle("shifted");
+  panel.style.display = "flex";
 });
+
 document.getElementById("btnRooms").addEventListener("click", () => {
   const panel = document.getElementById("roomsSidebar");
-  panel.classList.toggle("open");
-});
-$('closeDmSidebar')?.addEventListener('click', () => {
-  $('dmSidebar').classList.remove('open');
+  panel.style.display = "flex";
 });
 
-$('closeRoomsSidebar')?.addEventListener('click', () => {
-  $('roomsSidebar').classList.remove('open');
+document.getElementById("closeDmSidebar")?.addEventListener("click", () => {
+  document.getElementById("dmSidebar").style.display = "none";
+});
+
+document.getElementById("closeRoomsSidebar")?.addEventListener("click", () => {
+  document.getElementById("roomsSidebar").style.display = "none";
 });
