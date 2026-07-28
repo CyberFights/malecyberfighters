@@ -5,6 +5,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const multer = require('multer');
 const fetch = require('node-fetch');
 const path = require('path');
@@ -119,7 +120,8 @@ function requireAdmin(req, res, next) {
 const userSchema = new mongoose.Schema({
   username: { type: String, unique: true, required: true, index: true },
   email:    { type: String, unique: true, required: true, index: true },
-  passwordHash: { type: String, required: true },
+  passwordHash: { type: String },
+  password: { type: String },
   display:  { type: String },
   age:      { type: Number },
   stats:    { type: Object, default: {} },
@@ -616,7 +618,10 @@ app.post("/api/admin/reset-password", requireAdmin, async (req, res) => {
     const hash = await bcrypt.hash(newPassword, 10);
     const user = await User.findOneAndUpdate(
       { username },
-      { passwordHash: hash },
+      { 
+        $set: { passwordHash: hash },
+        $unset: { password: 1 }
+      },
       { new: true }
     );
 
@@ -951,7 +956,44 @@ app.post('/api/login', async (req, res) => {
       return res.status(403).json({ ok: false, error: 'banned' });
     }
 
-    const match = await bcrypt.compare(password, user.passwordHash);
+    let match = false;
+    if (user.passwordHash && user.passwordHash.startsWith('$2')) {
+      try {
+        match = await bcrypt.compare(password, user.passwordHash);
+      } catch (err) {
+        console.error('Bcrypt compare error:', err);
+      }
+    }
+
+    // Fallback for plain text or old field name, including MD5
+    if (!match) {
+      const storedPassword = user.passwordHash || user.password;
+      if (storedPassword) {
+        if (storedPassword === password) {
+          match = true;
+        } else {
+          // Check for MD5
+          const md5 = crypto.createHash('md5').update(password).digest('hex');
+          if (storedPassword === md5) {
+            match = true;
+          }
+        }
+      }
+
+      // If matched via fallback, upgrade to bcrypt
+      if (match) {
+        console.log(`Upgrading password for user: ${username}`);
+        const newHash = await bcrypt.hash(password, 10);
+        await User.updateOne(
+          { _id: user._id },
+          { 
+            $set: { passwordHash: newHash },
+            $unset: { password: 1 } 
+          }
+        );
+      }
+    }
+
     if (!match) {
       await logIp(req, { action: 'login_fail', username });
       return res.status(401).json({ ok: false, error: 'invalid_credentials' });
