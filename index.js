@@ -77,12 +77,8 @@ app.use(cors({ origin: true, credentials: true }));
 
 
 // ---------- DB ----------
-if (!MONGO_URI) {
-  console.warn('Warning: MONGO_URI is not set. Database features will fail until it is configured.');
-}
-mongoose.connect(MONGO_URI || 'mongodb://127.0.0.1:27017/malecyberfighters')
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB connection error:', err));
+mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
+
 
 // ---------- ADMIN AUTH ----------
 function requireAdmin(req, res, next) {
