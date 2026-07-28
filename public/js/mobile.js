@@ -435,7 +435,7 @@
     const errEl = $("loginError");
     setError(errEl, "");
 
-    const username = ($("loginUser") && $("loginUser").value || "").trim();
+    const username = ($("loginUser") && $("loginUser").value || "").trim().toLowerCase();
     const password = ($("loginPass") && $("loginPass").value) || "";
 
     if (!username || !password) {
@@ -464,8 +464,8 @@
     const errEl = $("regError");
     setError(errEl, "");
 
-    const username = ($("regUser") && $("regUser").value || "").trim();
-    const email = ($("regEmail") && $("regEmail").value || "").trim();
+    const username = ($("regUser") && $("regUser").value || "").trim().toLowerCase();
+    const email = ($("regEmail") && $("regEmail").value || "").trim().toLowerCase();
     const password = ($("regPass") && $("regPass").value) || "";
     const display = ($("regDisplay") && $("regDisplay").value || "").trim() || username;
     const age = Number(($("regAge") && $("regAge").value) || 0);
@@ -1468,20 +1468,62 @@
   }
 
   /* ---------------------------------------------------------------------
-     Admin panel (only /api/admin/users exists server side)
+     Admin panel (requires x-admin-key = ADMIN_KEY)
      --------------------------------------------------------------------- */
   let adminUsers = [];
+  let adminKey = null;
+
+  async function adminFetch(url, options = {}) {
+    const headers = Object.assign(
+      { Accept: "application/json", "x-admin-key": adminKey || "" },
+      options.headers || {}
+    );
+    const res = await fetch(url, Object.assign({}, options, { headers }));
+    const data = await res.json().catch(() => null);
+    if (!data) throw new Error("bad_response");
+    return data;
+  }
+
+  async function promptAdminKey() {
+    if (adminKey) return true;
+    const key = prompt("Enter admin password:");
+    if (!key) return false;
+    try {
+      const data = await fetch("/api/admin/users", {
+        headers: { "x-admin-key": key, Accept: "application/json" }
+      }).then(r => r.json());
+      if (!data.ok) {
+        alert("Incorrect admin password.");
+        return false;
+      }
+      adminKey = key;
+      adminUsers = data.users || [];
+      return true;
+    } catch (e) {
+      alert("Could not verify admin password.");
+      return false;
+    }
+  }
+
+  async function openAdminPanel() {
+    const ok = await promptAdminKey();
+    if (!ok) return;
+    showId("modalAdmin");
+    showAdminTab("users");
+    renderAdminUsers();
+  }
 
   async function loadAdminData() {
     const tbody = document.querySelector("#adminTable tbody");
-    if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="small muted">Loading…</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="small muted">Loading…</td></tr>';
 
     try {
-      const data = await getJSON("/api/admin/users");
-      adminUsers = (data && data.users) || [];
+      const data = await adminFetch("/api/admin/users");
+      if (!data.ok) throw new Error("denied");
+      adminUsers = data.users || [];
       renderAdminUsers();
     } catch (e) {
-      if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="small muted">Could not load users.</td></tr>';
+      if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="small muted">Could not load users.</td></tr>';
     }
   }
 
@@ -1499,21 +1541,64 @@
     tbody.innerHTML = "";
 
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="small muted">No users found.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="small muted">No users found.</td></tr>';
       return;
     }
 
     rows.forEach(u => {
       const tr = document.createElement("tr");
+      tr.dataset.username = u.username || "";
       tr.innerHTML = `
         <td>${escapeHtml(u.username)}</td>
         <td class="ellipsis">${escapeHtml(u.email || "")}</td>
         <td>${escapeHtml(u.role || "user")}</td>
-        <td>${isOnline(u.username) ? "yes" : "no"}</td>
+        <td>${u.online || isOnline(u.username) ? "yes" : "no"}</td>
         <td>${u.banned ? "yes" : "no"}</td>
+        <td>
+          <button type="button" class="small-btn admin-ban">${u.banned ? "Unban" : "Ban"}</button>
+          <button type="button" class="small-btn admin-reset">Reset PW</button>
+          <button type="button" class="small-btn admin-delete">Delete</button>
+        </td>
       `;
       tbody.appendChild(tr);
     });
+  }
+
+  async function loadAdminAnalytics() {
+    const box = $("statsSummary");
+    const list = $("topIpsList");
+    if (box) box.innerHTML = '<div class="small muted">Loading…</div>';
+
+    try {
+      const [stats, ips] = await Promise.all([
+        adminFetch("/api/admin/stats"),
+        adminFetch("/api/admin/top-ips")
+      ]);
+
+      if (box && stats.ok) {
+        box.innerHTML = `
+          <div>Total users: ${stats.totalUsers}</div>
+          <div>Online users: ${stats.onlineUsers}</div>
+          <div>Banned users: ${stats.bannedUsers}</div>
+          <div>Total logs: ${stats.totalLogs}</div>
+          <div>Last 24h: logins ${stats.last24h?.logins24h ?? 0}, fails ${stats.last24h?.fails24h ?? 0}, regs ${stats.last24h?.regs24h ?? 0}</div>
+        `;
+      }
+
+      if (list && ips.ok) {
+        list.innerHTML = "";
+        (ips.ips || []).forEach(row => {
+          const li = document.createElement("li");
+          li.textContent = `${row._id || "unknown"} — ${row.count}`;
+          list.appendChild(li);
+        });
+        if (!(ips.ips || []).length) {
+          list.innerHTML = '<li class="small muted">No IP activity in the last 24h</li>';
+        }
+      }
+    } catch (e) {
+      if (box) box.innerHTML = '<div class="small muted">Could not load analytics.</div>';
+    }
   }
 
   function showAdminTab(tab) {
@@ -1522,6 +1607,46 @@
     if (usersView) usersView.style.display = tab === "users" ? "block" : "none";
     if (analyticsView) analyticsView.style.display = tab === "analytics" ? "block" : "none";
     if (tab === "users") renderAdminUsers();
+    if (tab === "analytics") loadAdminAnalytics();
+  }
+
+  async function handleAdminAction(e) {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    const row = btn.closest("tr");
+    const username = row && row.dataset.username;
+    if (!username || !adminKey) return;
+
+    try {
+      if (btn.classList.contains("admin-ban")) {
+        const banned = btn.textContent.trim() === "Ban";
+        await adminFetch("/api/admin/ban", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, banned })
+        });
+        await loadAdminData();
+      } else if (btn.classList.contains("admin-reset")) {
+        const newPassword = prompt("Enter new password:");
+        if (!newPassword) return;
+        const data = await adminFetch("/api/admin/reset-password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, newPassword })
+        });
+        alert(data.ok ? "Password reset" : "Failed to reset password");
+      } else if (btn.classList.contains("admin-delete")) {
+        if (!confirm("Delete this user?")) return;
+        await adminFetch("/api/admin/delete-user", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username })
+        });
+        await loadAdminData();
+      }
+    } catch (err) {
+      alert("Admin action failed");
+    }
   }
 
   /* ---------------------------------------------------------------------
@@ -1680,11 +1805,13 @@
     on($("storyCloseBtn"), "click", () => hideId("storyPopup"));
 
     /* admin */
-    on($("btnAdmin"), "click", () => { showId("modalAdmin"); showAdminTab("users"); loadAdminData(); });
+    on($("btnAdmin"), "click", openAdminPanel);
     on($("adminClose"), "click", () => hideId("modalAdmin"));
     on($("tabUsers"), "click", () => showAdminTab("users"));
     on($("tabAnalytics"), "click", () => showAdminTab("analytics"));
     on($("adminSearch"), "input", debounce(renderAdminUsers, 200));
+    const adminTable = document.querySelector("#adminTable tbody");
+    if (adminTable) adminTable.addEventListener("click", handleAdminAction);
 
     /* logout */
     on($("btnLogout"), "click", logout);
@@ -1722,8 +1849,9 @@
 
   window.addEventListener("beforeunload", () => {
     const s = getSession();
+    // Mark offline but keep session so refresh stays signed in
     if (state.socket && s) {
-      try { state.socket.emit("forceLogout", { username: s.username }); } catch (e) {}
+      try { state.socket.emit("chatClosed", { username: s.username }); } catch (e) {}
     }
   });
 

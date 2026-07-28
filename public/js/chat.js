@@ -50,15 +50,15 @@ function fileToBase64(file) {
 }
 
 async function uploadImageToServer(file) {
-  const base64 = await fileToBase64(file);
+  const form = new FormData();
+  form.append("image", file);
 
   const res = await fetch("/api/upload-image", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ image: base64 })
+    body: form
   });
 
-  return await res.json(); // { success: true, url: "https://..." }
+  return await res.json(); // { ok: true, imageUrl: "https://..." }
 }
 
 /* ============================================================
@@ -136,36 +136,17 @@ function renderRosterPage(){
     btn.addEventListener('click', e => openPrivateWindow(e.target.dataset.user));
   });
 }
-// OPEN ROSTER POPUP
-$('btnRoster')?.addEventListener('click', async () => {
-  $('modalRoster').style.display = 'flex';
-
-  // Fetch ALL users from MongoDB
-  const res = await fetch("/api/allUsers");
-  const data = await res.json();
-
-  if (data.success) {
-    window.allUsers = data.users;
-    rosterPage = 1;
-    renderRosterPopup();
-  }
-});
-
-
-// CLOSE ROSTER POPUP
-$('rosterClose')?.addEventListener('click', () => {
-  $('modalRoster').style.display = 'none';
-});
-
-// SEARCH FILTER
-$('rosterSearch')?.addEventListener('input', () => {
-  renderRosterPopup();
-});
+// PAGINATION SETTINGS (declared early so handlers can use them)
+let rosterPage = 1;
+const rosterPerPage = 12;
 
 // RENDER ROSTER POPUP
 function renderRosterPopup() {
   const list = $('rosterPage');
-  const search = $('rosterSearch').value.toLowerCase();
+  if (!list) return;
+
+  const searchEl = $('rosterSearch');
+  const search = (searchEl?.value || '').toLowerCase();
   const pageLabel = $('rosterPageNumber');
 
   list.innerHTML = '';
@@ -173,13 +154,14 @@ function renderRosterPopup() {
   let sorted = [...(window.allUsers || [])];
 
   // SORT NEWEST FIRST
-  sorted.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  sorted.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
   // SEARCH FILTER
-  sorted = sorted.filter(u =>
-    u.username.toLowerCase().includes(search) ||
-    u.display.toLowerCase().includes(search)
-  );
+  sorted = sorted.filter(u => {
+    const name = (u.username || '').toLowerCase();
+    const display = (u.display || '').toLowerCase();
+    return name.includes(search) || display.includes(search);
+  });
 
   // PAGINATION
   const total = sorted.length;
@@ -195,17 +177,18 @@ function renderRosterPopup() {
   // RENDER USERS
   pageItems.forEach(u => {
     const div = document.createElement('div');
-    div.className = 'roster-user';
+    div.className = 'roster-user user-row';
 
+    const display = u.display || u.username || '?';
     const avatar = u.imageUrl
-      ? `<img src="${u.imageUrl}" class="roster-avatar">`
-      : `<div class="avatar-fallback roster-avatar">${u.display[0]}</div>`;
+      ? `<img src="${u.imageUrl}" class="roster-avatar" style="width:44px;height:44px;border-radius:8px;object-fit:cover">`
+      : `<div class="avatar-fallback roster-avatar" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center">${display[0]}</div>`;
 
     div.innerHTML = `
       ${avatar}
-      <div>
-        <div class="roster-name">${u.display}</div>
-        <div class="roster-username">@${u.username}</div>
+      <div style="flex:1">
+        <div class="roster-name" style="font-weight:700">${escapeHtml(display)}</div>
+        <div class="roster-username small">@${escapeHtml(u.username || '')}</div>
       </div>
     `;
 
@@ -213,7 +196,24 @@ function renderRosterPopup() {
     list.appendChild(div);
   });
 
-  pageLabel.textContent = `Page ${rosterPage} / ${totalPages}`;
+  if (pageLabel) pageLabel.textContent = `Page ${rosterPage} / ${totalPages}`;
+}
+
+async function openRosterModal() {
+  const modal = $('modalRoster');
+  if (modal) modal.style.display = 'flex';
+
+  try {
+    const res = await fetch('/api/allUsers');
+    const data = await res.json();
+    if (data.success) {
+      window.allUsers = data.users;
+      rosterPage = 1;
+      renderRosterPopup();
+    }
+  } catch (err) {
+    console.error('Failed to load roster', err);
+  }
 }
 
 
@@ -222,16 +222,16 @@ function openUserProfile(username) {
   const user = (window.allUsers || []).find(u => u.username === username);
   if (!user) return;
 
-  // Existing profile fields...
-  $('vpName').textContent = user.display;
-  $('vpUsername').textContent = user.username;
-  $('vpBio').textContent = user.info || "No bio provided";
-  $('vpWins').textContent = user.wins ?? 0;
-  $('vpLosses').textContent = user.losses ?? 0;
-  $('vpLang').textContent = user.language || "Unknown";
-  $('vpAge').textContent = user.age || "Unknown";
-  $('vpColorBox').style.background = user.color || "#7fd8ff";
-  $('vpAvatar').src = user.imageUrl || "https://via.placeholder.com/120?text=No+Image";
+  // Existing profile fields
+  if ($('vpName')) $('vpName').textContent = user.display || user.username;
+  if ($('vpUsername')) $('vpUsername').textContent = user.username;
+  if ($('vpBio')) $('vpBio').textContent = user.info || "No bio provided";
+  if ($('vpWins')) $('vpWins').textContent = user.wins ?? user.stats?.wins ?? 0;
+  if ($('vpLosses')) $('vpLosses').textContent = user.losses ?? user.stats?.losses ?? 0;
+  if ($('vpLang')) $('vpLang').textContent = user.language || "Unknown";
+  if ($('vpAge')) $('vpAge').textContent = user.age || "Unknown";
+  if ($('vpColorBox')) $('vpColorBox').style.background = user.color || "#7fd8ff";
+  if ($('vpAvatar')) $('vpAvatar').src = user.imageUrl || "https://via.placeholder.com/120?text=No+Image";
 
   document.getElementById("vpBlockButton").onclick = async () => {
     const me = getSession();
@@ -293,24 +293,16 @@ function openUserProfile(username) {
   };
 }
 
-$('vpClose').addEventListener('click', () => {
-  $('modalViewProfile').style.display = "none";
+$('vpClose')?.addEventListener('click', () => {
+  if ($('modalViewProfile')) $('modalViewProfile').style.display = "none";
 });
-
-// PAGINATION SETTINGS
-let rosterPage = 1;
-const rosterPerPage = 12;
 
 // OPEN ROSTER POPUP
-$('btnRoster')?.addEventListener('click', () => {
-  rosterPage = 1;
-  $('modalRoster').style.display = 'flex';
-  renderRosterPopup();
-});
+$('btnRoster')?.addEventListener('click', openRosterModal);
 
 // CLOSE ROSTER POPUP
 $('rosterClose')?.addEventListener('click', () => {
-  $('modalRoster').style.display = 'none';
+  if ($('modalRoster')) $('modalRoster').style.display = 'none';
 });
 
 // SEARCH FILTER
@@ -333,13 +325,14 @@ $('rosterNext')?.addEventListener('click', () => {
 });
 
 async function loadStories(username) {
-  const res = await fetch("/api/story/list?username=" + username);
+  const res = await fetch("/api/story/list?username=" + encodeURIComponent(username));
   const data = await res.json();
 
   const box = document.getElementById("profileStories");
+  if (!box) return;
   box.innerHTML = "<h3>Stories</h3>";
 
-  if (!data.stories.length) {
+  if (!data.stories || !data.stories.length) {
     box.innerHTML += "<div class='small muted'>No approved stories</div>";
     return;
   }
@@ -354,37 +347,39 @@ async function loadStories(username) {
 }
 
 async function loadRelationships(username) {
-  const res = await fetch("/api/relationship/list?username=" + username);
+  const res = await fetch("/api/relationship/list?username=" + encodeURIComponent(username));
   const data = await res.json();
 
   const box = document.getElementById("profileRelationships");
+  if (!box) return;
   box.innerHTML = "<h3>Relationships</h3>";
 
-  if (!data.relationships.length) {
+  if (!data.relationships || !data.relationships.length) {
     box.innerHTML += "<div class='small muted'>No relationships</div>";
     return;
   }
 
   data.relationships.forEach(r => {
     const other = r.requester === username ? r.target : r.requester;
+    const cls = REL_COLORS[r.type] || "rel-friend";
 
     const div = document.createElement("div");
-    div.className = "relationship-item";
+    div.className = `relationship-item ${cls}`;
     div.innerHTML = `
-      <strong>${r.type}</strong> with ${other}
+      <strong>${escapeHtml(r.type)}</strong> with ${escapeHtml(other)}
     `;
     box.appendChild(div);
   });
 }
 
 async function loadRelationshipTimeline(username) {
-  const res = await fetch("/api/relationship/timeline?username=" + username);
+  const res = await fetch("/api/relationship/timeline?username=" + encodeURIComponent(username));
   const data = await res.json();
 
   const box = document.getElementById("profileTimeline");
+  if (!box) return;
   box.innerHTML = "<h3>Relationship Timeline</h3>";
 
-  // FIX: use data.timeline instead of data.events
   const events = data.timeline || [];
 
   if (!events.length) {
@@ -394,21 +389,26 @@ async function loadRelationshipTimeline(username) {
 
   events.forEach(e => {
     const div = document.createElement("div");
-
-    const cls = REL_COLORS[e.type] || "rel-friend"; // fallback
-
+    const cls = REL_COLORS[e.type] || "rel-friend";
     div.className = `timeline-item ${cls}`;
 
     div.innerHTML = `
       <div class="timeline-date">${new Date(e.approvedAt).toLocaleString()}</div>
       <div class="timeline-desc">
-        ${e.type} with <strong>${e.with}</strong>
+        ${escapeHtml(e.type)} with <strong>${escapeHtml(e.with)}</strong>
       </div>
     `;
 
     box.appendChild(div);
   });
 }
+
+// Expose for other modules
+window.loadStories = loadStories;
+window.loadRelationships = loadRelationships;
+window.loadRelationshipTimeline = loadRelationshipTimeline;
+window.openUserProfile = openUserProfile;
+window.openRosterModal = openRosterModal;
 
 
 
@@ -513,16 +513,13 @@ $('btnMinimize')?.addEventListener('click', () => {
 });
 
 /* ============================================================
-   LOGOUT ON BROWSER CLOSE / REFRESH
+   MARK OFFLINE ON TAB CLOSE (keep session for refresh)
 ============================================================ */
 window.addEventListener("beforeunload", () => {
   const s = getSession();
   if (!s) return;
-
-  socket.emit("forceLogout", { username: s.username });
-
-  localStorage.removeItem("cw_session_v1");
-  localStorage.removeItem("currentUser");
+  // Mark offline but keep login session so refresh stays signed in
+  socket.emit("chatClosed", { username: s.username });
 });
 
 /* ============================================================
@@ -596,7 +593,11 @@ function appendPublicMessage(msg){
 
   const s = getSession();
   const user = (window.users || []).find(u => u.username === msg.from);
-  const avatar = renderMessageAvatar(msg.from, msg.display, user?.imageUrl);
+  const avatar = renderMessageAvatar(
+    msg.from,
+    msg.display,
+    msg.avatar || user?.imageUrl
+  );
 
   const div = document.createElement('div');
   div.className = 'message-row ' + (s && msg.from === s.username ? 'me' : '');
@@ -605,12 +606,12 @@ function appendPublicMessage(msg){
     <div class="message-avatar">${avatar}</div>
     <div class="message">
       <div style="font-weight:700; color:${user?.color || '#7fd8ff'}">
-        ${msg.display}
+        ${escapeHtml(msg.display || msg.from || '')}
         <span class="small" style="color:${user?.color || '#7fd8ff'}">
-          @${msg.from} • ${new Date(msg.time).toLocaleTimeString()}
+          @${escapeHtml(msg.from || '')} • ${new Date(msg.time).toLocaleTimeString()}
         </span>
       </div>
-      <div>${escapeHtml(msg.text)}</div>
+      <div>${escapeHtml(msg.text || '')}</div>
     </div>
   `;
 
@@ -636,6 +637,7 @@ function sendRoomMessage(room, text){
     text,
     time: new Date().toISOString()
   });
+  // Server will broadcast back (including to sender) after translate/save
 }
 
 socket.on('roomHistory', ({ room, history }) => {
@@ -649,10 +651,14 @@ socket.on('roomHistory', ({ room, history }) => {
 socket.on('roomMessage', msg => {
   const roomChat = $('roomChatPopup');
   const currentRoom = roomChat?.dataset.room;
+  const s = getSession();
 
   if (msg.room !== currentRoom) {
-    incrementRoomUnread(msg.room);
-    updateRoomsSidebarBadges();
+    // Don't badge our own outbound messages when room isn't focused
+    if (!s || msg.from !== s.username) {
+      if (typeof incrementRoomUnread === 'function') incrementRoomUnread(msg.room);
+      if (typeof updateRoomsSidebarBadges === 'function') updateRoomsSidebarBadges();
+    }
     return;
   }
 
@@ -665,31 +671,34 @@ function appendRoomMessage(msg){
   if (!feed) return;
 
   const user = (window.users || []).find(u => u.username === msg.from);
-  const avatar = renderMessageAvatar(msg.from, msg.display, user?.imageUrl);
+  const avatar = renderMessageAvatar(msg.from, msg.display, user?.imageUrl || msg.avatar);
 
   const div = document.createElement('div');
   div.className = 'message-row';
 
-  let html = `
+  const textHtml = msg.text ? `<div>${escapeHtml(msg.text)}</div>` : '';
+  const imageHtml = msg.imageUrl
+    ? `<img src="${msg.imageUrl}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${msg.imageUrl}">`
+    : '';
+
+  div.innerHTML = `
     <div class="message-avatar">${avatar}</div>
     <div class="message">
       <div style="font-weight:700; color:${user?.color || '#7fd8ff'}">
-        ${msg.display}
+        ${escapeHtml(msg.display || msg.from || '')}
         <span class="small" style="color:${user?.color || '#7fd8ff'}">
-          @${msg.from} • ${new Date(msg.time).toLocaleTimeString()}
+          @${escapeHtml(msg.from || '')} • ${new Date(msg.time).toLocaleTimeString()}
         </span>
       </div>
-      <div>${escapeHtml(msg.text)}</div>
+      ${textHtml}
+      ${imageHtml}
     </div>
   `;
 
-  if (msg.imageUrl) {
-    html += `
-      <img src="${msg.imageUrl}" class="chat-image" onclick="window.open('${msg.imageUrl}', '_blank')">
-    `;
-  }
+  div.querySelectorAll('.chat-image').forEach(img => {
+    img.addEventListener('click', () => window.open(img.dataset.url, '_blank'));
+  });
 
-  div.innerHTML = html;
   feed.appendChild(div);
   feed.scrollTop = feed.scrollHeight;
 }
@@ -711,18 +720,30 @@ async function uploadRoomImage(file) {
     return;
   }
 
+  const s = getSession();
+  const room = document.getElementById("roomChatPopup")?.dataset.room;
+  if (!s || !room) return;
+
   socket.emit("roomMessage", {
-    room: document.getElementById("roomChatPopup").dataset.room,
-    from: getSession().username,
+    room,
+    from: s.username,
+    display: s.display || s.username,
     imageUrl: data.imageUrl
   });
 }
 
 /* ============================================================
    PRIVATE MESSAGING HOOK
+   (pm.js provides the real openPrivateWindow implementation)
 ============================================================ */
-function openPrivateWindow(username){
-  console.log("PM:", username);
+if (typeof window.openPrivateWindow !== 'function') {
+  window.openPrivateWindow = function(username) {
+    console.warn('PM module not loaded; cannot open chat with', username);
+  };
+}
+// Local alias so roster/online list handlers work either way
+function openPrivateWindow(username) {
+  return window.openPrivateWindow(username);
 }
 
 makeDraggable($('chatPopup'));

@@ -4,7 +4,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const mongoose = require('mongoose');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const fetch = require('node-fetch');
 const path = require('path');
@@ -36,7 +36,7 @@ app.use(
         scriptSrc: ["'self'"],
         scriptSrcAttr: ["'none'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "https://i.ibb.co", "https://ibb.co"],
+        imgSrc: ["'self'", "data:", "blob:", "https://i.ibb.co", "https://ibb.co", "https://*.ibb.co"],
         connectSrc: ["'self'", "ws:", "wss:"],
         fontSrc: ["'self'", "data:"],
         frameAncestors: ["'self'"],
@@ -76,7 +76,24 @@ app.use('/api/register', authLimiter);
 app.use(cors({ origin: true, credentials: true }));
 
 // ---------- DB ----------
-mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
+if (!MONGO_URI) {
+  console.warn('Warning: MONGO_URI is not set. Database features will fail until it is configured.');
+}
+mongoose.connect(MONGO_URI || 'mongodb://127.0.0.1:27017/malecyberfighters')
+  .then(() => console.log('MongoDB connected'))
+  .catch(err => console.error('MongoDB connection error:', err));
+
+// ---------- ADMIN AUTH ----------
+function requireAdmin(req, res, next) {
+  const key = req.headers['x-admin-key'];
+  if (!ADMIN_KEY) {
+    return res.status(500).json({ ok: false, error: 'admin_not_configured' });
+  }
+  if (!key || key !== ADMIN_KEY) {
+    return res.status(401).json({ ok: false, error: 'unauthorized' });
+  }
+  next();
+}
 
 // ---------- SCHEMAS ----------
 const userSchema = new mongoose.Schema({
@@ -143,8 +160,9 @@ const dmSchema = new mongoose.Schema({
   imageUrl: { type: String },
 
   relationshipId: { type: String },
+  storyId: { type: String },
   // system / approval / normal
-  type: { type: String, default: "normal" }, 
+  type: { type: String, default: "normal" },
   // values:
   // "normal"        → regular DM
   // "image"         → image DM
@@ -251,21 +269,29 @@ async function sendDiscordWebhookMessage(username, message, avatarUrl) {
 }
 
 async function updateRoomMembers(roomId) {
-  const sockets = await io.in(roomId).fetchSockets();
+  try {
+    const sockets = await io.in(roomId).fetchSockets();
 
-  const members = await Promise.all(
-    sockets.map(async s => {
-      const user = await User.findOne({ username: s.username }).lean();
-      return {
-        username: user.username,
-        display: user.display,
-        imageUrl: user.imageUrl,
-        online: user.online
-      };
-    })
-  );
+    const members = (
+      await Promise.all(
+        sockets.map(async s => {
+          if (!s.username) return null;
+          const user = await User.findOne({ username: s.username }).lean();
+          if (!user) return null;
+          return {
+            username: user.username,
+            display: user.display || user.username,
+            imageUrl: user.imageUrl,
+            online: user.online
+          };
+        })
+      )
+    ).filter(Boolean);
 
-  io.to(roomId).emit("roomMembers", members);
+    io.to(roomId).emit("roomMembers", members);
+  } catch (err) {
+    console.error("updateRoomMembers error:", err);
+  }
 }
 
 app.post("/api/story/save", async (req, res) => {
@@ -295,6 +321,7 @@ app.post("/api/story/save", async (req, res) => {
       to: partner,
       text: `${owner} created a story involving your messages. Please approve it.`,
       type: "storyApproval",
+      storyId: saved._id,
       time: new Date()
     });
   }
@@ -506,16 +533,161 @@ app.post("/api/unblock-user", async (req, res) => {
   }
 });
 
-app.get("/api/admin/users", async (req, res) => {
+app.get("/api/admin/users", requireAdmin, async (req, res) => {
   try {
     const users = await User.find()
-      .select("username display email imageUrl info wins losses color language age role banned createdAt")
+      .select("username display email imageUrl info stats color language age role banned online createdAt")
       .lean();
 
     res.json({ ok: true, users });
   } catch (err) {
     console.error("Admin user fetch error:", err);
-    res.status(500).json({ success: false });
+    res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
+app.post("/api/admin/ban", requireAdmin, async (req, res) => {
+  try {
+    const { username, banned } = req.body;
+    if (!username) return res.status(400).json({ ok: false, error: "missing_username" });
+
+    const update = { banned: !!banned };
+    if (banned) {
+      update.online = false;
+      update.socketId = null;
+    }
+
+    const user = await User.findOneAndUpdate(
+      { username },
+      update,
+      { new: true }
+    );
+
+    if (!user) return res.status(404).json({ ok: false, error: "not_found" });
+
+    // Kick banned user if currently connected
+    if (banned) {
+      const live = [...io.sockets.sockets.values()].find(s => s.username === username);
+      if (live) {
+        live.emit("forceLogout", { reason: "banned" });
+        live.disconnect(true);
+      }
+    }
+
+    const onlineUsers = await User.find({ online: true })
+      .select("username display imageUrl info stats color language age createdAt -_id")
+      .lean();
+    io.emit("presence", onlineUsers);
+
+    res.json({ ok: true, user: { username: user.username, banned: user.banned } });
+  } catch (err) {
+    console.error("admin ban error:", err);
+    res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
+app.post("/api/admin/reset-password", requireAdmin, async (req, res) => {
+  try {
+    const { username, newPassword } = req.body;
+    if (!username || !newPassword) {
+      return res.status(400).json({ ok: false, error: "missing_fields" });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    const user = await User.findOneAndUpdate(
+      { username },
+      { passwordHash: hash },
+      { new: true }
+    );
+
+    if (!user) return res.status(404).json({ ok: false, error: "not_found" });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("admin reset-password error:", err);
+    res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
+app.post("/api/admin/delete-user", requireAdmin, async (req, res) => {
+  try {
+    const { username } = req.body;
+    if (!username) return res.status(400).json({ ok: false, error: "missing_username" });
+
+    const user = await User.findOneAndDelete({ username });
+    if (!user) return res.status(404).json({ ok: false, error: "not_found" });
+
+    if (user.socketId) {
+      const sock = io.sockets.sockets.get(user.socketId);
+      if (sock) sock.disconnect(true);
+    }
+
+    // Clean related data
+    await Promise.all([
+      DM.deleteMany({ $or: [{ from: username }, { to: username }] }),
+      Relationship.deleteMany({ $or: [{ requester: username }, { target: username }] }),
+      Story.deleteMany({ $or: [{ owner: username }, { partner: username }] }),
+      PublicMessage.deleteMany({ from: username }),
+      RoomMessage.deleteMany({ from: username })
+    ]);
+
+    const onlineUsers = await User.find({ online: true })
+      .select("username display imageUrl info stats color language age createdAt -_id")
+      .lean();
+    io.emit("presence", onlineUsers);
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("admin delete-user error:", err);
+    res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
+app.get("/api/admin/stats", requireAdmin, async (req, res) => {
+  try {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const [totalUsers, onlineUsers, bannedUsers, totalLogs, logins24h, fails24h, regs24h] =
+      await Promise.all([
+        User.countDocuments(),
+        User.countDocuments({ online: true }),
+        User.countDocuments({ banned: true }),
+        IpLog.countDocuments(),
+        IpLog.countDocuments({ action: "login_success", createdAt: { $gte: since } }),
+        IpLog.countDocuments({
+          action: { $in: ["login_fail", "login_banned", "login_error"] },
+          createdAt: { $gte: since }
+        }),
+        IpLog.countDocuments({ action: "register", createdAt: { $gte: since } })
+      ]);
+
+    res.json({
+      ok: true,
+      totalUsers,
+      onlineUsers,
+      bannedUsers,
+      totalLogs,
+      last24h: { logins24h, fails24h, regs24h }
+    });
+  } catch (err) {
+    console.error("admin stats error:", err);
+    res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
+app.get("/api/admin/top-ips", requireAdmin, async (req, res) => {
+  try {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const ips = await IpLog.aggregate([
+      { $match: { createdAt: { $gte: since } } },
+      { $group: { _id: "$ip", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 20 }
+    ]);
+
+    res.json({ ok: true, ips });
+  } catch (err) {
+    console.error("admin top-ips error:", err);
+    res.status(500).json({ ok: false, error: "server_error" });
   }
 });
 
@@ -548,23 +720,27 @@ app.get("/api/story/list", async (req, res) => {
 
 app.post("/api/check-availability", async (req, res) => {
   try {
-    const { username, email } = req.body;
+    const username = (req.body.username || "").trim().toLowerCase();
+    const email = (req.body.email || "").trim().toLowerCase();
 
     const conflict = {
       username: false,
       email: false
     };
 
-    const user = await User.findOne({
-      $or: [
-        { username: username?.toLowerCase() },
-        { email: email?.toLowerCase() }
-      ]
-    });
+    if (!username && !email) {
+      return res.json({ ok: true, conflict });
+    }
 
-    if (user) {
-      if (user.username === username.toLowerCase()) conflict.username = true;
-      if (user.email === email.toLowerCase()) conflict.email = true;
+    const or = [];
+    if (username) or.push({ username });
+    if (email) or.push({ email });
+
+    const matches = await User.find({ $or: or }).lean();
+
+    for (const user of matches) {
+      if (username && user.username?.toLowerCase() === username) conflict.username = true;
+      if (email && user.email?.toLowerCase() === email) conflict.email = true;
     }
 
     res.json({
@@ -682,7 +858,10 @@ app.post('/api/update-profile', async (req, res) => {
 
 // ---------- API: REGISTER ----------
 app.post('/api/register', async (req, res) => {
-  const { username, email, password, display, age, stats, info, color, language, imageUrl } = req.body;
+  let { username, email, password, display, age, stats, info, color, language, imageUrl } = req.body;
+  username = (username || '').trim().toLowerCase();
+  email = (email || '').trim().toLowerCase();
+
   if (!username || !email || !password) {
     await logIp(req, { action: 'register_fail', username });
     return res.status(400).json({ ok: false, error: 'missing_fields' });
@@ -733,7 +912,8 @@ app.post('/api/register', async (req, res) => {
 
 // ---------- API: LOGIN ----------
 app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
+  const username = (req.body.username || '').trim().toLowerCase();
+  const password = req.body.password;
   if (!username || !password) {
     await logIp(req, { action: 'login_fail', username });
     return res.status(400).json({ ok: false, error: 'missing_fields' });
@@ -819,18 +999,33 @@ app.post("/api/chatMessage", async (req, res) => {
 app.post("/api/dm/history", async (req, res) => {
   const { a, b } = req.body;
 
- const messages = await DM.find({
-  $or: [
-    { from: a, to: b },
-    { from: b, to: a },
-    { from: "SYSTEM", to: a },
-    { from: "SYSTEM", to: b }
-  ]
-})
-.sort({ time: 1 })
-.lean();
+  if (!a || !b) {
+    return res.json({ ok: false, messages: [] });
+  }
 
-  res.json({ ok: true, messages });
+  // Conversation between a and b, plus system notices delivered to either party
+  // that are related to this pair (story/relationship approvals)
+  const messages = await DM.find({
+    $or: [
+      { from: a, to: b },
+      { from: b, to: a },
+      { from: "SYSTEM", to: a, type: { $in: ["storyApproval", "relationshipApproval", "system"] } },
+      { from: "SYSTEM", to: b, type: { $in: ["storyApproval", "relationshipApproval", "system"] } }
+    ]
+  })
+    .sort({ time: 1 })
+    .lean();
+
+  // Filter system messages that don't mention the other party when possible
+  const filtered = messages.filter(m => {
+    if (m.from !== "SYSTEM") return true;
+    // Keep system messages addressed to the requesting user (a) about the partner (b)
+    if (m.to === a && m.text && m.text.toLowerCase().includes(String(b).toLowerCase())) return true;
+    if (m.to === a && (m.type === "storyApproval" || m.type === "relationshipApproval")) return true;
+    return false;
+  });
+
+  res.json({ ok: true, messages: filtered });
 });
 
 app.post("/api/dm/partners", async (req, res) => {
@@ -850,8 +1045,8 @@ app.post("/api/dm/partners", async (req, res) => {
   const partners = new Set();
 
   messages.forEach(m => {
-    if (m.from !== username) partners.add(m.from);
-    if (m.to !== username) partners.add(m.to);
+    if (m.from && m.from !== username && m.from !== "SYSTEM") partners.add(m.from);
+    if (m.to && m.to !== username && m.to !== "SYSTEM") partners.add(m.to);
   });
 
   res.json({ ok: true, partners: [...partners] });
@@ -877,10 +1072,17 @@ app.post("/api/dm/clear", async (req, res) => {
 app.get("/api/allUsers", async (req, res) => {
   try {
     const users = await User.find()
-      .select("username display imageUrl info wins losses color language age createdAt")
+      .select("username display imageUrl info stats color language age createdAt")
       .lean();
 
-    res.json({ success: true, users });
+    // Flatten wins/losses for clients that expect top-level fields
+    const normalized = users.map(u => ({
+      ...u,
+      wins: u.stats?.wins ?? 0,
+      losses: u.stats?.losses ?? 0
+    }));
+
+    res.json({ success: true, users: normalized });
   } catch (err) {
     console.error("Error fetching all users:", err);
     res.status(500).json({ success: false });
@@ -897,7 +1099,22 @@ io.on("connection", async (socket) => {
   const rooms = await Room.find().lean();
   socket.emit("roomsList", rooms);
 
-  socket.on('login', async (user) => {
+  async function emitPresence() {
+    const onlineUsers = await User.find({ online: true })
+      .select("username display imageUrl info stats color language age createdAt -_id")
+      .lean();
+
+    const normalized = onlineUsers.map(u => ({
+      ...u,
+      wins: u.stats?.wins ?? 0,
+      losses: u.stats?.losses ?? 0
+    }));
+
+    io.emit("presence", normalized);
+  }
+
+  socket.on("login", async (user) => {
+    if (!user?.username) return;
     socket.username = user.username;
     const u = await User.findOneAndUpdate(
       { username: user.username },
@@ -905,12 +1122,12 @@ io.on("connection", async (socket) => {
       { new: true }
     );
     if (!u) return;
-
-    const onlineUsers = await User.find({ online: true })
-      .select('username display imageUrl info wins losses color language age createdAt -_id')
-      .lean();
-
-    io.emit('presence', onlineUsers);
+    if (u.banned) {
+      socket.emit("forceLogout", { reason: "banned" });
+      socket.disconnect(true);
+      return;
+    }
+    await emitPresence();
   });
 
   socket.on("chatClosed", async ({ username }) => {
@@ -921,11 +1138,7 @@ io.on("connection", async (socket) => {
       { online: false }
     );
 
-    const onlineUsers = await User.find({ online: true })
-      .select("username display imageUrl info wins losses color language age createdAt -_id")
-      .lean();
-
-    io.emit("presence", onlineUsers);
+    await emitPresence();
   });
 
   socket.on("forceLogout", async ({ username }) => {
@@ -936,11 +1149,12 @@ io.on("connection", async (socket) => {
       { online: false, socketId: null }
     );
 
-    const onlineUsers = await User.find({ online: true })
-      .select("username display imageUrl info wins losses color language age createdAt -_id")
-      .lean();
+    await emitPresence();
+  });
 
-    io.emit("presence", onlineUsers);
+  socket.on("requestRoomMembers", async ({ room }) => {
+    if (!room) return;
+    await updateRoomMembers(room);
   });
 
 socket.on('publicMessage', async (msg) => {
@@ -990,77 +1204,82 @@ socket.on('publicMessage', async (msg) => {
 
 
   socket.on("privateMessage", async pm => {
-    const sender = await User.findOne({ username: pm.from }).lean();
-    const receiver = await User.findOne({ username: pm.to }).lean();
+    try {
+      if (!pm?.from || !pm?.to) return;
 
-    // ✅ FIXED: Check receiver.blockedUsers instead of undefined targetUser
-    if (receiver?.blockedUsers?.includes(pm.from)) {
-      console.log(`DM blocked: ${pm.from} → ${pm.to}`);
-      return; // do NOT deliver the DM
-    }
+      const sender = await User.findOne({ username: pm.from }).lean();
+      const receiver = await User.findOne({ username: pm.to }).lean();
 
-    if (!receiver) {
-      socket.emit("pmError", { reason: "User not found" });
-      return;
-    }
+      if (!receiver) {
+        socket.emit("pmError", { reason: "User not found" });
+        return;
+      }
 
-    // IMAGE MESSAGE
-    if (pm.imageUrl) {
+      // Block checks (either direction)
+      if (receiver.blockedUsers?.includes(pm.from) || sender?.blockedUsers?.includes(pm.to)) {
+        console.log(`DM blocked: ${pm.from} → ${pm.to}`);
+        socket.emit("pmError", { reason: "User unavailable" });
+        return;
+      }
+
+      // IMAGE MESSAGE
+      if (pm.imageUrl) {
+        const saved = await DM.create({
+          from: pm.from,
+          to: pm.to,
+          imageUrl: pm.imageUrl,
+          text: null,
+          originalText: null,
+          type: "image"
+        });
+
+        const payload = {
+          from: pm.from,
+          to: pm.to,
+          imageUrl: pm.imageUrl,
+          type: "image",
+          time: saved.time
+        };
+
+        if (receiver.socketId) io.to(receiver.socketId).emit("privateMessage", payload);
+        if (sender?.socketId) io.to(sender.socketId).emit("privateMessage", payload);
+        return;
+      }
+
+      if (!pm.text) return;
+
+      // TEXT MESSAGE
+      const translated = await translateText(pm.text, receiver.language || "en");
+
       const saved = await DM.create({
         from: pm.from,
         to: pm.to,
-        imageUrl: pm.imageUrl,
-        text: null,
-        originalText: null
+        originalText: pm.text,
+        text: translated,
+        type: "normal"
       });
 
       if (receiver.socketId) {
         io.to(receiver.socketId).emit("privateMessage", {
           from: pm.from,
           to: pm.to,
-          imageUrl: pm.imageUrl,
+          text: translated,
+          type: "normal",
           time: saved.time
         });
       }
 
-      if (sender.socketId) {
+      if (sender?.socketId) {
         io.to(sender.socketId).emit("privateMessage", {
           from: pm.from,
           to: pm.to,
-          imageUrl: pm.imageUrl,
+          text: pm.text,
+          type: "normal",
           time: saved.time
         });
       }
-
-      return;
-    }
-
-    // TEXT MESSAGE
-    const translated = await translateText(pm.text, receiver.language || "en");
-
-    const saved = await DM.create({
-      from: pm.from,
-      to: pm.to,
-      originalText: pm.text,
-      text: translated
-    });
-
-    if (receiver.socketId) {
-      io.to(receiver.socketId).emit("privateMessage", {
-        from: pm.from,
-        to: pm.to,
-        text: translated,
-        time: saved.time
-      });
-    }
-
-    if (sender.socketId) {
-      io.to(sender.socketId).emit("privateMessage", {
-        from: pm.from,
-        to: pm.to,
-        text: pm.text,
-        time: saved.time
-      });
+    } catch (err) {
+      console.error("privateMessage error:", err);
     }
   });
 
@@ -1075,6 +1294,8 @@ socket.on('publicMessage', async (msg) => {
   });
 
   socket.on("roomMessage", async (msg) => {
+    if (!msg?.room) return;
+
     const enriched = {
       room: msg.room,
       from: msg.from,
@@ -1090,23 +1311,28 @@ socket.on('publicMessage', async (msg) => {
       console.error("Failed to save room message:", err);
     }
 
-    const members = await User.find({ socketId: { $ne: null } }).lean();
+    // Only emit to sockets currently in this room
+    const sockets = await io.in(msg.room).fetchSockets();
 
     if (msg.imageUrl) {
-      members.forEach(u => {
-        io.to(u.socketId).emit("roomMessage", enriched);
-      });
+      io.to(msg.room).emit("roomMessage", enriched);
       return;
     }
 
-    members.forEach(async u => {
-      const translated = await translateText(enriched.text, u.language || "en");
-
-      io.to(u.socketId).emit("roomMessage", {
-        ...enriched,
-        text: translated
-      });
-    });
+    await Promise.all(
+      sockets.map(async s => {
+        if (!s.username) {
+          io.to(s.id).emit("roomMessage", enriched);
+          return;
+        }
+        const u = await User.findOne({ username: s.username }).lean();
+        const translated = await translateText(enriched.text, u?.language || "en");
+        io.to(s.id).emit("roomMessage", {
+          ...enriched,
+          text: translated
+        });
+      })
+    );
   });
 
   socket.on("typingDM", ({ from, to }) => {
@@ -1131,12 +1357,12 @@ socket.on('publicMessage', async (msg) => {
     socket.to(room).emit("stopTypingRoom", { from, room });
   });
 
-  socket.on("createRoom", async ({ name, private }) => {
-    if (!name) return;
+  socket.on("createRoom", async ({ name, private: isPrivate }) => {
+    if (!name || !socket.username) return;
 
     const room = await Room.create({
-      name,
-      private: !!private,
+      name: String(name).trim().slice(0, 64),
+      private: !!isPrivate,
       owner: socket.username,
       invitedUsers: [],
       createdAt: new Date()
@@ -1174,25 +1400,21 @@ socket.on('publicMessage', async (msg) => {
   });
 
 
-  socket.on('disconnect', async () => {
+  socket.on("disconnect", async () => {
     const u = await User.findOneAndUpdate(
       { socketId: socket.id },
       { online: false, socketId: null }
     );
 
     if (u) {
-      const onlineUsers = await User.find({ online: true })
-        .select('username display imageUrl info wins losses color language age createdAt -_id')
-        .lean();
-
-      io.emit('presence', onlineUsers);
+      await emitPresence();
     }
 
     if (socket.currentRoom) {
       updateRoomMembers(socket.currentRoom);
     }
 
-    console.log('socket disconnected', socket.id);
+    console.log("socket disconnected", socket.id);
   });
 });
 
