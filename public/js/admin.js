@@ -2,53 +2,92 @@
    ADMIN PANEL (CSP-SAFE VERSION)
 ----------------------------------------------------------- */
 
-async function loadAdminPanel() {
-  const res = await fetch('/api/admin/users', {
-    headers: { 'x-admin-key': window.adminSessionKey }
-  });
+window.loadAdminPanel = async function loadAdminPanel() {
+  try {
+    const res = await fetch('/api/admin/users', {
+      headers: { 'x-admin-key': window.adminSessionKey }
+    });
 
-  const data = await res.json();
-  if (!data.ok) {
-    alert("Admin access denied");
-    return;
+    const data = await res.json();
+    if (!data.ok) {
+      alert('Admin access denied');
+      return;
+    }
+
+    const tbody = document.querySelector('#adminTable tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    (data.users || []).forEach(u => {
+      const row = document.createElement('tr');
+      row.dataset.username = u.username;
+
+      row.innerHTML = `
+        <td>${escapeHtml(u.username || '')}</td>
+        <td>${escapeHtml(u.email || '')}</td>
+        <td>${escapeHtml(u.role || 'user')}</td>
+        <td>${u.online ? '🟢' : '⚪'}</td>
+        <td>${u.banned ? '🚫' : '✔'}</td>
+        <td>
+          <button class="small-btn admin-ban">${u.banned ? 'Unban' : 'Ban'}</button>
+          <button class="small-btn admin-reset">Reset PW</button>
+          <button class="small-btn admin-delete">Delete</button>
+        </td>
+      `;
+
+      tbody.appendChild(row);
+    });
+
+    // Default to users tab
+    showAdminTab('users');
+
+    const modal = document.getElementById('modalAdmin');
+    if (modal) {
+      modal.style.display = 'flex';
+      modal.style.alignItems = 'center';
+      modal.style.justifyContent = 'center';
+    }
+  } catch (err) {
+    console.error('loadAdminPanel error', err);
+    alert('Failed to load admin panel');
   }
+};
 
-  const tbody = document.querySelector('#adminTable tbody');
-  tbody.innerHTML = '';
+function showAdminTab(tab) {
+  const usersView = document.getElementById('adminUsersView');
+  const analyticsView = document.getElementById('adminAnalyticsView');
+  if (!usersView || !analyticsView) return;
 
-  data.users.forEach(u => {
-    const row = document.createElement('tr');
-    row.dataset.username = u.username;
-
-    row.innerHTML = `
-      <td>${u.username}</td>
-      <td>${u.email}</td>
-      <td>${u.role}</td>
-      <td>${u.online ? "🟢" : "⚪"}</td>
-      <td>${u.banned ? "🚫" : "✔"}</td>
-      <td>
-        <button class="small-btn admin-ban">${u.banned ? "Unban" : "Ban"}</button>
-        <button class="small-btn admin-reset">Reset PW</button>
-        <button class="small-btn admin-delete">Delete</button>
-      </td>
-    `;
-
-    tbody.appendChild(row);
-  });
-
-  show(document.getElementById('modalAdmin'));
+  if (tab === 'analytics') {
+    usersView.style.display = 'none';
+    analyticsView.style.display = 'block';
+    if (window.loadAnalytics) window.loadAnalytics();
+  } else {
+    usersView.style.display = 'block';
+    analyticsView.style.display = 'none';
+  }
 }
 
 /* EVENT DELEGATION (CSP-SAFE) */
 document.addEventListener('click', async (e) => {
-  const row = e.target.closest('tr');
-  if (!row) return;
+  if (e.target.id === 'tabUsers') {
+    showAdminTab('users');
+    return;
+  }
+  if (e.target.id === 'tabAnalytics') {
+    showAdminTab('analytics');
+    return;
+  }
+
+  const row = e.target.closest('#adminTable tr');
+  if (!row || !row.dataset.username) return;
 
   const username = row.dataset.username;
+  if (!window.adminSessionKey) return;
 
   /* BAN / UNBAN */
   if (e.target.classList.contains('admin-ban')) {
-    const banned = e.target.textContent === "Ban" ? true : false;
+    const banned = e.target.textContent.trim() === 'Ban';
 
     await fetch('/api/admin/ban', {
       method: 'POST',
@@ -59,15 +98,15 @@ document.addEventListener('click', async (e) => {
       body: JSON.stringify({ username, banned })
     });
 
-    loadAdminPanel();
+    window.loadAdminPanel();
   }
 
   /* RESET PASSWORD */
   if (e.target.classList.contains('admin-reset')) {
-    const newPass = prompt("Enter new password:");
+    const newPass = prompt('Enter new password:');
     if (!newPass) return;
 
-    await fetch('/api/admin/reset-password', {
+    const res = await fetch('/api/admin/reset-password', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -76,12 +115,13 @@ document.addEventListener('click', async (e) => {
       body: JSON.stringify({ username, newPassword: newPass })
     });
 
-    alert("Password reset");
+    const data = await res.json();
+    alert(data.ok ? 'Password reset' : 'Failed to reset password');
   }
 
   /* DELETE USER */
   if (e.target.classList.contains('admin-delete')) {
-    if (!confirm("Delete this user?")) return;
+    if (!confirm('Delete this user?')) return;
 
     await fetch('/api/admin/delete-user', {
       method: 'POST',
@@ -92,11 +132,21 @@ document.addEventListener('click', async (e) => {
       body: JSON.stringify({ username })
     });
 
-    loadAdminPanel();
+    window.loadAdminPanel();
   }
 });
 
+/* SEARCH FILTER */
+document.getElementById('adminSearch')?.addEventListener('input', (e) => {
+  const q = e.target.value.toLowerCase();
+  document.querySelectorAll('#adminTable tbody tr').forEach(row => {
+    const text = row.textContent.toLowerCase();
+    row.style.display = text.includes(q) ? '' : 'none';
+  });
+});
+
 /* CLOSE BUTTON */
-document.getElementById('adminClose').addEventListener('click', () => {
-  hide(document.getElementById('modalAdmin'));
+document.getElementById('adminClose')?.addEventListener('click', () => {
+  const modal = document.getElementById('modalAdmin');
+  if (modal) modal.style.display = 'none';
 });

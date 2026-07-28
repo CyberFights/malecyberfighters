@@ -38,8 +38,8 @@ $('btnUploadImage').addEventListener('click', async () => {
 });
 
 $('regSubmit').addEventListener('click', async () => {
-  const username = $('regUser').value.trim();
-  const email = $('regEmail').value.trim();
+  const username = $('regUser').value.trim().toLowerCase();
+  const email = $('regEmail').value.trim().toLowerCase();
   const password = $('regPass').value;
   const display = $('regDisplay').value.trim() || username;
   const age = $('regAge').value;

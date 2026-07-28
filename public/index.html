@@ -979,7 +979,7 @@ footer{
     border:none;
   }
 }
-#userProfileCard > * {
+#userProfileCard {
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -990,6 +990,7 @@ footer{
     box-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
     width: 100%;
     position: relative;
+    margin-top: 20px;
 }
 
 #layoutWrapper {
@@ -997,22 +998,232 @@ footer{
     width: 100%;
 }
 
-  #modalLogin > div {
-    background:#111;
-    padding:20px;
-    border-radius:10px;
-    width:360px
-  }
+#modalLogin,
+#modalRegister,
+#modalAdmin,
+#modalAdminPassword,
+#modalEditProfile {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.85);
+  z-index: 10000;
+}
 
-  #modalRegister > div {
-    background:#111;
-    padding:18px;
-    border-radius:10px;
-    width:520px;
-    max-height:90vh;
-    overflow:auto
-  }
+#modalLogin > div,
+#modalAdminPassword > div {
+  background:#111;
+  padding:20px;
+  border-radius:10px;
+  width:360px;
+  border:1px solid rgba(127,216,255,0.3);
+}
 
+#modalRegister > div {
+  background:#111;
+  padding:18px;
+  border-radius:10px;
+  width:520px;
+  max-height:90vh;
+  overflow:auto;
+  border:1px solid rgba(127,216,255,0.3);
+}
+
+#modalAdmin > div {
+  background:#0a0e18;
+  padding:24px;
+  border-radius:12px;
+  width:min(900px, 95vw);
+  max-height:90vh;
+  overflow:auto;
+  border:1px solid rgba(127,216,255,0.35);
+  color:#e9f6ff;
+}
+
+#adminTable {
+  width:100%;
+  border-collapse:collapse;
+  margin-top:12px;
+  font-size:13px;
+}
+
+#adminTable th,
+#adminTable td {
+  border-bottom:1px solid rgba(160,200,255,0.15);
+  padding:8px;
+  text-align:left;
+}
+
+#adminSearch {
+  width:100%;
+  margin:10px 0;
+  padding:8px;
+  border-radius:6px;
+  border:1px solid rgba(160,200,255,0.25);
+  background:rgba(160,200,255,0.05);
+  color:#e6f6ff;
+}
+
+.modal-overlay {
+  position:fixed;
+  inset:0;
+  background:rgba(2,6,23,0.75);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:9999;
+}
+
+.modal-box {
+  background:#111;
+  padding:24px;
+  border-radius:12px;
+  width:min(720px, 92vw);
+  max-height:85vh;
+  overflow:auto;
+  border:1px solid rgba(127,216,255,0.35);
+  color:#fff;
+}
+
+.modal-scroll {
+  max-height:60vh;
+  overflow:auto;
+  line-height:1.5;
+  font-size:13px;
+  color:#cde;
+}
+
+.badge,
+#dmBadge {
+  background:#7fd8ff;
+  color:#00121f;
+  padding:1px 6px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:700;
+  margin-left:4px;
+}
+
+.chat-image {
+  max-width:220px;
+  border-radius:8px;
+  margin-top:6px;
+  cursor:pointer;
+  display:block;
+}
+
+.room-item {
+  padding:10px;
+  margin-bottom:8px;
+  border-radius:8px;
+  background:rgba(160,200,255,0.08);
+  cursor:pointer;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:8px;
+}
+
+.room-item:hover {
+  background:rgba(160,200,255,0.15);
+}
+
+.room-members-panel {
+  width:160px;
+  border-left:1px solid rgba(160,200,255,0.12);
+  padding:12px;
+  overflow:auto;
+}
+
+.room-member {
+  display:flex;
+  gap:8px;
+  align-items:center;
+  margin-bottom:8px;
+}
+
+.room-member-status {
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:var(--muted);
+}
+.room-member-status.online { background:var(--success); }
+
+.roster-user {
+  display:flex;
+  gap:12px;
+  align-items:center;
+  padding:10px;
+  border-radius:8px;
+  background:rgba(160,200,255,0.06);
+  margin-bottom:8px;
+  cursor:pointer;
+}
+.roster-user:hover {
+  background:rgba(160,200,255,0.14);
+}
+
+.avatar-img,
+.avatar-fallback {
+  border-radius:8px;
+  object-fit:cover;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(0,255,255,0.15);
+  border:1px solid var(--accent);
+  color:var(--accent);
+  font-weight:700;
+}
+
+.message-row {
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+  margin-bottom:8px;
+}
+.message-row.me {
+  flex-direction:row-reverse;
+}
+
+.side-close-btn {
+  background:transparent;
+  border:1px solid rgba(180,220,255,0.2);
+  color:var(--muted);
+  border-radius:6px;
+  padding:4px 8px;
+  cursor:pointer;
+}
+
+.side-panel-header {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:12px;
+  font-weight:700;
+}
+
+input, select, textarea {
+  background:rgba(160,200,255,0.05);
+  border:1px solid rgba(160,200,255,0.25);
+  border-radius:6px;
+  color:#e6f6ff;
+  padding:8px;
+  box-sizing:border-box;
+}
+
+#modalLogin input,
+#modalRegister input,
+#modalRegister select,
+#modalRegister textarea,
+#modalEditProfile input,
+#modalEditProfile select,
+#modalEditProfile textarea,
+#modalAdminPassword input {
+  width:100%;
+  margin:6px 0;
+}
 
 </style>
 

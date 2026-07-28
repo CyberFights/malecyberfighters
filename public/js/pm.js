@@ -57,8 +57,10 @@ function openPrivateWindow(targetUsername) {
 
   const existing = document.getElementById("pmWindow_" + targetUsername);
   if (existing) {
+    existing.style.display = "flex";
     clearUnread(targetUsername);
     if (window.updateDMListSidebar) updateDMListSidebar();
+    updateDMBadge();
     return;
   }
 
@@ -176,7 +178,11 @@ pmWindow.querySelector(".pm-story").addEventListener("click", () => {
 
   clearUnread(targetUsername);
   if (window.updateDMListSidebar) updateDMListSidebar();
+  updateDMBadge();
 }
+
+// Expose globally so chat.js / roster / profile can open DMs
+window.openPrivateWindow = openPrivateWindow;
 
 /* ---------- Send DM ---------- */
 
@@ -207,47 +213,61 @@ function renderPMHistory(targetUsername, messages) {
   const body = document.getElementById("pmBody_" + targetUsername);
   if (!body) return;
 
+  // Preserve typing indicator if present
+  const typingEl = document.getElementById("pmTyping_" + targetUsername);
   body.innerHTML = "";
 
   messages.forEach(m => {
+    // Skip SYSTEM messages that aren't for this conversation partner
+    if (m.from === "SYSTEM" && m.to !== s.username) return;
+    if (m.from === "SYSTEM" && m.to === s.username && targetUsername !== "SYSTEM") {
+      // Still show system approvals in any open DM with the related user when possible
+    }
+
     const div = document.createElement("div");
     div.className = "message " + (m.from === s.username ? "me" : "");
     div.innerHTML = `
-      <div style="font-size:13px;font-weight:700">${m.from}</div>
+      <div style="font-size:13px;font-weight:700">${escapeHtml(m.from || "")}</div>
       <div style="margin-top:6px">${escapeHtml(m.text || "")}</div>
     `;
-if (m.type === "storyApproval") {
-  div.className = "message system";
-  div.innerHTML = `
-    <div class="system-msg">
-      ${escapeHtml(m.text)}
-      <button class="small-btn approveStoryBtn" data-id="${m.storyId}">
-        Approve
-      </button>
-    </div>
-  `;
-}
-if (m.type === "relationshipApproval") {
-  div.className = "message system";
-  div.innerHTML = `
-    <div class="system-msg">
-      ${escapeHtml(m.text)}
-      <button class="small-btn approveRelBtn" data-rel-id="${m.relationshipId}">
-        Approve
-      </button>
-    </div>
-  `;
-}
+
+    if (m.type === "storyApproval") {
+      div.className = "message system";
+      div.innerHTML = `
+        <div class="system-msg">
+          ${escapeHtml(m.text || "")}
+          <button class="small-btn approveStoryBtn" data-id="${m.storyId || ""}">
+            Approve
+          </button>
+        </div>
+      `;
+    }
+
+    if (m.type === "relationshipApproval") {
+      div.className = "message system";
+      div.innerHTML = `
+        <div class="system-msg">
+          ${escapeHtml(m.text || "")}
+          <button class="small-btn approveRelBtn" data-rel-id="${m.relationshipId || ""}">
+            Approve
+          </button>
+        </div>
+      `;
+    }
 
     if (m.imageUrl) {
-      div.innerHTML += `
-        <img src="${m.imageUrl}" class="chat-image" onclick="window.open('${m.imageUrl}', '_blank')">
-      `;
+      const img = document.createElement("img");
+      img.src = m.imageUrl;
+      img.className = "chat-image";
+      img.style.cssText = "max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer";
+      img.addEventListener("click", () => window.open(m.imageUrl, "_blank"));
+      div.appendChild(img);
     }
 
     body.appendChild(div);
   });
 
+  if (typingEl) body.appendChild(typingEl);
   body.scrollTop = body.scrollHeight;
 }
 document.addEventListener("click", async (e) => {
@@ -357,19 +377,45 @@ socket.on("privateMessage", pm => {
   const me = getSession();
   if (!me) return;
 
+  // Don't count our own echo as unread
   const other = pm.from === me.username ? pm.to : pm.from;
-  const body = document.getElementById("pmBody_" + other);
+  if (!other || other === me.username) return;
 
-  if (body) {
+  const body = document.getElementById("pmBody_" + other);
+  const windowOpen = !!document.getElementById("pmWindow_" + other);
+
+  if (body && windowOpen) {
     const existing = body._history || [];
     const updated = [...existing, pm];
     body._history = updated;
     renderPMHistory(other, updated);
-  } else {
+  } else if (pm.from !== me.username) {
     incrementUnread(other);
     if (window.updateDMListSidebar) updateDMListSidebar();
+    updateDMBadge();
   }
 });
+
+function updateDMBadge() {
+  const badge = document.getElementById("dmBadge");
+  if (!badge) return;
+
+  const map = typeof getUnreadMap === "function" ? getUnreadMap() : {};
+  const total = Object.values(map).reduce((sum, n) => sum + (Number(n) || 0), 0);
+
+  if (total > 0) {
+    badge.textContent = total > 99 ? "99+" : String(total);
+    badge.style.display = "inline-block";
+  } else {
+    badge.textContent = "";
+    badge.style.display = "none";
+  }
+}
+
+window.updateDMBadge = updateDMBadge;
+
+// Refresh badge on load
+document.addEventListener("DOMContentLoaded", updateDMBadge);
 
 /* ---------- Typing Indicator Receive ---------- */
 
@@ -392,8 +438,14 @@ function updateDMListSidebar() {
   if (!sidebar) return;
 
   const user = getSession();
+  const listContainer = document.getElementById("dmSidebarList") || sidebar.querySelector(".dm-list");
+  const searchInput = document.getElementById("dmSearch");
+
   if (!user) {
-    sidebar.innerHTML = '<div class="small" style="color:var(--muted)">Login to see DMs</div>';
+    if (listContainer) {
+      listContainer.innerHTML = '<div class="small" style="color:var(--muted)">Login to see DMs</div>';
+    }
+    updateDMBadge();
     return;
   }
 
@@ -406,22 +458,17 @@ function updateDMListSidebar() {
   })
     .then(res => res.json())
     .then(data => {
-      const partners = data.partners || [];
+      let partners = (data.partners || []).filter(p => p && p !== "SYSTEM" && p !== user.username);
 
-      sidebar.innerHTML = "";
-
-      const search = document.createElement("input");
-      search.id = "dmSearch";
-      search.className = "dm-search";
-      search.placeholder = "Search DMs";
-      sidebar.appendChild(search);
-
-      const listContainer = document.createElement("div");
-      listContainer.id = "dmSidebarList";
-      sidebar.appendChild(listContainer);
+      const target = listContainer || (() => {
+        const el = document.createElement("div");
+        el.id = "dmSidebarList";
+        sidebar.appendChild(el);
+        return el;
+      })();
 
       const renderList = (filterTerm = "") => {
-        listContainer.innerHTML = "";
+        target.innerHTML = "";
 
         partners.forEach(other => {
           if (filterTerm && !other.toLowerCase().includes(filterTerm.toLowerCase())) return;
@@ -429,25 +476,36 @@ function updateDMListSidebar() {
           const item = document.createElement("div");
           item.className = "dm-sidebar-item";
           item.innerHTML = `
-            <span>@${other}</span>
+            <span>@${escapeHtml(other)}</span>
             ${unread[other] ? `<span class="dm-unread-badge">${unread[other]}</span>` : ""}
           `;
-          item.addEventListener("click", () => openPrivateWindow(other));
-          listContainer.appendChild(item);
+          item.addEventListener("click", () => {
+            openPrivateWindow(other);
+            sidebar.style.display = "none";
+          });
+          target.appendChild(item);
         });
 
-        if (!listContainer.innerHTML) {
-          listContainer.innerHTML = '<div class="small" style="color:var(--muted)">No DMs yet</div>';
+        if (!target.innerHTML) {
+          target.innerHTML = '<div class="small" style="color:var(--muted)">No DMs yet</div>';
         }
       };
 
-      renderList();
+      renderList(searchInput?.value?.trim() || "");
 
-      search.addEventListener("input", e => {
-        renderList(e.target.value.trim());
-      });
-    });
+      if (searchInput && !searchInput._dmBound) {
+        searchInput._dmBound = true;
+        searchInput.addEventListener("input", e => {
+          renderList(e.target.value.trim());
+        });
+      }
+
+      updateDMBadge();
+    })
+    .catch(err => console.error("DM partners error", err));
 }
+
+window.updateDMListSidebar = updateDMListSidebar;
 
 socket.on("storyApprovalRequest", data => {
   const { storyId, from } = data;

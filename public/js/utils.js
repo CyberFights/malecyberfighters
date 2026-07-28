@@ -94,23 +94,20 @@ window.updateProfileCard = function(user) {
   const age = user.age ? `${user.age} years old` : 'Age not set';
   const bio = user.info || 'No bio';
 
-loadStories(user.username);
-loadPendingStories(user.username);
-
 const avatarHtml = user.imageUrl
-  ? `<img src="${user.imageUrl}" alt="avatar" class="profile-avatar-img">`
-  : initials;
+  ? `<img src="${escapeHtml(user.imageUrl)}" alt="avatar" class="profile-avatar-img">`
+  : escapeHtml(initials);
 
 card.innerHTML = `
   <div class="profile-avatar">${avatarHtml}</div>
 
   <div class="profile-info">
-    <div class="profile-name">${displayName}</div>
-    <div class="profile-status">@${user.username}</div>
+    <div class="profile-name">${escapeHtml(displayName)}</div>
+    <div class="profile-status">@${escapeHtml(user.username)}</div>
 
     <div class="profile-details">
-      <div class="profile-age">${age}</div>
-      <div class="profile-bio">${bio}</div>
+      <div class="profile-age">${escapeHtml(age)}</div>
+      <div class="profile-bio">${escapeHtml(bio)}</div>
     </div>
 
     <div class="profile-stats">
@@ -128,14 +125,18 @@ card.innerHTML = `
       </div>
     </div>
   </div>
-<div id="profileStories"></div>
-<div id="profilePendingStories"></div>
+  <div id="selfProfileStories"></div>
+  <div id="selfProfilePendingStories"></div>
 
   <button id="btnEditProfile" class="ghost">Edit Profile</button>
   <button id="logoutBtn" class="profile-logout ghost">Logout</button>
 `;
 
   card.classList.add('logged-in');
+
+  // Load stories after containers exist in the DOM
+  loadSelfStories(user.username);
+  loadSelfPendingStories(user.username);
 
   /* Attach Logout Listener ------------------------------------------ */
   const logoutBtn = document.getElementById('logoutBtn');
@@ -163,30 +164,15 @@ card.innerHTML = `
     });
   }
 
-  document.querySelectorAll(".resendApproval").forEach(btn => {
-  btn.onclick = async () => {
-    const storyId = btn.dataset.id;
-
-    const res = await fetch("/api/story/resend", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ storyId })
-    });
-
-    const data = await res.json();
-    if (data.ok) alert("Approval request resent");
-  };
-});
-
 };
 
-async function loadStories(username) {
-  const res = await fetch("/api/story/list?username=" + username);
+async function loadSelfStories(username) {
+  const res = await fetch("/api/story/list?username=" + encodeURIComponent(username));
   const data = await res.json();
 
-  const box = document.getElementById("profileStories");
+  const box = document.getElementById("selfProfileStories");
   if (!box) return;
-  
+
   box.innerHTML = "<h3>Stories</h3>";
 
   if (!data.stories || !data.stories.length) {
@@ -203,13 +189,13 @@ async function loadStories(username) {
   });
 }
 
-async function loadPendingStories(username) {
-  const res = await fetch("/api/story/pending?username=" + username);
+async function loadSelfPendingStories(username) {
+  const res = await fetch("/api/story/pending?username=" + encodeURIComponent(username));
   const data = await res.json();
 
-  const box = document.getElementById("profilePendingStories");
+  const box = document.getElementById("selfProfilePendingStories");
   if (!box) return;
-  
+
   box.innerHTML = "<h3>Pending Approval</h3>";
 
   if (!data.stories || !data.stories.length) {
@@ -221,24 +207,68 @@ async function loadPendingStories(username) {
     const div = document.createElement("div");
     div.className = "story-item pending";
     div.innerHTML = `
-      <div><strong>${s.partner}</strong></div>
+      <div><strong>${escapeHtml(s.partner)}</strong></div>
       <div class="small">${new Date(s.createdAt).toLocaleDateString()}</div>
-      <div class="tiny muted">Waiting for ${s.partner} to approve…</div>
+      <div class="tiny muted">Waiting for ${escapeHtml(s.partner)} to approve…</div>
       <button class="small-btn resendApproval" data-id="${s._id}">
-    Resend Request
-  </button>
+        Resend Request
+      </button>
     `;
+    box.appendChild(div);
+  });
+
+  box.querySelectorAll(".resendApproval").forEach(btn => {
+    btn.onclick = async () => {
+      const storyId = btn.dataset.id;
+      const res = await fetch("/api/story/resend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storyId })
+      });
+      const result = await res.json();
+      if (result.ok) alert("Approval request resent");
+    };
+  });
+}
+
+// View-profile helpers (used by chat.js openUserProfile)
+async function loadStories(username) {
+  const res = await fetch("/api/story/list?username=" + encodeURIComponent(username));
+  const data = await res.json();
+
+  const box = document.getElementById("profileStories");
+  if (!box) return;
+
+  box.innerHTML = "";
+
+  if (!data.stories || !data.stories.length) {
+    box.innerHTML = "<div class='small muted'>No approved stories yet</div>";
+    return;
+  }
+
+  data.stories.forEach(s => {
+    const div = document.createElement("div");
+    div.className = "story-item";
+    div.textContent = `${s.partner} — ${new Date(s.createdAt).toLocaleDateString()}`;
+    div.onclick = () => alert(s.story);
     box.appendChild(div);
   });
 }
 
+async function loadPendingStories(username) {
+  return loadSelfPendingStories(username);
+}
+
 async function loadRelationships(username) {
-  const res = await fetch("/api/relationship/list?username=" + username);
+  const res = await fetch("/api/relationship/list?username=" + encodeURIComponent(username));
   const data = await res.json();
 
-  const box = document.getElementById("vpRelationships");
+  // Prefer view-profile container, fall back to self-profile card
+  const box =
+    document.getElementById("profileRelationships") ||
+    document.getElementById("vpRelationships");
   if (!box) return;
-  
+
   box.innerHTML = "";
 
   if (!data.relationships || !data.relationships.length) {
@@ -252,19 +282,19 @@ async function loadRelationships(username) {
     const div = document.createElement("div");
     div.className = "relationship-item";
     div.innerHTML = `
-      <strong>${r.type}</strong> with ${other}
+      <strong>${escapeHtml(r.type)}</strong> with ${escapeHtml(other)}
     `;
     box.appendChild(div);
   });
 }
 
 async function loadPendingRelationships(username) {
-  const res = await fetch("/api/relationship/pending?username=" + username);
+  const res = await fetch("/api/relationship/pending?username=" + encodeURIComponent(username));
   const data = await res.json();
 
   const box = document.getElementById("vpPendingRelationships");
   if (!box) return;
-  
+
   box.innerHTML = "";
 
   if (!data.relationships || !data.relationships.length) {
@@ -276,20 +306,22 @@ async function loadPendingRelationships(username) {
     const div = document.createElement("div");
     div.className = "relationship-item pending";
     div.innerHTML = `
-      <strong>${r.type}</strong> with ${r.target}
-      <div class="tiny muted">Waiting for ${r.target} to approve…</div>
+      <strong>${escapeHtml(r.type)}</strong> with ${escapeHtml(r.target)}
+      <div class="tiny muted">Waiting for ${escapeHtml(r.target)} to approve…</div>
     `;
     box.appendChild(div);
   });
 }
 
 async function loadRelationshipTimeline(username) {
-  const res = await fetch("/api/relationship/timeline?username=" + username);
+  const res = await fetch("/api/relationship/timeline?username=" + encodeURIComponent(username));
   const data = await res.json();
 
-  const box = document.getElementById("vpTimeline");
+  const box =
+    document.getElementById("profileTimeline") ||
+    document.getElementById("vpTimeline");
   if (!box) return;
-  
+
   box.innerHTML = "";
 
   if (!data.timeline || !data.timeline.length) {
@@ -300,13 +332,21 @@ async function loadRelationshipTimeline(username) {
   data.timeline.forEach(event => {
     const div = document.createElement("div");
     div.className = "timeline-item";
+    const when = event.approvedAt || event.createdAt;
     div.innerHTML = `
-      <div class="tiny muted">${new Date(event.createdAt).toLocaleDateString()}</div>
-      <div>${event.description || event.type}</div>
+      <div class="tiny muted">${when ? new Date(when).toLocaleDateString() : ''}</div>
+      <div>${escapeHtml(event.type || '')}${event.with ? ' with ' + escapeHtml(event.with) : ''}</div>
     `;
     box.appendChild(div);
   });
 }
+
+// Expose helpers globally
+window.loadStories = loadStories;
+window.loadPendingStories = loadPendingStories;
+window.loadRelationships = loadRelationships;
+window.loadPendingRelationships = loadPendingRelationships;
+window.loadRelationshipTimeline = loadRelationshipTimeline;
 
 /* SESSION UI SYNC ---------------------------------------------------- */
 window.updateUIForSession = function() {
@@ -316,8 +356,12 @@ window.updateUIForSession = function() {
 
 /* LOAD PROFILE ON PAGE LOAD ------------------------------------------ */
 window.addEventListener('load', () => {
-  const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
-  updateProfileCard(currentUser);
+  // Prefer session storage; fall back to currentUser for legacy sessions
+  const sessionUser = getSession();
+  const legacyUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+  const user = sessionUser || legacyUser;
+  if (user && !sessionUser) setSession(user);
+  updateProfileCard(user);
 });
 
 const STORAGE_ROOM_UNREAD = 'cw_room_unread';

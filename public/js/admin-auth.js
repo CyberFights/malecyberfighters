@@ -5,58 +5,72 @@
 window.adminSessionKey = null;
 
 /* Open Admin Password Modal */
-document.getElementById("btnAdmin").addEventListener("click", () => {
+document.getElementById("btnAdmin")?.addEventListener("click", () => {
   if (window.adminSessionKey) {
-    // Already authenticated → open admin panel
     if (window.loadAdminPanel) window.loadAdminPanel();
     return;
   }
 
-  // Show password modal
-  show(document.getElementById("modalAdminPassword"));
+  const modal = document.getElementById("modalAdminPassword");
+  if (modal) {
+    modal.style.display = "flex";
+    modal.style.alignItems = "center";
+    modal.style.justifyContent = "center";
+  }
 });
 
 /* Cancel admin password modal */
-document.getElementById("adminPasswordCancel").addEventListener("click", () => {
-  hide(document.getElementById("modalAdminPassword"));
+document.getElementById("adminPasswordCancel")?.addEventListener("click", () => {
+  const modal = document.getElementById("modalAdminPassword");
+  if (modal) modal.style.display = "none";
 });
 
 /* Submit admin password */
-document.getElementById("adminPasswordSubmit").addEventListener("click", async () => {
-  const input = document.getElementById("adminPasswordInput").value.trim();
+document.getElementById("adminPasswordSubmit")?.addEventListener("click", async () => {
+  const inputEl = document.getElementById("adminPasswordInput");
   const error = document.getElementById("adminPasswordError");
+  const input = (inputEl?.value || "").trim();
 
-  error.style.display = "none";
+  if (error) error.style.display = "none";
 
   if (!input) {
-    error.textContent = "Enter a password";
-    error.style.display = "block";
+    if (error) {
+      error.textContent = "Enter a password";
+      error.style.display = "block";
+    }
     return;
   }
 
-  // Test password by calling a protected endpoint
-  const resp = await fetch("/api/admin/users", {
-    headers: { "x-admin-key": input }
-  });
+  try {
+    const resp = await fetch("/api/admin/users", {
+      headers: { "x-admin-key": input }
+    });
 
-  const data = await resp.json();
+    const data = await resp.json();
 
-  if (!data.ok) {
-    error.textContent = "Incorrect password";
-    error.style.display = "block";
-    return;
+    if (!data.ok) {
+      if (error) {
+        error.textContent = "Incorrect password";
+        error.style.display = "block";
+      }
+      return;
+    }
+
+    window.adminSessionKey = input;
+
+    const modal = document.getElementById("modalAdminPassword");
+    if (modal) modal.style.display = "none";
+    if (inputEl) inputEl.value = "";
+
+    if (window.loadAdminPanel) window.loadAdminPanel();
+  } catch (err) {
+    if (error) {
+      error.textContent = "Network error";
+      error.style.display = "block";
+    }
   }
-
-  // Password correct → store session key
-  window.adminSessionKey = input;
-
-  hide(document.getElementById("modalAdminPassword"));
-
-  // Open admin panel
-  if (window.loadAdminPanel) window.loadAdminPanel();
 });
 
-/* Close Admin Panel */
-document.getElementById("adminClose").addEventListener("click", () => {
-  hide(document.getElementById("modalAdmin"));
+document.getElementById("adminPasswordInput")?.addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("adminPasswordSubmit")?.click();
 });
