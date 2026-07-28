@@ -63,7 +63,6 @@ app.get('/', (req, res) => {
   return res.sendFile(__dirname + '/public/index.html');
 });
 
-
 app.use(express.static(path.join(__dirname, 'public')));
 
 const authLimiter = rateLimit({
@@ -76,25 +75,6 @@ app.use('/api/login', authLimiter);
 app.use('/api/register', authLimiter);
 app.use(cors({ origin: true, credentials: true }));
 
-// ---------- API: METHOD GUARDS ----------
-// /api/login and /api/register are POST-only. Any other method (e.g. someone
-// opening https://.../api/login directly in a browser, a crawler, or an
-// uptime probe doing a GET) used to fall through to Express's default HTML
-// 404 page ("Cannot GET /api/login"), which made it look like the login API
-// was missing. Return a clear 405 JSON response instead.
-function methodNotAllowed(allowedMethod) {
-  return (req, res, next) => {
-    if (req.method === allowedMethod) return next();
-    res.set('Allow', allowedMethod);
-    return res.status(405).json({
-      ok: false,
-      error: 'method_not_allowed',
-      message: `${req.baseUrl} only accepts ${allowedMethod}. Send a ${allowedMethod} request with a JSON body.`
-    });
-  };
-}
-app.use('/api/login', methodNotAllowed('POST'));
-app.use('/api/register', methodNotAllowed('POST'));
 
 // ---------- DB ----------
 if (!MONGO_URI) {
