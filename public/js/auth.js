@@ -4,7 +4,7 @@ $('loginSubmit').addEventListener('click', doLogin);
 $('loginPass').addEventListener('keydown', e => { if(e.key === 'Enter') doLogin(); });
 
 async function doLogin(){
-  const username = $('loginUser').value.trim().toLowerCase();
+  const username = $('loginUser').value.trim();
   const password = $('loginPass').value;
   const err = $('loginError');
   err.style.display = 'none';
