@@ -75,6 +75,26 @@ app.use('/api/login', authLimiter);
 app.use('/api/register', authLimiter);
 app.use(cors({ origin: true, credentials: true }));
 
+// ---------- API: METHOD GUARDS ----------
+// /api/login and /api/register are POST-only. Any other method (e.g. someone
+// opening https://.../api/login directly in a browser, a crawler, or an
+// uptime probe doing a GET) used to fall through to Express's default HTML
+// 404 page ("Cannot GET /api/login"), which made it look like the login API
+// was missing. Return a clear 405 JSON response instead.
+function methodNotAllowed(allowedMethod) {
+  return (req, res, next) => {
+    if (req.method === allowedMethod) return next();
+    res.set('Allow', allowedMethod);
+    return res.status(405).json({
+      ok: false,
+      error: 'method_not_allowed',
+      message: `${req.baseUrl} only accepts ${allowedMethod}. Send a ${allowedMethod} request with a JSON body.`
+    });
+  };
+}
+app.use('/api/login', methodNotAllowed('POST'));
+app.use('/api/register', methodNotAllowed('POST'));
+
 // ---------- DB ----------
 if (!MONGO_URI) {
   console.warn('Warning: MONGO_URI is not set. Database features will fail until it is configured.');
@@ -1087,6 +1107,18 @@ app.get("/api/allUsers", async (req, res) => {
     console.error("Error fetching all users:", err);
     res.status(500).json({ success: false });
   }
+});
+
+// ---------- API: JSON 404 HANDLER ----------
+// Any /api/* path that matched no route above returns a consistent JSON 404
+// instead of Express's default HTML "Cannot GET ..." page, so API consumers
+// always get a parseable JSON response.
+app.use('/api', (req, res) => {
+  return res.status(404).json({
+    ok: false,
+    error: 'not_found',
+    message: `No API endpoint matches ${req.method} ${req.originalUrl}`
+  });
 });
 
 
