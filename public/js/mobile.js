@@ -435,7 +435,7 @@
     const errEl = $("loginError");
     setError(errEl, "");
 
-    const username = ($("loginUser") && $("loginUser").value || "").trim().toLowerCase();
+    const username = ($("loginUser") && $("loginUser").value || "").trim();
     const password = ($("loginPass") && $("loginPass").value) || "";
 
     if (!username || !password) {
