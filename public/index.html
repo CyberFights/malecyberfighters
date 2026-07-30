@@ -61,9 +61,11 @@ body::after{
 }
 
 .container-main{
-  display: grid;
-  grid-template-column:1f;
-  }
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) minmax(180px, 240px);
+  gap:20px;
+  align-items:start;
+}
 
 header{
   display:flex;
@@ -927,6 +929,10 @@ footer{
 }
 
 @media(max-width:768px){
+  .container-main{
+    grid-template-columns:1fr;
+  }
+
   body,html{
     margin:0;
     padding:0;
@@ -989,14 +995,16 @@ footer{
     display: flex;
     flex-direction: column;
     gap: 12px;
+    box-sizing:border-box;
+    width:100%;
+    max-width:none;
+    margin:0;
     background: rgba(15, 23, 42, 0.8);
     padding: 20px;
     border-radius: 12px;
     border: 1px solid #38bdf8;
     box-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
-    width: 100%;
     position: relative;
-    margin-top: 20px;
 }
 
 #layoutWrapper {
@@ -1323,13 +1331,11 @@ input, select, textarea {
 </div>
   </div>
   </div>
-  <div class="contain">
- <div class="user-profile-card" id="userProfileCard">
-            <button id="btnEditProfile" class="ghost">Edit Profile</button>
-      <div>🔒 Not logged in</div>
-   </div>
+  <div class="user-profile-card" id="userProfileCard">
+    <button id="btnEditProfile" class="ghost">Edit Profile</button>
+    <div>🔒 Not logged in</div>
   </div>
-  </div>
+</div>
 
 <footer>Male Cyber Fighters</footer>
 </div>
