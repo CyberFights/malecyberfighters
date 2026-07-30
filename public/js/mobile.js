@@ -156,6 +156,7 @@
     rosterPerPage: 10,
     dmPartner: null,
     dmUnread: {},         // username -> count
+    roomUnread: {},       // roomId -> count
     legalLoaded: {}
   };
 
@@ -459,21 +460,26 @@
       return;
     }
 
+    let data;
     try {
-      const data = await postJSON("/api/login", { username, password });
-      if (!data.ok) {
-        setError(errEl, data.error === "banned" ? "You are banned." : "Invalid credentials");
-        return;
-      }
-
-      setSession(data.user);
-      hideId("modalLogin");
-      $("loginUser").value = "";
-      $("loginPass").value = "";
-      enterApp();
+      data = await postJSON("/api/login", { username, password });
     } catch (e) {
       setError(errEl, "Network error during login");
+      return;
     }
+
+    if (!data.ok) {
+      setError(errEl, data.error === "banned" ? "You are banned." : "Invalid credentials");
+      return;
+    }
+
+    setSession(data.user);
+    hideId("modalLogin");
+    const loginUser = $("loginUser");
+    if (loginUser) loginUser.value = "";
+    const loginPass = $("loginPass");
+    if (loginPass) loginPass.value = "";
+    enterApp();
   }
 
   async function handleRegister() {
