@@ -934,6 +934,23 @@
     }
   }
 
+  // Desktop-compatible pending-data loaders.  The mobile document does not
+  // render dedicated pending sections, but keeping these functions and paths
+  // aligned lets callers use the same API contract on either client.
+  async function loadPendingStories(username) {
+    const data = await getJSON("/api/story/pending?username=" + encodeURIComponent(username));
+    return (data && data.stories) || [];
+  }
+
+  async function resendStoryApproval(storyId) {
+    return postJSON("/api/story/resend", { storyId });
+  }
+
+  async function loadPendingRelationships(username) {
+    const data = await getJSON("/api/relationship/pending?username=" + encodeURIComponent(username));
+    return (data && data.relationships) || [];
+  }
+
   async function blockCurrentProfile() {
     const me = getSession();
     const modal = $("modalViewProfile");
@@ -1980,6 +1997,27 @@
   });
 
   /* small debug surface */
+  // Keep the public function names used by the desktop scripts available to
+  // mobile callers.  Each alias uses mobile.html's existing elements and the
+  // same API paths rather than duplicating a second implementation.
+  Object.assign(window, {
+    getSession,
+    setSession,
+    logout,
+    openEditProfileModal: openEditProfile,
+    openRosterModal: openRoster,
+    openUserProfile: openProfile,
+    openPrivateWindow: openDm,
+    loadPublicMessages,
+    sendPublicMessage,
+    loadStories: loadProfileStories,
+    loadPendingStories,
+    loadRelationships: loadProfileRelationships,
+    loadPendingRelationships,
+    loadRelationshipTimeline: loadProfileTimeline,
+    resendStoryApproval
+  });
+
   window.__cw = {
     state,
     getSession,
@@ -1988,6 +2026,9 @@
     openProfile,
     openDm,
     openRoster,
-    loadAllUsers
+    loadAllUsers,
+    loadPendingStories,
+    loadPendingRelationships,
+    resendStoryApproval
   };
 })();
