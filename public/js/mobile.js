@@ -163,6 +163,11 @@
 
   function directoryUser(username) {
     if (!username) return null;
+    if (state.session && state.session.username === username) {
+      const found = state.allUsers.find(u => u.username === username) ||
+                    state.onlineUsers.find(u => u.username === username);
+      return Object.assign({}, state.session, found || {});
+    }
     return state.allUsers.find(u => u.username === username) ||
            state.onlineUsers.find(u => u.username === username) ||
            null;
@@ -320,6 +325,10 @@
       }
     });
 
+    socket.on("pmError", ({ reason } = {}) => {
+      alert(reason || "User not found");
+    });
+
     socket.on("typingDM", ({ from }) => {
       if (state.dmPartner && from === state.dmPartner) {
         const el = $("dmTyping");
@@ -355,7 +364,14 @@
     socket.on("roomMessage", msg => {
       const popup = $("roomChatPopup");
       const current = popup ? popup.dataset.room : null;
-      if (!msg || (msg.room && current && String(msg.room) !== String(current))) return;
+      if (!current || !msg || String(msg.room) !== String(current)) {
+        const s = getSession();
+        if (msg && msg.room && (!s || msg.from !== s.username)) {
+          state.roomUnread[msg.room] = (state.roomUnread[msg.room] || 0) + 1;
+          renderRoomsSidebar();
+        }
+        return;
+      }
       appendRoomMessage(msg);
     });
 
@@ -568,6 +584,14 @@
     const feed = $("publicFeed");
     if (!feed) return;
     try {
+      if (!state.allUsers || !state.allUsers.length) {
+        try {
+          const resUsers = await getJSON("/api/allUsers");
+          if (resUsers && resUsers.success && Array.isArray(resUsers.users)) {
+            state.allUsers = resUsers.users;
+          }
+        } catch (err) {}
+      }
       const data = await getJSON("/api/public-messages");
       if (!data.ok) return;
       feed.innerHTML = "";
@@ -584,9 +608,10 @@
     const s = getSession();
     const author = directoryUser(msg.from) || {};
     const isMe = !!(s && msg.from === s.username);
-    const avatarSource = msg.avatar || msg.imageUrl
-      ? { imageUrl: msg.avatar || msg.imageUrl, display: msg.display || msg.from }
-      : { imageUrl: author.imageUrl, display: msg.display || msg.from };
+    const display = msg.display || author.display || msg.from || "";
+    const avatarSource = msg.avatar || msg.imageUrl || author.imageUrl
+      ? { imageUrl: msg.avatar || msg.imageUrl || author.imageUrl, display }
+      : { imageUrl: author.imageUrl, display };
 
     const row = document.createElement("div");
     row.className = "message-row" + (isMe ? " me" : "");
@@ -594,8 +619,8 @@
       <div class="message-avatar">${avatarHtml(avatarSource)}</div>
       <div class="message">
         <div class="message-meta" style="color:${escapeHtml(msg.color || author.color || "#7fd8ff")}">
-          ${escapeHtml(msg.display || msg.from)}
-          <span class="small muted">@${escapeHtml(msg.from)} • ${escapeHtml(timeLabel(msg.time))}</span>
+          ${escapeHtml(display)}
+          <span class="small muted">@${escapeHtml(msg.from || "")} • ${escapeHtml(timeLabel(msg.time))}</span>
         </div>
         <div>${escapeHtml(msg.text || "")}</div>
       </div>
@@ -621,6 +646,8 @@
       from: s.username,
       display: s.display || s.username,
       text,
+      avatar: s.imageUrl || null,
+      color: s.color || null,
       time: new Date().toISOString()
     };
 
@@ -1044,8 +1071,15 @@
         const item = document.createElement("div");
         item.className = "dm-row";
         const unread = state.dmUnread[other];
+        const user = directoryUser(other) || { username: other, display: other };
         item.innerHTML = `
-          <span class="ellipsis">@${escapeHtml(other)}</span>
+          <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1">
+            ${avatarHtml(user, 32)}
+            <div style="min-width:0">
+              <div class="ellipsis" style="font-weight:700">${escapeHtml(user.display || other)}</div>
+              <div class="ellipsis small muted">@${escapeHtml(other)}</div>
+            </div>
+          </div>
           ${unread ? `<span class="badge">${unread}</span>` : ""}
         `;
         item.addEventListener("click", () => openDm(other));
@@ -1103,14 +1137,33 @@
 
     const s = getSession();
     const isMe = !!(s && msg.from === s.username);
-    const author = directoryUser(msg.from) || { username: msg.from, display: msg.from };
+    const author = directoryUser(msg.from) || { username: msg.from, display: msg.display || msg.from };
 
     const row = document.createElement("div");
-    row.className = "message-row" + (isMe ? " me" : "");
+    row.className = "message-row" + (isMe ? " me" : "") + ((msg.type === "storyApproval" || msg.type === "relationshipApproval") ? " system" : "");
 
-    const content = msg.imageUrl
-      ? `<img src="${escapeHtml(msg.imageUrl)}" class="chat-image" alt="attachment">`
-      : `<div>${escapeHtml(msg.text || "")}</div>`;
+    let content = "";
+    if (msg.type === "storyApproval") {
+      const sid = msg.storyId || msg._id || "";
+      content = `
+        <div class="system-msg">
+          <div>${escapeHtml(msg.text || "")}</div>
+          <button type="button" class="small-btn approveStoryBtn" data-id="${escapeHtml(sid)}">Approve</button>
+        </div>
+      `;
+    } else if (msg.type === "relationshipApproval") {
+      const rid = msg.relationshipId || msg._id || "";
+      content = `
+        <div class="system-msg">
+          <div>${escapeHtml(msg.text || "")}</div>
+          <button type="button" class="small-btn approveRelBtn" data-id="${escapeHtml(rid)}">Approve</button>
+        </div>
+      `;
+    } else if (msg.imageUrl) {
+      content = `<img src="${escapeHtml(msg.imageUrl)}" class="chat-image" alt="attachment">`;
+    } else {
+      content = `<div>${escapeHtml(msg.text || "")}</div>`;
+    }
 
     row.innerHTML = `
       <div class="message-avatar">${avatarHtml(author)}</div>
@@ -1121,6 +1174,49 @@
         ${content}
       </div>
     `;
+
+    const storyBtn = row.querySelector(".approveStoryBtn");
+    if (storyBtn) {
+      storyBtn.addEventListener("click", async () => {
+        const storyId = storyBtn.dataset.id;
+        if (!storyId) return;
+        try {
+          const res = await postJSON("/api/story/approve", { storyId });
+          if (res && res.ok) {
+            storyBtn.parentElement.innerHTML = '<div class="tiny muted">Story approved</div>';
+          } else {
+            alert("Could not approve story.");
+          }
+        } catch (e) {
+          alert("Could not approve story.");
+        }
+      });
+    }
+
+    const relBtn = row.querySelector(".approveRelBtn");
+    if (relBtn) {
+      relBtn.addEventListener("click", async () => {
+        const relationshipId = relBtn.dataset.id;
+        if (!relationshipId) return;
+        try {
+          const res = await postJSON("/api/relationship/approve", { relationshipId });
+          if (res && res.ok) {
+            relBtn.parentElement.innerHTML = '<div class="tiny muted">Relationship approved</div>';
+          } else {
+            alert("Could not approve relationship.");
+          }
+        } catch (e) {
+          alert("Could not approve relationship.");
+        }
+      });
+    }
+
+    const imgEl = row.querySelector(".chat-image");
+    if (imgEl) {
+      imgEl.style.cursor = "pointer";
+      imgEl.addEventListener("click", () => window.open(msg.imageUrl, "_blank"));
+    }
+
     body.appendChild(row);
     body.scrollTop = body.scrollHeight;
   }
@@ -1139,8 +1235,8 @@
       // the server echoes the message back to the sender, so do not append here
       state.socket.emit("privateMessage", payload);
     } else {
-      postJSON("/api/send-dm", payload).catch(() => {});
-      appendDmMessage(Object.assign({ time: new Date().toISOString() }, payload));
+      alert("Not connected to the arena. Please reload the page.");
+      return;
     }
 
     input.value = "";
@@ -1155,6 +1251,8 @@
 
     if (state.socket) {
       state.socket.emit("privateMessage", { from: s.username, to: state.dmPartner, imageUrl: url });
+    } else {
+      alert("Not connected to the arena. Please reload the page.");
     }
   }
 
@@ -1235,7 +1333,7 @@
       if (!r.private) return true;
       if (!s) return false;
       if (r.owner && r.owner.toLowerCase() === s.username.toLowerCase()) return true;
-      return Array.isArray(r.invitedUsers) && r.invitedUsers.includes(s.username);
+      return Array.isArray(r.invitedUsers) && r.invitedUsers.some(u => u && u.toLowerCase() === s.username.toLowerCase());
     });
 
     if (sort === "newest") rooms.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -1253,7 +1351,11 @@
     rooms.forEach(room => {
       const div = document.createElement("div");
       div.className = "room-item";
-      div.innerHTML = `<span class="ellipsis">${room.private ? "🔒 " : ""}${escapeHtml(room.name)}</span>`;
+      const unread = state.roomUnread[room._id];
+      div.innerHTML = `
+        <span class="ellipsis">${room.private ? "🔒 " : ""}${escapeHtml(room.name)}</span>
+        ${unread ? `<span class="badge">${unread}</span>` : ""}
+      `;
       div.addEventListener("click", () => openRoomPopup(room._id, room.name));
 
       if (s && room.owner && room.owner.toLowerCase() === s.username.toLowerCase()) {
@@ -1279,6 +1381,8 @@
     if (!popup || !roomId) return;
 
     popup.dataset.room = roomId;
+    delete state.roomUnread[roomId];
+    renderRoomsSidebar();
 
     const title = $("roomChatTitle");
     if (title) title.textContent = roomName || "Room";
@@ -1308,24 +1412,34 @@
     const feed = $("roomFeed");
     if (!feed || !msg) return;
 
+    const s = getSession();
+    const isMe = !!(s && msg.from === s.username);
     const author = directoryUser(msg.from) || { username: msg.from, display: msg.display || msg.from };
+    const display = msg.display || author.display || msg.from || "";
 
     const content = msg.imageUrl
       ? `<img src="${escapeHtml(msg.imageUrl)}" class="chat-image" alt="attachment">`
       : `<div>${escapeHtml(msg.text || "")}</div>`;
 
     const div = document.createElement("div");
-    div.className = "message-row";
+    div.className = "message-row" + (isMe ? " me" : "");
     div.innerHTML = `
       <div class="message-avatar">${avatarHtml(author)}</div>
       <div class="message">
         <div class="message-meta" style="color:${escapeHtml(author.color || "#7fd8ff")}">
-          ${escapeHtml(msg.display || msg.from)}
-          <span class="small muted">@${escapeHtml(msg.from)} • ${escapeHtml(timeLabel(msg.time))}</span>
+          ${escapeHtml(display)}
+          <span class="small muted">@${escapeHtml(msg.from || "")} • ${escapeHtml(timeLabel(msg.time))}</span>
         </div>
         ${content}
       </div>
     `;
+
+    const imgEl = div.querySelector(".chat-image");
+    if (imgEl) {
+      imgEl.style.cursor = "pointer";
+      imgEl.addEventListener("click", () => window.open(msg.imageUrl, "_blank"));
+    }
+
     feed.appendChild(div);
     feed.scrollTop = feed.scrollHeight;
   }
