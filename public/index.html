@@ -60,6 +60,11 @@ body::after{
   box-shadow:0 8px 30px rgba(120,180,255,0.25);
 }
 
+.container-main{
+  display: grid;
+  grid-template-column: auto auto auto;
+  }
+
 header{
   display:flex;
   align-items:center;
@@ -1292,6 +1297,8 @@ input, select, textarea {
 
   </div>
 </header>
+<div class="container-main">
+  <div class="contain">
 <div id="layoutWrapper">
 <div class="grid">
  <div class="gridContent">  
@@ -1319,11 +1326,14 @@ input, select, textarea {
 </div>
 </div>
   </div>
+  </div>
+  <div class="contain">
  <div class="user-profile-card" id="userProfileCard">
             <button id="btnEditProfile" class="ghost">Edit Profile</button>
       <div>🔒 Not logged in</div>
    </div>
-  
+  </div>
+  </div>
 
 <footer>Male Cyber Fighters</footer>
 </div>
