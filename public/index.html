@@ -549,6 +549,23 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
   .message { max-width: 88%; }
 }
 
+/* ============================================================
+   RESPONSIVE UI SPLIT
+   The page ships both a mobile UI (#mainUI) and a desktop UI
+   (.container). On small screens we show the mobile UI and
+   hide the desktop container; on larger screens the reverse.
+   Without this, #mainUI is never displayed (the loaded JS never
+   reveals it) so the mobile .actions stay invisible.
+   ============================================================ */
+@media (max-width: 768px) {
+  .container { display: none; }
+  #mainUI {
+    display: block;
+    min-height: 100vh;
+    overflow-y: auto;
+  }
+}
+
 /* Original desktop styles kept below for compatibility */
 :root{
   --bg:#05070d;
@@ -637,7 +654,7 @@ header{
   box-shadow:0 0 12px #7fd8ff, 0 0 24px #7fd8ff;
 }
 
-.actions{
+.container .actions{
   position:fixed;
   left:20px;
   top:50%;
@@ -1830,6 +1847,8 @@ input, select, textarea {
   </div>
 
   <div class="actions">
+    <button id="btnLoginMobile" type="button">Login</button>
+    <button id="btnRegisterMobile" class="ghost" type="button">Register</button>
     <button id="btnOpenChat" type="button">Open Arena</button>
     <button id="btnRoster" class="ghost" type="button">User Roster</button>
     <button id="btnDMs" class="ghost" type="button">
