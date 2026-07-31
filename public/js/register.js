@@ -1,5 +1,5 @@
 $('btnRegister').addEventListener('click', () => show($('modalRegister')));
-$('btnRegisterMobile')?.addEventListener('click', () => show($('modalRegister')));
+
 $('regCancel').addEventListener('click', () => hide($('modalRegister')));
 
 let uploadedImageUrl = '';
