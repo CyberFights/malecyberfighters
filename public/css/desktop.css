@@ -256,37 +256,71 @@ button.ghost{
   display:none;
   align-items:center;
   justify-content:center;
-  background:rgba(2,6,23,0.7);
+  padding:24px;
+  box-sizing:border-box;
+  background:rgba(2,6,23,0.72);
+  backdrop-filter:blur(8px);
   z-index:9999;
 }
 
+#dmSidebar .list-popup-panel,
+#roomsSidebar .list-popup-panel{
+  width:min(760px, 94vw);
+  max-height:min(80vh, 720px);
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  box-sizing:border-box;
+  background:linear-gradient(180deg, rgba(15,23,42,0.96), rgba(5,10,22,0.98));
+  border:1px solid rgba(127,216,255,0.35);
+  border-radius:14px;
+  padding:18px;
+  box-shadow:0 24px 70px rgba(0,0,0,0.5), 0 0 24px rgba(127,216,255,0.22);
+}
+
+#dmSidebar .side-panel-header,
 #roomsSidebar .side-panel-header{
-  background:rgba(15,23,42,0.9);
-  padding:20px;
-  border-radius:12px;
-  width:90%;
-  max-width:420px;
-  border:1px solid #38bdf8;
-  backdrop-filter:blur(12px);
+  flex-shrink:0;
+  padding-bottom:10px;
+  margin-bottom:0;
+  border-bottom:1px solid rgba(160,200,255,0.15);
 }
 
 .dm-search{
+  width:100%;
   background:rgba(160,200,255,0.05);
   border:1px solid rgba(160,200,255,0.25);
-  padding:6px;
-  border-radius:6px;
+  padding:8px;
+  border-radius:8px;
   color:#e6f6ff;
-  margin-bottom:8px;
+  margin-bottom:0;
+}
+
+.dm-list,
+.rooms-list{
+  display:flex;
+  flex:1 1 auto;
+  flex-direction:column;
+  gap:10px;
+  width:100%;
+  min-height:0;
+  overflow:auto;
+  padding-right:4px;
 }
 
 .dm-sidebar-item{
-  padding:8px;
-  border-radius:8px;
+  width:100%;
+  box-sizing:border-box;
+  padding:10px;
+  border-radius:10px;
   background:rgba(160,200,255,0.08);
+  border:1px solid rgba(160,200,255,0.12);
   cursor:pointer;
   display:flex;
   justify-content:space-between;
   align-items:center;
+  gap:12px;
 }
 
 .dm-sidebar-item:hover{
@@ -300,6 +334,7 @@ button.ghost{
   border-radius:6px;
   font-size:11px;
   font-weight:bold;
+  flex-shrink:0;
 }
 
 
@@ -1076,10 +1111,13 @@ footer{
 }
 
 .room-item {
+  width:100%;
+  box-sizing:border-box;
   padding:10px;
-  margin-bottom:8px;
-  border-radius:8px;
+  margin-bottom:0;
+  border-radius:10px;
   background:rgba(160,200,255,0.08);
+  border:1px solid rgba(160,200,255,0.12);
   cursor:pointer;
   display:flex;
   justify-content:space-between;

@@ -1416,3 +1416,102 @@ table tr:hover {
 #supportPopup #srSubmit:hover {
   background: #5ab0ff;
 }
+/* DM/Rooms list popups -----------------------------------------------------
+   Keep the list launchers as modal popups instead of side drawers. */
+#dmSidebar,
+#roomsSidebar {
+  position: fixed;
+  inset: 0;
+  left: 0;
+  right: 0;
+  width: 100vw;
+  height: 100vh;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: row;
+  padding: 16px;
+  box-sizing: border-box;
+  background: rgba(2, 6, 23, 0.78);
+  border: 0;
+  backdrop-filter: blur(8px);
+  overflow: hidden;
+  box-shadow: none;
+  transition: none;
+  z-index: 9999;
+}
+
+#dmSidebar.open,
+#roomsSidebar.open {
+  display: flex;
+}
+
+#dmSidebar .list-popup-panel,
+#roomsSidebar .list-popup-panel {
+  width: min(520px, 94vw);
+  max-height: min(82vh, 680px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-sizing: border-box;
+  padding: 16px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.97), rgba(5, 10, 22, 0.98));
+  border: 1px solid rgba(79, 209, 255, 0.38);
+  border-radius: 16px;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.55), var(--accent-glow);
+}
+
+#dmSidebar .side-panel-header,
+#roomsSidebar .side-panel-header {
+  flex-shrink: 0;
+  padding: 0 0 10px;
+  border-bottom: 1px solid rgba(160,200,255,0.15);
+}
+
+#dmSidebar .dm-search,
+#roomsSidebar select {
+  width: 100%;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+#dmSidebar .dm-list,
+#roomsSidebar .rooms-list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.dm-row,
+.dm-sidebar-item,
+.room-item {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(160,200,255,0.08);
+  border: 1px solid rgba(160,200,255,0.15);
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.dm-row:hover,
+.dm-sidebar-item:hover,
+.room-item:hover {
+  background: rgba(127,216,255,0.15);
+}
+
+#roomsSidebar #createRoomBtn {
+  width: 100%;
+  flex-shrink: 0;
+}

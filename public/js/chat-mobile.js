@@ -911,6 +911,9 @@ function openRoomPopup(roomId, roomName) {
   const popup = $('roomChatPopup');
   const title = $('roomChatTitle');
   if (!popup || !title) return;
+
+  const roomsPopup = $('roomsSidebar');
+  if (roomsPopup) roomsPopup.style.display = 'none';
   
   title.textContent = roomName;
 

@@ -3441,6 +3441,20 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
+["dmSidebar", "roomsSidebar"].forEach(id => {
+  const popup = $(id);
+  if (!popup) return;
+  popup.addEventListener("click", e => {
+    if (e.target === popup) hideId(id);
+  });
+});
+
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  hideId("dmSidebar");
+  hideId("roomsSidebar");
+});
+
 
   /* ===================== END ORIGINAL mobile.js ===================== */
 })();
