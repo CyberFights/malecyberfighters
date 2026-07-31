@@ -1,3 +1,112 @@
+// Overwrite document.getElementById to handle duplicate IDs between mobile (#mainUI) and desktop (.container) layouts
+(function() {
+  const originalGetElementById = document.getElementById;
+  document.getElementById = function(id) {
+    const escapedId = id.replace(/"/g, '\\"');
+    const elements = document.querySelectorAll('[id="' + escapedId + '"]');
+    if (elements.length > 1) {
+      // Find the currently active element as the primary target
+      const getActiveElement = () => {
+        const mainUI = originalGetElementById.call(document, 'mainUI');
+        if (mainUI) {
+          const isMobile = window.getComputedStyle(mainUI).display !== 'none';
+          for (let el of elements) {
+            const insideMainUI = mainUI.contains(el);
+            if (isMobile && insideMainUI) return el;
+            if (!isMobile && !insideMainUI) return el;
+          }
+        }
+        return elements[0];
+      };
+
+      const primary = getActiveElement();
+
+      return new Proxy(primary, {
+        get(target, prop, receiver) {
+          // 1. If adding event listeners, bind to ALL matching elements so both desktop & mobile work seamlessly
+          if (prop === 'addEventListener') {
+            return function(...args) {
+              elements.forEach(el => el.addEventListener(...args));
+            };
+          }
+          if (prop === 'removeEventListener') {
+            return function(...args) {
+              elements.forEach(el => el.removeEventListener(...args));
+            };
+          }
+
+          const activeEl = getActiveElement();
+
+          // 2. If accessing style, return a proxy to keep style properties in sync across all elements
+          if (prop === 'style') {
+            return new Proxy(activeEl.style, {
+              set(styleTarget, styleProp, styleValue) {
+                elements.forEach(el => {
+                  el.style[styleProp] = styleValue;
+                });
+                return true;
+              },
+              get(styleTarget, styleProp) {
+                return activeEl.style[styleProp];
+              }
+            });
+          }
+
+          // 3. If accessing classList, proxy common mutation methods so class changes sync across both
+          if (prop === 'classList') {
+            const classListMethods = ['add', 'remove', 'toggle', 'replace'];
+            return new Proxy(activeEl.classList, {
+              get(classListTarget, classListProp) {
+                if (classListMethods.includes(classListProp)) {
+                  return function(...args) {
+                    elements.forEach(el => el.classList[classListProp](...args));
+                  };
+                }
+                const val = Reflect.get(activeEl.classList, classListProp);
+                if (typeof val === 'function') {
+                  return val.bind(activeEl.classList);
+                }
+                return val;
+              }
+            });
+          }
+
+          // 4. If accessing dataset, sync dataset assignments
+          if (prop === 'dataset') {
+            return new Proxy(activeEl.dataset, {
+              set(datasetTarget, datasetProp, datasetValue) {
+                elements.forEach(el => {
+                  el.dataset[datasetProp] = datasetValue;
+                });
+                return true;
+              },
+              get(datasetTarget, datasetProp) {
+                return activeEl.dataset[datasetProp];
+              }
+            });
+          }
+
+          // Default fallback
+          const value = Reflect.get(activeEl, prop);
+          if (typeof value === 'function') {
+            return value.bind(activeEl);
+          }
+          return value;
+        },
+
+        set(target, prop, value, receiver) {
+          // Keep common values, states, and inline HTML in sync
+          elements.forEach(el => {
+            Reflect.set(el, prop, value);
+          });
+          return true;
+        }
+      });
+    }
+    return originalGetElementById.call(document, id);
+  };
+})();
+
 // utils.js (top) — define $ only if not already defined
 if (typeof window.$ === 'undefined') {
   window.$ = function(id) {
