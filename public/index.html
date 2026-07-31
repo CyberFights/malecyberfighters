@@ -539,15 +539,17 @@
   </div>
 </div>
 
-<div id="dmSidebar" class="dm-panel" style="background:#111;padding:18px;border-radius:10px;width:760px;max-height:80vh;overflow:auto">
-  <div class="side-panel-header">
-    <span>Direct Messages</span>
-    <button id="closeDmSidebar" class="side-close-btn">✕</button>
+<div id="dmSidebar" class="list-popup-overlay" role="dialog" aria-modal="true" aria-labelledby="dmSidebarTitle">
+  <div class="list-popup-panel">
+    <div class="side-panel-header">
+      <span id="dmSidebarTitle">Direct Messages</span>
+      <button id="closeDmSidebar" class="side-close-btn" type="button" aria-label="Close Direct Messages">✕</button>
+    </div>
+
+    <input id="dmSearch" class="dm-search" type="text" placeholder="Search DMs">
+
+    <div id="dmSidebarList" class="dm-list"></div>
   </div>
-
-  <input id="dmSearch" class="dm-search" placeholder="Search DMs">
-
-  <div id="dmSidebarList" class="dm-list"></div>
 </div>
 
 
@@ -591,21 +593,24 @@
     <button id="adminClose" class="ghost">Close</button>
   </div>
 </div>
-<div id="roomsSidebar" class="rooms-panel" style="background:#111;padding:18px;border-radius:10px;width:760px;max-height:80vh;overflow:auto">
-  <div class="side-panel-header">
-    <span>Rooms</span>
-    <button id="closeRoomsSidebar" class="side-close-btn">✕</button>
+<div id="roomsSidebar" class="list-popup-overlay" role="dialog" aria-modal="true" aria-labelledby="roomsSidebarTitle">
+  <div class="list-popup-panel">
+    <div class="side-panel-header">
+      <span id="roomsSidebarTitle">Rooms</span>
+      <button id="closeRoomsSidebar" class="side-close-btn" type="button" aria-label="Close Rooms">✕</button>
+    </div>
+
+    <select id="roomSort" class="ghost" style="margin-bottom:10px;width:100%">
+      <option value="newest">Newest First</option>
+      <option value="oldest">Oldest First</option>
+      <option value="az">A → Z</option>
+      <option value="za">Z → A</option>
+    </select>
+
+    <div id="roomsList" class="rooms-list"></div>
+
+    <button id="createRoomBtn" class="small-btn" type="button">Create Room</button>
   </div>
-<select id="roomSort" class="ghost" style="margin-bottom:10px;width:100%">
-  <option value="newest">Newest First</option>
-  <option value="oldest">Oldest First</option>
-  <option value="az">A → Z</option>
-  <option value="za">Z → A</option>
-</select>
-
-  <div id="roomsList" class="rooms-list"></div>
-
-  <button id="createRoomBtn" class="small-btn">Create Room</button>
 </div>
 
 <!-- ROOM CHAT POPUP -->
