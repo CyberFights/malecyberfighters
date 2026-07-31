@@ -8,6 +8,7 @@ const bcrypt = require('bcrypt');
 const multer = require('multer');
 const fetch = require('node-fetch');
 const path = require('path');
+const fs = require('fs');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cors = require("cors");
@@ -51,7 +52,38 @@ app.use(
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 
+function isMobileClient(req) {
+  const mobileHint = req.headers['sec-ch-ua-mobile'];
 
+  if (typeof mobileHint === 'string') {
+    return mobileHint.trim() === '?1';
+  }
+
+  const userAgent = req.headers['user-agent'] || '';
+
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(userAgent);
+}
+
+app.get('/', (req, res, next) => {
+  const cssFile = isMobileClient(req) ? 'mobile.css' : 'desktop.css';
+  const indexPath = path.join(__dirname, 'public', 'index.html');
+
+  fs.readFile(indexPath, 'utf8', (err, html) => {
+    if (err) return next(err);
+
+    const page = html.replace(
+      /<link\s+rel=["']stylesheet["']\s+href=["'][^"']*\/css\/[^"']+["']\s*>/i,
+      `<link rel="stylesheet" href="/css/${cssFile}">`
+    );
+
+    res.set({
+      'Content-Type': 'text/html; charset=utf-8',
+      'Vary': 'User-Agent, Sec-CH-UA-Mobile'
+    });
+
+    res.send(page);
+  });
+});
 
 app.use(express.static(path.join(__dirname, 'public')));
 
