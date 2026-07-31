@@ -1,5 +1,5 @@
 $('btnLogin').addEventListener('click', () => show($('modalLogin')));
-$('btnLoginMobile')?.addEventListener('click', () => show($('modalLogin')));
+
 $('loginCancel').addEventListener('click', () => hide($('modalLogin')));
 $('loginSubmit').addEventListener('click', doLogin);
 $('loginPass').addEventListener('keydown', e => { if(e.key === 'Enter') doLogin(); });
