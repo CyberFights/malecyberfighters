@@ -219,9 +219,12 @@ function renderPMHistory(targetUsername, messages) {
 
   messages.forEach(m => {
     // Skip SYSTEM messages that aren't for this conversation partner
-    if (m.from === "SYSTEM" && m.to !== s.username) return;
-    if (m.from === "SYSTEM" && m.to === s.username && targetUsername !== "SYSTEM") {
-      // Still show system approvals in any open DM with the related user when possible
+    if (m.from === "SYSTEM") {
+      // only show system messages addressed to this user
+      if (m.to !== s.username) return;
+      // if the current open DM is with another user, only show the system message
+      // when it appears to relate to that partner (text includes their username)
+      if (targetUsername !== "SYSTEM" && !(String(m.text || "").includes(targetUsername))) return;
     }
 
     const div = document.createElement("div");
