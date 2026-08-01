@@ -1,4 +1,4 @@
-require('dotenv').config();
+﻿require('dotenv').config();
 const FormData = require('form-data');
 const express = require('express');
 const http = require('http');
@@ -129,7 +129,9 @@ const userSchema = new mongoose.Schema({
   online:   { type: Boolean, default: false },
   socketId: { type: String, default: null },
   role:     { type: String, default: 'user' },
-  banned:   { type: Boolean, default: false }
+  banned:   { type: Boolean, default: false },
+  // Optional Discord OAuth linkage
+  discordId: { type: String, unique: true, sparse: true }
 }, { timestamps: true });
 
 const publicMessageSchema = new mongoose.Schema({
@@ -786,59 +788,9 @@ app.post('/api/update-profile', async (req, res) => {
 });
 
 // ---------- API: REGISTER ----------
-app.post('/api/register', async (req, res) => {
-  const { username, email, password, display, age, stats, info, color, language, imageUrl } = req.body;
-  if (!username || !email || !password) {
-    await logIp(req, { action: 'register_fail', username });
-    return res.status(400).json({ ok: false, error: 'missing_fields' });
-  }
 
-  try {
-    const existing = await User.findOne({ $or: [{ username }, { email }] }).lean();
-    if (existing) {
-      const conflict = {};
-      if (existing.username === username) conflict.username = true;
-      if (existing.email === email) conflict.email = true;
-      await logIp(req, { action: 'register_conflict', username });
-      return res.status(409).json({ ok: false, conflict });
-    }
-
-    const hash = await bcrypt.hash(password, 10);
-
-    const user = new User({
-      username,
-      email,
-      passwordHash: hash,
-      display: display || username,
-      age: age ? Number(age) : undefined,
-      stats: stats || {},
-      info: info || '',
-      color: color || '',
-      language: language || 'en',
-      imageUrl: imageUrl || ''
-    });
-
-    await user.save();
-    await logIp(req, { action: 'register', username });
-
-    createSessionForUser(user, res);
-    return res.json({
-      ok: true,
-      user: {
-        username: user.username,
-        display: user.display,
-        imageUrl: user.imageUrl
-      }
-    });
-  } catch (e) {
-    console.error('register error', e);
-    await logIp(req, { action: 'register_error', username });
-    return res.status(500).json({ ok: false, error: 'server_error' });
-  }
-});
-
-// ---------- OAuth: Discord (server-side session cookie)
-// Requires DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET in env
+// ---------- OAuth: Discord ----------
+// Requires environment variables: DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_REDIRECT_URI
 app.get('/auth/discord', (req, res) => {
   const clientId = process.env.DISCORD_CLIENT_ID;
   const redirect = process.env.DISCORD_REDIRECT_URI || (req.protocol + '://' + req.get('host') + '/auth/discord/callback');
@@ -854,6 +806,8 @@ app.get('/auth/discord', (req, res) => {
   res.redirect(`https://discord.com/api/oauth2/authorize?${params.toString()}`);
 });
 
+// OAuth callback: exchange code, fetch user info, create or login local user, then postMessage back to opener
+// OAuth callback: exchange code, fetch user info, create or login local user, then create server-side session
 app.get('/auth/discord/callback', async (req, res) => {
   const code = req.query.code;
   const clientId = process.env.DISCORD_CLIENT_ID;
@@ -875,21 +829,15 @@ app.get('/auth/discord/callback', async (req, res) => {
       })
     });
 
-    const tokenJson = await tokenResp.json();
-    if (!tokenJson.access_token) {
-      console.error('Discord token exchange failed', tokenJson);
-      return res.status(500).send('Discord token exchange failed');
-    }
-
-    const meResp = await fetch('https://discord.com/api/users/@me', {
-      headers: { Authorization: `Bearer ${tokenJson.access_token}` }
-    });
+    
 
     const me = await meResp.json();
 
+    // Build a safe unique username
     let proposedUsername = (me.username || 'discord-user').toLowerCase();
     if (me.discriminator) proposedUsername = `${proposedUsername}-${me.discriminator}`;
 
+    // Ensure uniqueness by checking DB
     let user = await User.findOne({ discordId: me.id }).lean();
     if (!user) {
       const email = me.email || `${me.id}@discord.local`;
@@ -947,12 +895,158 @@ app.get('/auth/discord/callback', async (req, res) => {
       };
     }
 
-    createSessionForUser(user, res);
-    return res.redirect(302, '/');
+    // Create server-side session cookie and redirect to app root
+    try {
+      createSessionForUser(user, res);
+      return res.redirect(302, '/');
+    } catch (e) {
+      console.error('Discord OAuth redirect error', e);
+      return res.status(500).send('Discord OAuth failed');
+    }
 
   } catch (err) {
     console.error('Discord OAuth error', err);
     return res.status(500).send('Discord OAuth failed');
+  }
+});
+
+    const tokenJson = await tokenResp.json();
+    if (!tokenJson.access_token) {
+      console.error('Discord token exchange failed', tokenJson);
+      return res.status(500).send('Discord token exchange failed');
+    }
+
+    const meResp = await fetch('https://discord.com/api/users/@me', {
+      headers: { Authorization: `Bearer ${tokenJson.access_token}` }
+    });
+
+    const me = await meResp.json();
+
+    // Build a safe unique username
+    let proposedUsername = (me.username || 'discord-user').toLowerCase();
+    // If discriminator present, append it so names like "Foo#1234" remain unique-ish
+    if (me.discriminator) proposedUsername = `${proposedUsername}-${me.discriminator}`;
+
+    // Ensure uniqueness by checking DB
+    let user = await User.findOne({ discordId: me.id }).lean();
+    if (!user) {
+      // if email exists in response use it, otherwise synthesize one to satisfy schema
+      const email = me.email || `${me.id}@discord.local`;
+
+      // ensure username uniqueness
+      let username = proposedUsername;
+      const existingUser = await User.findOne({ username }).lean();
+      if (existingUser) {
+        username = `${username}_${me.id}`;
+      }
+
+      // construct avatar URL
+      let imageUrl = '';
+      if (me.avatar) {
+        const format = me.avatar.startsWith('a_') ? 'gif' : 'png';
+        imageUrl = `https://cdn.discordapp.com/avatars/${me.id}/${me.avatar}.${format}?size=256`;
+      }
+
+      // create a random password hash so schema constraints satisfied
+      const pw = Math.random().toString(36).slice(2) + me.id;
+      const hash = await bcrypt.hash(pw, 10);
+
+      const newUser = new User({
+        username,
+        email,
+        passwordHash: hash,
+        display: me.username || username,
+        age: undefined,
+        stats: {},
+        info: '',
+        color: '',
+        language: 'en',
+        imageUrl: imageUrl || '',
+        discordId: me.id
+      });
+
+      await newUser.save();
+
+      user = {
+        username: newUser.username,
+        display: newUser.display,
+        imageUrl: newUser.imageUrl,
+        color: newUser.color,
+        language: newUser.language,
+        role: newUser.role,
+        stats: newUser.stats,
+        info: newUser.info,
+        age: newUser.age
+      };
+    } else {
+      // existing user linked by discordId
+      user = {
+        username: user.username,
+        display: user.display,
+        imageUrl: user.imageUrl,
+        color: user.color,
+        language: user.language,
+        role: user.role,
+        stats: user.stats,
+        info: user.info,
+        age: user.age
+      };
+    }
+
+    
+
+app.post('/api/register', async (req, res) => {
+  const { username, email, password, display, age, stats, info, color, language, imageUrl } = req.body;
+  if (!username || !email || !password) {
+    await logIp(req, { action: 'register_fail', username });
+    return res.status(400).json({ ok: false, error: 'missing_fields' });
+  }
+
+  try {
+    const existing = await User.findOne({ $or: [{ username }, { email }] }).lean();
+    if (existing) {
+      const conflict = {};
+      if (existing.username === username) conflict.username = true;
+      if (existing.email === email) conflict.email = true;
+      await logIp(req, { action: 'register_conflict', username });
+      return res.status(409).json({ ok: false, conflict });
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+
+    const user = new User({
+      username,
+      email,
+      passwordHash: hash,
+      display: display || username,
+      age: age ? Number(age) : undefined,
+      stats: stats || {},
+      info: info || '',
+      color: color || '',
+      language: language || 'en',
+      imageUrl: imageUrl || ''
+    });
+
+    await user.save();
+    await logIp(req, { action: 'register', username });
+
+        const sessionUser = {
+      username: user.username,
+      display: user.display,
+      imageUrl: user.imageUrl,
+      color: user.color || '',
+      language: user.language || 'en',
+      role: user.role || 'user',
+      stats: user.stats || {},
+      info: user.info || '',
+      age: user.age || null
+    };
+    createSessionForUser(sessionUser, res);
+    return res.json({ ok: true, user: sessionUser });
+  } catch (e) {
+    console.error('register error', e);
+    await logIp(req, { action: 'register_error', username });
+    return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });
 
@@ -961,6 +1055,17 @@ app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
     await logIp(req, { action: 'login_fail', username });
+// ---------- API: SESSION ----------
+app.get('/api/session', (req, res) => {
+  try {
+    const user = getSessionUser(req);
+    if (!user) return res.json({ ok: false });
+    return res.json({ ok: true, user });
+  } catch (e) {
+    console.error('session endpoint error', e);
+    return res.json({ ok: false });
+  }
+});
     return res.status(400).json({ ok: false, error: 'missing_fields' });
   }
 
@@ -984,36 +1089,22 @@ app.post('/api/login', async (req, res) => {
 
     await logIp(req, { action: 'login_success', username });
 
-    createSessionForUser(user, res);
-    return res.json({
-      ok: true,
-      user: {
-        username: user.username,
-        display: user.display,
-        imageUrl: user.imageUrl,
-        color: user.color,
-        language: user.language,
-        role: user.role,
-        stats: user.stats,
-        info: user.info,
-        age: user.age
-      }
-    });
+        const sessionUser = {
+      username: user.username,
+      display: user.display,
+      imageUrl: user.imageUrl,
+      color: user.color || '',
+      language: user.language || 'en',
+      role: user.role || 'user',
+      stats: user.stats || {},
+      info: user.info || '',
+      age: user.age || null
+    };
+    createSessionForUser(sessionUser, res);
+    return res.json({ ok: true, user: sessionUser });
   } catch (e) {
     console.error(e);
     await logIp(req, { action: 'login_error', username });
-    return res.status(500).json({ ok: false, error: 'server_error' });
-  }
-});
-
-// ---------- API: SESSION (server-side session cookie) ----------
-app.get('/api/session', (req, res) => {
-  try {
-    const user = getSessionUser(req);
-    if (!user) return res.json({ ok: true, user: null });
-    return res.json({ ok: true, user });
-  } catch (e) {
-    console.error('session endpoint error', e);
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });
@@ -1448,3 +1539,9 @@ socket.on('publicMessage', async (msg) => {
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Server listening on http://localhost:${PORT}`);
 });
+
+
+
+
+
+

@@ -161,9 +161,10 @@
     <input id="loginUser" type="text" placeholder="Username">
     <input id="loginPass" type="password" placeholder="Password">
     <div id="loginError" style="display:none"></div>
-    <div>
+    <div style="display:flex;gap:8px;align-items:center">
       <button id="loginCancel" class="ghost">Cancel</button>
       <button id="loginSubmit">Login</button>
+      <button id="loginDiscord" class="small-btn">Login with Discord</button>
     </div>
   </div>
 </div>
@@ -237,6 +238,9 @@
 
     <h3>Register - click upload image before create account</h3>
     <div>
+      <div style="margin-bottom:8px">
+        <button id="regDiscord" class="small-btn">Register with Discord</button>
+      </div>
 
       <div>
         <input id="regUser" type="text" placeholder="Username" required />
