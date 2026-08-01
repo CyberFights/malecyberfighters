@@ -54,15 +54,18 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 
 function isMobileClient(req) {
+  // Prefer Sec-CH-UA-Mobile when available (client hints). Browsers will provide this header
+  // after they see an Accept-CH response header. Fall back to UA sniffing when the hint is absent.
   const mobileHint = req.headers['sec-ch-ua-mobile'];
 
   if (typeof mobileHint === 'string') {
     return mobileHint.trim() === '?1';
   }
 
-  const userAgent = req.headers['user-agent'] || '';
+  const ua = (req.headers['user-agent'] || '').toLowerCase();
 
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(userAgent);
+  // Broader fallback regex that matches mobile phones and many tablets; more resilient across UAs.
+  return /mobi|iphone|android|ipad|ipod|iemobile|opera mini|mobile/i.test(ua);
 }
 
 app.get('/', (req, res, next) => {
@@ -79,6 +82,7 @@ app.get('/', (req, res, next) => {
 
     res.set({
       'Content-Type': 'text/html; charset=utf-8',
+      'Accept-CH': 'Sec-CH-UA-Mobile',
       'Vary': 'User-Agent, Sec-CH-UA-Mobile'
     });
 
@@ -97,6 +101,12 @@ const authLimiter = rateLimit({
 app.use('/api/login', authLimiter);
 app.use('/api/register', authLimiter);
 app.use(cors({ origin: true, credentials: true }));
+// Request client hints so modern browsers will include Sec-CH-UA-Mobile on subsequent navigations.
+// This improves server-side mobile detection without relying solely on User-Agent sniffing.
+app.use((req, res, next) => {
+  res.set('Accept-CH', 'Sec-CH-UA-Mobile');
+  next();
+});
 
 // ---------- DB ----------
 mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
