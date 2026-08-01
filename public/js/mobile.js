@@ -1162,29 +1162,37 @@
 
     const s = getSession();
     const isMe = !!(s && msg.from === s.username);
-    const author = directoryUser(msg.from) || { username: msg.from, display: msg.display || msg.from };
 
-    const row = document.createElement("div");
-    row.className = "message-row" + (isMe ? " me" : "") + ((msg.type === "storyApproval" || msg.type === "relationshipApproval") ? " system" : "");
+      // guard: SYSTEM messages should only appear in a DM window when relevant
+      const currentPartner = body.dataset.partner || state.dmPartner || null;
+      if (msg.from === "SYSTEM") {
+        if (msg.to !== s.username) return;
+        if (currentPartner !== "SYSTEM" && !(String(msg.text || "").includes(currentPartner))) return;
+      }
 
-    let content = "";
-    if (msg.type === "storyApproval") {
-      const sid = msg.storyId || msg._id || "";
+      const author = directoryUser(msg.from) || { username: msg.from, display: msg.display || msg.from };
+
+      const row = document.createElement("div");
+      row.className = "message-row" + (isMe ? " me" : "") + ((msg.type === "storyApproval" || msg.type === "relationshipApproval") ? " system" : "");
+
+      let content = "";
+      if (msg.type === "storyApproval") {
+        const sid = msg.storyId || msg._id || "";
       content = `
         <div class="system-msg">
           <div>${escapeHtml(msg.text || "")}</div>
-          <button type="button" class="small-btn approveStoryBtn" data-id="${escapeHtml(sid)}">Approve</button>
+            <button type="button" class="small-btn approveStoryBtn" data-id="${escapeHtml(sid)}">Approve</button>
         </div>
       `;
-    } else if (msg.type === "relationshipApproval") {
-      const rid = msg.relationshipId || msg._id || "";
-      content = `
-        <div class="system-msg">
-          <div>${escapeHtml(msg.text || "")}</div>
-          <button type="button" class="small-btn approveRelBtn" data-id="${escapeHtml(rid)}">Approve</button>
-        </div>
-      `;
-    } else if (msg.imageUrl) {
+      } else if (msg.type === "relationshipApproval") {
+        const rid = msg.relationshipId || msg._id || "";
+        content = `
+          <div class="system-msg">
+            <div>${escapeHtml(msg.text || "")}</div>
+            <button type="button" class="small-btn approveRelBtn" data-id="${escapeHtml(rid)}">Approve</button>
+          </div>
+        `;
+      } else if (msg.imageUrl) {
       content = `<img src="${escapeHtml(msg.imageUrl)}" class="chat-image" alt="attachment">`;
     } else {
       content = `<div>${escapeHtml(msg.text || "")}</div>`;

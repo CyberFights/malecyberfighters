@@ -163,34 +163,38 @@ function renderDMMessages(targetUsername, messages) {
 
   messages.forEach(m => {
     // Skip SYSTEM messages that aren't for this conversation partner
-    if (m.from === "SYSTEM" && m.to !== s.username) return;
+  if (m.from === "SYSTEM") {
+    if (m.to !== s.username) return;
+    // only show system messages in this DM if they seem related to the partner
+    if (targetUsername !== "SYSTEM" && !(String(m.text || "").includes(targetUsername))) return;
+  }
 
-    const div = document.createElement("div");
-    div.className = "message-row " + (m.from === s.username ? "me" : "");
+  const div = document.createElement("div");
+  div.className = "message-row " + (m.from === s.username ? "me" : "");
 
-    const avatarHtml = renderMessageAvatar
-      ? renderMessageAvatar(m.from, m.display || m.from, m.imageUrl, 36)
-      : `<div class="avatar-fallback" style="width:36px;height:36px">${(m.from || '?')[0].toUpperCase()}</div>`;
+  const avatarHtml = renderMessageAvatar
+    ? renderMessageAvatar(m.from, m.display || m.from, m.imageUrl, 36)
+    : `<div class="avatar-fallback" style="width:36px;height:36px">${(m.from || '?')[0].toUpperCase()}</div>`;
 
-    let contentHtml = '';
+  let contentHtml = '';
 
-    if (m.type === "storyApproval") {
-      div.className = "message-row system";
-      contentHtml = `
-        <div class="system-msg">
-          ${escapeHtml(m.text || "")}
-          <button class="small-btn approveStoryBtn" data-id="${m.storyId || ""}">Approve</button>
-        </div>
-      `;
-    } else if (m.type === "relationshipApproval") {
-      div.className = "message-row system";
-      contentHtml = `
-        <div class="system-msg">
-          ${escapeHtml(m.text || "")}
-          <button class="small-btn approveRelBtn" data-rel-id="${m.relationshipId || ""}">Approve</button>
-        </div>
-      `;
-    } else if (m.imageUrl) {
+  if (m.type === "storyApproval") {
+    div.className = "message-row system";
+    contentHtml = `
+      <div class="system-msg">
+        ${escapeHtml(m.text || "")}
+        <button class="small-btn approveStoryBtn" data-id="${m.storyId || ""}">Approve</button>
+      </div>
+    `;
+  } else if (m.type === "relationshipApproval") {
+    div.className = "message-row system";
+    contentHtml = `
+      <div class="system-msg">
+        ${escapeHtml(m.text || "")}
+        <button class="small-btn approveRelBtn" data-rel-id="${m.relationshipId || ""}">Approve</button>
+      </div>
+    `;
+  } else if (m.imageUrl) {
       contentHtml = `<img src="${m.imageUrl}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${m.imageUrl}">`;
     } else {
       contentHtml = `<div>${escapeHtml(m.text || "")}</div>`;
