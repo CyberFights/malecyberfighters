@@ -20,7 +20,8 @@ const io = new Server(server);
 
 // ---------- CONFIG ----------
 const PORT = process.env.PORT || 3000;
-const MONGO_URI = process.env.MONGO_URI;
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/cyberfights';
+if (!process.env.MONGO_URI) console.warn('Warning: MONGO_URI not set — defaulting to mongodb://127.0.0.1:27017/cyberfights (may fail if Mongo is not running)');
 const ADMIN_KEY = process.env.ADMIN_KEY;
 
 const DISCORD_WEBHOOK_URL = process.env.Discord_webhook || null;
@@ -98,7 +99,9 @@ app.use('/api/register', authLimiter);
 app.use(cors({ origin: true, credentials: true }));
 
 // ---------- DB ----------
-mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
+mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log('MongoDB connected'))
+  .catch(err => console.warn('MongoDB connection failed (continuing without DB):', err.message || err));
 
 // ---------- SCHEMAS ----------
 const userSchema = new mongoose.Schema({
@@ -273,21 +276,37 @@ async function sendDiscordWebhookMessage(username, message, avatarUrl) {
 }
 
 async function updateRoomMembers(roomId) {
-  const sockets = await io.in(roomId).fetchSockets();
+  try {
+    const sockets = await io.in(roomId).fetchSockets();
+    const members = [];
 
-  const members = await Promise.all(
-    sockets.map(async s => {
-      const user = await User.findOne({ username: s.username }).lean();
-      return {
+    for (const s of sockets) {
+      // attempt to access the live socket instance (may be different shapes depending on fetchSockets result)
+      const live = io.sockets.sockets.get(s.id) || s;
+      const username = live?.username || s?.username || (live?.handshake?.auth && live.handshake.auth.username) || null;
+
+      if (!username) continue; // skip anonymous sockets
+
+      const user = await User.findOne({ username }).lean();
+
+      if (!user) {
+        // fallback member object when user record not found
+        members.push({ username, display: username, imageUrl: null, online: true });
+        continue;
+      }
+
+      members.push({
         username: user.username,
-        display: user.display,
-        imageUrl: user.imageUrl,
-        online: user.online
-      };
-    })
-  );
+        display: user.display || user.username,
+        imageUrl: user.imageUrl || null,
+        online: user.online ?? true
+      });
+    }
 
-  io.to(roomId).emit("roomMembers", members);
+    io.to(roomId).emit("roomMembers", members);
+  } catch (err) {
+    console.error("updateRoomMembers error:", err);
+  }
 }
 
 app.post("/api/story/save", async (req, res) => {
@@ -1094,6 +1113,16 @@ socket.on('publicMessage', async (msg) => {
     io.to(socket.id).emit("roomHistory", { room, history });
 
     updateRoomMembers(room);
+  });
+
+  // Allow clients to request a members refresh for a room (client emits "requestRoomMembers")
+  socket.on("requestRoomMembers", async ({ room }) => {
+    try {
+      if (!room) return;
+      await updateRoomMembers(room);
+    } catch (err) {
+      console.error("requestRoomMembers handler error:", err);
+    }
   });
 
   socket.on("roomMessage", async (msg) => {

@@ -447,37 +447,7 @@ function renderOnlineList(){
   });
 }
 
-/* ============================================================
-   DM SIDEBAR (optional)
-============================================================ */
-function updateDMListSidebar(){
-  const sidebar = $('dmSidebar');
-  if (!sidebar) return;
-
-  const list = sidebar.querySelector('.dm-list');
-  if (!list) return;
-
-  list.innerHTML = '';
-
-  (window.users || []).forEach(u => {
-    const avatar = renderMessageAvatar(u.username, u.display, u.imageUrl, 32);
-
-    const div = document.createElement('div');
-    div.className = 'dm-sidebar-item';
-    div.innerHTML = `
-      <div class="holo-avatar" style="display:flex;gap:8px;align-items:center">
-        ${avatar}
-        <div>
-          <div style="font-weight:700">${u.display}</div>
-          <div class="small">@${u.username}</div>
-        </div>
-      </div>
-    `;
-
-    div.addEventListener('click', () => openPrivateWindow(u.username));
-    list.appendChild(div);
-  });
-}
+/* DM sidebar provided by utils.js */
 
 
 /* ============================================================

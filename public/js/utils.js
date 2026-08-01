@@ -2,9 +2,10 @@
 (function() {
   const originalGetElementById = document.getElementById;
   document.getElementById = function(id) {
-    const escapedId = id.replace(/"/g, '\\"');
-    const elements = document.querySelectorAll('[id="' + escapedId + '"]');
-    if (elements.length > 1) {
+      if (!id && id !== 0) return originalGetElementById.call(document, id);
+      const escapedId = String(id).replace(/"/g, '\\"');
+      const elements = document.querySelectorAll('[id="' + escapedId + '"]');
+      if (elements.length > 1) {
       // Find the currently active element as the primary target
       const getActiveElement = () => {
         const mainUI = originalGetElementById.call(document, 'mainUI');
@@ -115,10 +116,11 @@ if (typeof window.$ === 'undefined') {
 }
 
 
-function show(el){ el.style.display = 'flex'; }
-function hide(el){ el.style.display = 'none'; }
+function show(el){ if (!el) return; el.style.display = 'flex'; }
+function hide(el){ if (!el) return; el.style.display = 'none'; }
 
 function escapeHtml(s){
+  s = s == null ? '' : String(s);
   return s.replace(/[&<>"']/g, c => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
   }[c]));
@@ -173,6 +175,79 @@ function clearUnread(user) {
   delete map[user];
   saveUnreadMap(map);
 }
+
+/* DM SIDEBAR (shared) -------------------------------------------------
+   Canonical implementation for updating the DM partners sidebar. Placed
+   in utils.js so all client scripts can call window.updateDMListSidebar()
+   instead of implementing duplicate logic. Detects mobile vs desktop via
+   the existing document.getElementById proxy and binds search input once.
+--------------------------------------------------------------- */
+
+async function updateDMListSidebar() {
+  const sidebar = $("dmSidebar");
+  if (!sidebar) return;
+
+  const user = getSession();
+  const listContainer = $("dmSidebarList") || sidebar.querySelector('.dm-list');
+  const searchInput = $("dmSearch");
+
+  if (!user) {
+    if (listContainer) {
+      listContainer.innerHTML = '<div class="small muted">Login to see DMs</div>';
+    }
+    if (typeof updateDMBadge === 'function') updateDMBadge();
+    return;
+  }
+
+  const unread = getUnreadMap();
+
+  try {
+    const res = await fetch('/api/dm/partners', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: user.username })
+    });
+    const data = await res.json();
+    const partners = (data.partners || []).filter(p => p && p !== 'SYSTEM' && p !== user.username);
+
+    const target = listContainer || (() => { const el = document.createElement('div'); el.id = 'dmSidebarList'; sidebar.appendChild(el); return el; })();
+
+    const renderList = (filterTerm = '') => {
+      target.innerHTML = '';
+      const q = filterTerm.trim().toLowerCase();
+
+      partners.forEach(other => {
+        if (q && !other.toLowerCase().includes(q)) return;
+
+        const item = document.createElement('div');
+        item.className = 'dm-sidebar-item';
+        item.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="flex:1;min-width:0">@${escapeHtml(other)}</div>
+            ${unread[other] ? `<span class="dm-unread-badge">${unread[other]}</span>` : ''}
+          </div>
+        `;
+        item.addEventListener('click', () => { if (typeof openPrivateWindow === 'function') openPrivateWindow(other); if (sidebar && sidebar.style) sidebar.style.display = 'none'; });
+        target.appendChild(item);
+      });
+
+      if (!target.innerHTML) target.innerHTML = '<div class="small muted">No DMs yet</div>';
+    };
+
+    renderList(searchInput?.value?.trim() || '');
+
+    if (searchInput && !searchInput._dmBound) {
+      searchInput._dmBound = true;
+      searchInput.addEventListener('input', e => renderList(e.target.value || ''));
+    }
+
+    if (typeof updateDMBadge === 'function') updateDMBadge();
+  } catch (err) {
+    console.error('updateDMListSidebar error', err);
+  }
+}
+
+window.updateDMListSidebar = updateDMListSidebar;
 
 /* PROFILE CARD ------------------------------------------------------- */
 window.updateProfileCard = function(user) {

@@ -339,10 +339,7 @@ socket.on("privateMessage", pm => {
   const isOpen = popup && popup.style.display !== "none" && currentDmPartner === other;
 
   if (isOpen && body) {
-    // Append the new message to the current view
-    renderDMMessages(other, [pm]); // append single message
-    // Actually, we need to maintain history. Let's just append directly.
-    // We'll re-render by appending the message element
+    // Append the new message to the current view without re-rendering history
     appendSingleDMMessage(pm, me);
     body.scrollTop = body.scrollHeight;
   } else if (pm.from !== me.username) {
@@ -451,84 +448,7 @@ socket.on("stopTypingDM", ({ from }) => {
   }
 });
 
-/* ============================================================
-   DM SIDEBAR (MOBILE: uses dmSidebarList directly)
-============================================================ */
-
-function updateDMListSidebar() {
-  const sidebar = document.getElementById("dmSidebar");
-  if (!sidebar) return;
-
-  const user = getSession();
-  // MOBILE: use dmSidebarList directly instead of querySelector('.dm-list')
-  const listContainer = document.getElementById("dmSidebarList");
-  const searchInput = document.getElementById("dmSearch");
-
-  if (!user) {
-    if (listContainer) {
-      listContainer.innerHTML = '<div class="small muted">Login to see DMs</div>';
-    }
-    updateDMBadge();
-    return;
-  }
-
-  const unread = getUnreadMap();
-
-  fetch("/api/dm/partners", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: user.username })
-  })
-    .then(res => res.json())
-    .then(data => {
-      let partners = (data.partners || []).filter(p => p && p !== "SYSTEM" && p !== user.username);
-
-      const target = listContainer || (() => {
-        const el = document.createElement("div");
-        el.id = "dmSidebarList";
-        sidebar.appendChild(el);
-        return el;
-      })();
-
-      const renderList = (filterTerm = "") => {
-        target.innerHTML = "";
-
-        partners.forEach(other => {
-          if (filterTerm && !other.toLowerCase().includes(filterTerm.toLowerCase())) return;
-
-          const item = document.createElement("div");
-          item.className = "dm-sidebar-item";
-          item.innerHTML = `
-            <span>@${escapeHtml(other)}</span>
-            ${unread[other] ? `<span class="badge">${unread[other]}</span>` : ""}
-          `;
-          item.addEventListener("click", () => {
-            openPrivateWindow(other);
-            sidebar.style.display = "none";
-          });
-          target.appendChild(item);
-        });
-
-        if (!target.innerHTML) {
-          target.innerHTML = '<div class="small muted">No DMs yet</div>';
-        }
-      };
-
-      renderList(searchInput?.value?.trim() || "");
-
-      if (searchInput && !searchInput._dmBound) {
-        searchInput._dmBound = true;
-        searchInput.addEventListener("input", e => {
-          renderList(e.target.value.trim());
-        });
-      }
-
-      updateDMBadge();
-    })
-    .catch(err => console.error("DM partners error", err));
-}
-
-window.updateDMListSidebar = updateDMListSidebar;
+/* DM sidebar provided by utils.js */
 
 /* ============================================================
    DM POPUP BUTTON HANDLERS (MOBILE: static buttons in HTML)
