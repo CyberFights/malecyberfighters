@@ -208,7 +208,7 @@ async function updateDMListSidebar() {
       body: JSON.stringify({ username: user.username })
     });
     const data = await res.json();
-    const partners = (data.partners || []).filter(p => p && p !== 'SYSTEM' && p !== user.username);
+    const partners = (data.partners || []).filter(p => p && p !== user.username);
 
     const target = listContainer || (() => { const el = document.createElement('div'); el.id = 'dmSidebarList'; sidebar.appendChild(el); return el; })();
 
@@ -221,12 +221,23 @@ async function updateDMListSidebar() {
 
         const item = document.createElement('div');
         item.className = 'dm-sidebar-item';
-        item.innerHTML = `
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <div style="flex:1;min-width:0">@${escapeHtml(other)}</div>
-            ${unread[other] ? `<span class="dm-unread-badge">${unread[other]}</span>` : ''}
-          </div>
-        `;
+
+        if (other === 'SYSTEM') {
+          item.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div style="flex:1;min-width:0">🔔 System</div>
+              ${unread[other] ? `<span class="dm-unread-badge">${unread[other]}</span>` : ''}
+            </div>
+          `;
+        } else {
+          item.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div style="flex:1;min-width:0"><span style="font-weight:700">@${escapeHtml(other)}</span></div>
+              ${unread[other] ? `<span class="dm-unread-badge">${unread[other]}</span>` : ''}
+            </div>
+          `;
+        }
+
         item.addEventListener('click', () => { if (typeof openPrivateWindow === 'function') openPrivateWindow(other); if (sidebar && sidebar.style) sidebar.style.display = 'none'; });
         target.appendChild(item);
       });
