@@ -82,6 +82,7 @@ app.get('/', (req, res, next) => {
 
     res.set({
       'Content-Type': 'text/html; charset=utf-8',
+      'Accept-CH': 'Sec-CH-UA-Mobile',
       'Vary': 'User-Agent, Sec-CH-UA-Mobile'
     });
 
