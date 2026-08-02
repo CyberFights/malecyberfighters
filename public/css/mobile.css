@@ -280,7 +280,7 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
   background: rgba(15, 23, 42, .96);
   border-left: 1px solid #38bdf8;
   backdrop-filter: blur(10px);
-  display: flex;
+  display: none;
   flex-direction: column;
   padding: 15px;
   overflow: hidden;
