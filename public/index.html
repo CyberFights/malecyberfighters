@@ -71,6 +71,25 @@
     <button id="btnLogout" class="ghost small-btn" type="button">Log out</button>
   </div>
 
+  <!-- DM CHAT POPUP -->
+  <div id="dmPopup" class="chat-popup" style="display:none">
+    <div class="chat-header">
+      <span class="chat-title" id="dmChatTitle">DM</span>
+      <div class="chat-header-actions">
+        <button id="dmClose" class="small-btn">✕</button>
+      </div>
+    </div>
+    <div class="chat-body">
+      <div id="dmMessages" class="public-feed"></div>
+    </div>
+    <div id="dmTyping" class="small muted" style="display:none; padding:0 16px;"></div>
+    <div class="chat-input">
+      <input id="dmInput" type="text" placeholder="Message...">
+      <button id="dmImageBtn">📷</button>
+      <button id="dmSend">Send</button>
+    </div>
+  </div>
+
 </div>
 
 <div class="container">
