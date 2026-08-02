@@ -184,7 +184,7 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
   box-shadow: 0 0 12px rgba(56, 189, 248, .5);
 }
 
-.me-card {
+.user-profile-card.logged-in {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -206,30 +206,30 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
   align-items: center;
   justify-content: center;
 }
-.me-card > div:nth-child(2) {
+.user-profile-card.logged-in > div:nth-child(2) {
   flex: 1;
   min-width: 0;
 }
-.me-card #meName {
+.user-profile-card.logged-in #meName {
   font-weight: 700;
   font-size: 15px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.me-card #meHandle {
+.user-profile-card.logged-in #meHandle {
   font-size: 12px;
   color: #94a3b8;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.me-card .me-actions {
+.user-profile-card.logged-in .me-actions {
   display: flex;
   gap: 8px;
   flex: 0 0 auto;
 }
-.me-card .me-actions button {
+.user-profile-card.logged-in .me-actions button {
   width: auto;
   margin-top: 0;
   padding: 6px 10px;
