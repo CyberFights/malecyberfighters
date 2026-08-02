@@ -482,6 +482,130 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
 .chat-input input[type="text"] { flex: 1; min-width: 0; }
 .chat-input button { width: auto; margin-top: 0; flex: 0 0 auto; padding: 11px 14px; }
 
+/* ============================================================
+   DIRECT MESSAGE CHAT
+   ============================================================ */
+#dmPopup {
+  background:
+    radial-gradient(circle at 15% 0%, rgba(14, 165, 233, .12), transparent 34%),
+    #0b1220;
+}
+
+#dmPopup .chat-header {
+  padding: 14px 16px;
+  background: rgba(2, 6, 23, .9);
+  border-bottom-color: rgba(56, 189, 248, .42);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .22);
+}
+
+#dmPopup .chat-header-actions {
+  gap: 6px;
+}
+
+#dmPopup .chat-header-actions button {
+  white-space: nowrap;
+}
+
+#dmPopup .chat-body {
+  background: linear-gradient(180deg, rgba(15, 23, 42, .38), rgba(2, 6, 23, .24));
+}
+
+#dmPopup #dmMessages {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+#dmPopup .message-row {
+  align-items: flex-end;
+  gap: 8px;
+  margin-bottom: 0;
+}
+
+#dmPopup .message {
+  max-width: min(78%, 520px);
+  background: rgba(15, 23, 42, .88);
+  border-color: rgba(56, 189, 248, .24);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .16);
+}
+
+#dmPopup .message-row.me .message {
+  background: linear-gradient(135deg, rgba(14, 165, 233, .28), rgba(124, 58, 237, .24));
+  border-color: rgba(125, 211, 252, .5);
+}
+
+#dmPopup .message-meta {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+#dmPopup .chat-image {
+  display: block;
+  width: auto;
+  max-width: min(100%, 320px);
+  height: auto;
+  max-height: 320px;
+  object-fit: contain;
+  margin-top: 8px;
+  border: 1px solid rgba(56, 189, 248, .2);
+}
+
+#dmPopup .message-row.system {
+  justify-content: center;
+}
+
+#dmPopup .message-row.system .message {
+  max-width: min(92%, 560px);
+  background: rgba(234, 179, 8, .1);
+  border-color: rgba(250, 204, 21, .42);
+}
+
+#dmPopup .system-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#dmPopup .system-msg .small-btn {
+  align-self: flex-start;
+  margin-top: 0;
+}
+
+#dmPopup #dmTyping {
+  flex: 0 0 auto;
+  color: #7dd3fc;
+}
+
+#dmPopup .chat-input {
+  padding: 10px 12px;
+  background: rgba(2, 6, 23, .92);
+  border-top-color: rgba(56, 189, 248, .38);
+}
+
+#dmPopup #dmInput {
+  min-width: 0;
+  min-height: 42px;
+}
+
+#dmPopup #dmImageBtn {
+  min-width: 42px;
+  min-height: 42px;
+  padding: 9px 10px;
+}
+
+#dmPopup #dmSend {
+  min-height: 42px;
+  min-width: 64px;
+}
+
+/* ============================================================
+   ROOM MEMBERS
+   ============================================================ */
 .room-members-panel {
   width: 132px;
   flex: 0 0 auto;
