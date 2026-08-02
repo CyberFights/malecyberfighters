@@ -267,7 +267,7 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
 }
 
 .modal-overlay[aria-modal="true"] {
-  display: flex !important;
+  display: none !important;
 }
 
 .list-popup-panel {
