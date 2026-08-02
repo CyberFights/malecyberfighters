@@ -226,6 +226,7 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
 }
 .user-profile-card.logged-in .me-actions {
   display: flex;
+  flex-direction: column;
   gap: 8px;
   flex: 0 0 auto;
 }
