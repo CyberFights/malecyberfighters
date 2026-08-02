@@ -384,6 +384,31 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
   min-width: 0;
 }
 
+/* DMs popup refinements for touch-sized mobile viewports */
+#dmSidebar .list-popup-panel {
+  min-width: 0;
+}
+
+#dmSidebar .dm-list {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+#dmSidebar .dm-row {
+  min-height: 54px;
+  overflow: hidden;
+  touch-action: manipulation;
+}
+
+#dmSidebar .dm-row:active {
+  background: rgba(56, 189, 248, .18);
+  transform: translateY(0);
+}
+
+#dmSidebar .dm-row .badge {
+  flex: 0 0 auto;
+}
+
 /* ============================================================
    CHAT POPUPS
    ============================================================ */
