@@ -1116,20 +1116,45 @@ socket.on('publicMessage', async (msg) => {
   });
 
   socket.on("joinRoom", async ({ room }) => {
-    socket.join(room);
-    socket.currentRoom = room;
+    const roomId = room == null ? "" : String(room);
+    if (!roomId) return;
 
-    const history = await RoomMessage.find({ room }).sort({ time: 1 }).limit(200).lean();
-    io.to(socket.id).emit("roomHistory", { room, history });
+    // A socket can only be a member of the room it currently has open.
+    // Leave the previous room before joining another one so its member list
+    // is updated immediately instead of retaining a stale user.
+    const previousRoom = socket.currentRoom;
+    if (previousRoom && previousRoom !== roomId) {
+      socket.leave(previousRoom);
+      socket.currentRoom = null;
+      // Do not delay the new join while refreshing the old room.
+      updateRoomMembers(previousRoom);
+    }
 
-    updateRoomMembers(room);
+    socket.join(roomId);
+    socket.currentRoom = roomId;
+
+    const history = await RoomMessage.find({ room: roomId }).sort({ time: 1 }).limit(200).lean();
+    io.to(socket.id).emit("roomHistory", { room: roomId, history });
+
+    await updateRoomMembers(roomId);
+  });
+
+  // Remove this socket from a room when its chat window closes.
+  socket.on("leaveRoom", async ({ room } = {}) => {
+    const roomId = room == null || room === "" ? socket.currentRoom : String(room);
+    if (!roomId) return;
+
+    socket.leave(roomId);
+    if (socket.currentRoom === roomId) socket.currentRoom = null;
+    await updateRoomMembers(roomId);
   });
 
   // Allow clients to request a members refresh for a room (client emits "requestRoomMembers")
   socket.on("requestRoomMembers", async ({ room }) => {
     try {
-      if (!room) return;
-      await updateRoomMembers(room);
+      const roomId = room == null ? "" : String(room);
+      if (!roomId || !socket.rooms.has(roomId)) return;
+      await updateRoomMembers(roomId);
     } catch (err) {
       console.error("requestRoomMembers handler error:", err);
     }

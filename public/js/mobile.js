@@ -681,7 +681,11 @@
 
   function closeArenaChat() {
     const s = getSession();
-    if (state.socket && s) state.socket.emit("chatClosed", { username: s.username });
+    if (state.socket && s) {
+      state.socket.emit("chatClosed", { username: s.username });
+      state.onlineUsers = state.onlineUsers.filter(u => u.username !== s.username);
+    }
+    renderOnlineList();
     hideId("chatPopup");
   }
 
@@ -1423,6 +1427,9 @@
     const feed = $("roomFeed");
     if (feed) feed.innerHTML = "";
 
+    const members = $("roomMembersList");
+    if (members) members.innerHTML = "";
+
     const typing = $("roomTyping");
     if (typing) typing.style.display = "none";
 
@@ -1431,13 +1438,21 @@
 
     if (state.socket) {
       state.socket.emit("joinRoom", { room: String(roomId) });
-      setTimeout(() => state.socket.emit("requestRoomMembers", { room: String(roomId) }), 250);
+      setTimeout(() => {
+        const current = $("roomChatPopup")?.dataset.room;
+        if (String(current) !== String(roomId)) return;
+        state.socket.emit("requestRoomMembers", { room: String(roomId) });
+      }, 250);
     }
   }
 
   function closeRoomPopup() {
     const popup = $("roomChatPopup");
+    const room = popup && popup.dataset.room;
+    if (state.socket && room) state.socket.emit("leaveRoom", { room: String(room) });
     if (popup) popup.dataset.room = "";
+    const members = $("roomMembersList");
+    if (members) members.innerHTML = "";
     hideId("roomChatPopup");
   }
 
