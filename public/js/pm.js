@@ -321,6 +321,8 @@ function openStoryPopup(targetUsername) {
 
   document.getElementById("storyEditor").value = "";
   document.getElementById("storyDate").value = "";
+  const titleInput = document.getElementById("storyTitle");
+  if (titleInput) titleInput.value = "";
 
   document.getElementById("storyLoadBtn").onclick = async () => {
     const date = document.getElementById("storyDate").value;
@@ -347,6 +349,9 @@ function openStoryPopup(targetUsername) {
   };
 
   document.getElementById("storySaveBtn").onclick = async () => {
+    const title = titleInput ? titleInput.value.trim() : "";
+    if (!title) return alert("Please enter a story title");
+
     const storyText = document.getElementById("storyEditor").value.trim();
     if (!storyText) return alert("Story is empty");
 
@@ -356,6 +361,7 @@ function openStoryPopup(targetUsername) {
       body: JSON.stringify({
         owner: getSession().username,
         partner: targetUsername,
+        title,
         story: storyText
       })
     });
@@ -435,14 +441,15 @@ socket.on("stopTypingDM", ({ from }) => {
 /* DM sidebar provided by utils.js */
 
 socket.on("storyApprovalRequest", data => {
-  const { storyId, from } = data;
+  const { storyId, from, title } = data;
+  const safeTitle = title ? escapeHtml(title) : "";
 
   const popup = document.createElement("div");
   popup.className = "modal";
   popup.innerHTML = `
     <div class="modal-content">
       <h2>Story Approval Request</h2>
-      <p>${from} created a story involving your messages.</p>
+      <p>${from} created a story involving your messages${title ? `: <strong>"${safeTitle}"</strong>` : ""}.</p>
       <button id="approveStoryBtn">Approve</button>
       <button id="denyStoryBtn">Deny</button>
     </div>
@@ -455,6 +462,7 @@ socket.on("storyApprovalRequest", data => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ storyId })
     });
+    alert(`Story${title ? ` "${title}"` : ""} approved. It is now saved on both profiles.`);
     popup.remove();
   };
 

@@ -361,6 +361,72 @@ card.innerHTML = `
 
 };
 
+/* Story viewer popup -----------------------------------------------------
+   Replaces the old alert(s.story): shows the story title in an elegant
+   script font and the story text in a regular font, with a close button.
+------------------------------------------------------------------------ */
+function openStoryViewer(title, storyText) {
+  // Load the elegant script font once (falls back to system script fonts)
+  if (!document.getElementById("storyViewerFont")) {
+    const link = document.createElement("link");
+    link.id = "storyViewerFont";
+    link.rel = "stylesheet";
+    link.href = "https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap";
+    document.head.appendChild(link);
+  }
+
+  // Only one viewer at a time
+  document.getElementById("storyViewerPopup")?.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "storyViewerPopup";
+  overlay.style.cssText =
+    "position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;" +
+    "align-items:center;justify-content:center;z-index:10000;padding:20px;" +
+    "box-sizing:border-box;backdrop-filter:blur(4px);";
+
+  const box = document.createElement("div");
+  box.style.cssText =
+    "background:#111;border:1px solid rgba(0,150,255,0.4);border-radius:12px;" +
+    "box-shadow:0 0 25px rgba(0,150,255,0.4);color:#fff;padding:34px 30px;" +
+    "width:640px;max-width:95%;max-height:85vh;overflow-y:hidden;" +
+    "display:flex;flex-direction:column;text-align:center;";
+
+  const titleEl = document.createElement("div");
+  titleEl.textContent = title || "Untitled story";
+  titleEl.style.cssText =
+    'font-family:"Great Vibes","Brush Script MT","Segoe Script","Lucida Handwriting",cursive;' +
+    "font-size:44px;line-height:1.25;color:#00aaff;margin-bottom:20px;word-break:break-word;";
+
+  const textEl = document.createElement("div");
+  textEl.textContent = storyText || "";
+  textEl.style.cssText =
+    "font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;" +
+    "color:#f5f5f5;white-space:pre-wrap;word-break:break-word;text-align:left;";
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "small-btn ghost";
+  closeBtn.textContent = "Close";
+  closeBtn.style.cssText = "margin:24px auto 0;";
+
+  box.appendChild(titleEl);
+  box.appendChild(textEl);
+  box.appendChild(closeBtn);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  const close = () => {
+    document.removeEventListener("keydown", onKey);
+    overlay.remove();
+  };
+  const onKey = e => { if (e.key === "Escape") close(); };
+
+  closeBtn.onclick = close;
+  overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
+  document.addEventListener("keydown", onKey);
+}
+
 async function loadSelfStories(username) {
   const res = await fetch("/api/story/list?username=" + encodeURIComponent(username));
   const data = await res.json();
@@ -376,10 +442,16 @@ async function loadSelfStories(username) {
   }
 
   data.stories.forEach(s => {
+    // Approved stories are saved to both profiles (owner and partner)
+    const other = s.owner === username ? s.partner : s.owner;
+    const title = s.title || `Story with ${other}`;
     const div = document.createElement("div");
     div.className = "story-item";
-    div.textContent = `${s.partner} — ${new Date(s.createdAt).toLocaleDateString()}`;
-    div.onclick = () => alert(s.story);
+    div.innerHTML = `
+      <div><strong>${escapeHtml(title)}</strong></div>
+      <div class="small">${escapeHtml(other)} — ${new Date(s.createdAt).toLocaleDateString()}</div>
+    `;
+    div.onclick = () => openStoryViewer(title, s.story);
     box.appendChild(div);
   });
 }
@@ -399,15 +471,21 @@ async function loadSelfPendingStories(username) {
   }
 
   data.stories.forEach(s => {
+    // Pending stories appear on both profiles: the owner (approvalOwner)
+    // can resend the request, the partner (approvalPartner) can approve it.
+    const isOwner = s.owner === username;
+    const other = isOwner ? s.partner : s.owner;
+    const title = s.title || `Story with ${other}`;
     const div = document.createElement("div");
     div.className = "story-item pending";
     div.innerHTML = `
-      <div><strong>${escapeHtml(s.partner)}</strong></div>
-      <div class="small">${new Date(s.createdAt).toLocaleDateString()}</div>
-      <div class="tiny muted">Waiting for ${escapeHtml(s.partner)} to approve…</div>
-      <button class="small-btn resendApproval" data-id="${s._id}">
-        Resend Request
-      </button>
+      <div><strong>${escapeHtml(title)}</strong></div>
+      <div class="small">${escapeHtml(other)} — ${new Date(s.createdAt).toLocaleDateString()}</div>
+      ${isOwner
+        ? `<div class="tiny muted">Waiting for ${escapeHtml(s.partner)} to approve…</div>
+           <button class="small-btn resendApproval" data-id="${s._id}">Resend Request</button>`
+        : `<div class="tiny muted">${escapeHtml(s.owner)} is waiting for your approval…</div>
+           <button class="small-btn approvePendingStory" data-id="${s._id}" data-title="${escapeHtml(title)}">Approve</button>`}
     `;
     box.appendChild(div);
   });
@@ -422,6 +500,26 @@ async function loadSelfPendingStories(username) {
       });
       const result = await res.json();
       if (result.ok) alert("Approval request resent");
+    };
+  });
+
+  box.querySelectorAll(".approvePendingStory").forEach(btn => {
+    btn.onclick = async () => {
+      const storyId = btn.dataset.id;
+      const title = btn.dataset.title;
+      const res = await fetch("/api/story/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storyId })
+      });
+      const result = await res.json();
+      if (result.ok) {
+        alert(`Story${title ? ` "${title}"` : ""} approved. It is now saved on both profiles.`);
+        loadSelfPendingStories(username);
+        loadSelfStories(username);
+      } else {
+        alert("Could not approve the story");
+      }
     };
   });
 }
@@ -442,10 +540,16 @@ async function loadStories(username) {
   }
 
   data.stories.forEach(s => {
+    // Stories are saved to both the owner's and the partner's profile
+    const other = s.owner === username ? s.partner : s.owner;
+    const title = s.title || `Story with ${other}`;
     const div = document.createElement("div");
     div.className = "story-item";
-    div.textContent = `${s.partner} — ${new Date(s.createdAt).toLocaleDateString()}`;
-    div.onclick = () => alert(s.story);
+    div.innerHTML = `
+      <div><strong>${escapeHtml(title)}</strong></div>
+      <div class="small">${escapeHtml(other)} — ${new Date(s.createdAt).toLocaleDateString()}</div>
+    `;
+    div.onclick = () => openStoryViewer(title, s.story);
     box.appendChild(div);
   });
 }

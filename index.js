@@ -178,6 +178,7 @@ const dmSchema = new mongoose.Schema({
   imageUrl: { type: String },
 
   relationshipId: { type: String },
+  storyId: { type: String },
   // system / approval / normal
   type: { type: String, default: "normal" }, 
   // values:
@@ -193,6 +194,7 @@ const dmSchema = new mongoose.Schema({
 const storySchema = new mongoose.Schema({
   owner: { type: String, required: true },
   partner: { type: String, required: true },
+  title: { type: String, default: "" },
   story: { type: String, required: true },
 
   approvalOwner: { type: Boolean, default: true },
@@ -320,32 +322,36 @@ async function updateRoomMembers(roomId) {
 }
 
 app.post("/api/story/save", async (req, res) => {
-  const { owner, partner, story } = req.body;
+  const { owner, partner, story, title } = req.body;
 
   const saved = await Story.create({
     owner,
     partner,
+    title: title || "",
     story,
     approvalOwner: true,
     approvalPartner: false,
     approved: false
   });
 
+  const storyTitle = saved.title || "Untitled story";
   const partnerUser = await User.findOne({ username: partner }).lean();
 
   // If partner is online → real-time popup
   if (partnerUser?.socketId) {
     io.to(partnerUser.socketId).emit("storyApprovalRequest", {
       storyId: saved._id,
-      from: owner
+      from: owner,
+      title: saved.title
     });
   } else {
     // If partner is offline → send DM notification
     await DM.create({
       from: "SYSTEM",
       to: partner,
-      text: `${owner} created a story involving your messages. Please approve it.`,
+      text: `${owner} created a story involving your messages: "${storyTitle}". Please approve it.`,
       type: "storyApproval",
+      storyId: saved._id,
       time: new Date()
     });
   }
@@ -368,14 +374,16 @@ app.post("/api/story/approve", async (req, res) => {
 
   await story.save();
 
-  res.json({ ok: true, approved: story.approved });
+  res.json({ ok: true, approved: story.approved, title: story.title });
 });
 
 app.get("/api/story/pending", async (req, res) => {
   const { username } = req.query;
 
+  // Pending stories for both sides: the owner (approvalOwner) who created
+  // the story and the partner (approvalPartner) who still has to approve it.
   const stories = await Story.find({
-    owner: username,
+    $or: [{ owner: username }, { partner: username }],
     approved: false
   }).sort({ createdAt: -1 }).lean();
 
@@ -392,7 +400,8 @@ app.post("/api/story/resend", async (req, res) => {
   if (partnerUser?.socketId) {
     io.to(partnerUser.socketId).emit("storyApprovalRequest", {
       storyId,
-      from: story.owner
+      from: story.owner,
+      title: story.title
     });
   }
 
@@ -588,10 +597,21 @@ app.post("/api/story/load", async (req, res) => {
 app.get("/api/story/list", async (req, res) => {
   const { username } = req.query;
 
+  // Approved stories are saved to both profiles: the owner (approvalOwner)
+  // and the partner (approvalPartner) each see the story on their profile.
   const stories = await Story.find({
-    owner: username,
+    $or: [{ owner: username }, { partner: username }],
     approved: true
   }).sort({ createdAt: -1 }).lean();
+
+  res.json({ ok: true, stories });
+});
+
+// Public archives: every approved story from every member
+app.get("/api/story/archives", async (req, res) => {
+  const stories = await Story.find({ approved: true })
+    .sort({ createdAt: -1 })
+    .lean();
 
   res.json({ ok: true, stories });
 });
