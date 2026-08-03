@@ -478,7 +478,11 @@ socket.on('presence', users => {
    CHAT POPUP
 ============================================================ */
 $('btnOpenChat')?.addEventListener('click', () => {
+  const s = getSession();
   show($('chatPopup'));
+
+  // Re-announce presence after a previous close marked this user offline.
+  if (s) socket.emit("login", s);
   if (window.updateUIForSession) updateUIForSession();
   loadPublicMessages();
   renderOnlineList();
@@ -486,7 +490,12 @@ $('btnOpenChat')?.addEventListener('click', () => {
 /* CLOSE CHATROOM → disconnect from online (but stay logged in) */
 $('btnCloseChat')?.addEventListener('click', () => {
   const s = getSession();
-  if (s) socket.emit("chatClosed", { username: s.username });
+  if (s) {
+    socket.emit("chatClosed", { username: s.username });
+    window.users = (window.users || []).filter(u => u.username !== s.username);
+  }
+  const onlineList = $('onlineList');
+  if (onlineList) onlineList.innerHTML = '';
   hide($('chatPopup'));
 });
 
@@ -889,6 +898,8 @@ function openRoomPopup(roomId, roomName) {
   
   title.textContent = roomName;
 
+  // Never carry members from a previously open room into this one.
+  renderRoomMembers([]);
   popup.dataset.room = roomId;
   popup.style.display = 'flex';
 
@@ -897,8 +908,10 @@ function openRoomPopup(roomId, roomName) {
 
   socket.emit("joinRoom", { room: roomId });
 
-  // Request member list refresh
+  // Request member list refresh after the join has reached the server.
   setTimeout(() => {
+    const currentRoom = $('roomChatPopup')?.dataset.room;
+    if (String(currentRoom) !== String(roomId)) return;
     socket.emit("requestRoomMembers", { room: roomId });
   }, 200);
 }
@@ -922,7 +935,14 @@ $('roomSendBtn')?.addEventListener('click', () => {
 
 $('closeRoomChat')?.addEventListener('click', () => {
   const popup = $('roomChatPopup');
-  if (popup) popup.style.display = 'none';
+  const room = popup?.dataset.room;
+
+  if (room) socket.emit("leaveRoom", { room });
+  if (popup) {
+    popup.dataset.room = '';
+    popup.style.display = 'none';
+  }
+  renderRoomMembers([]);
 });
 
 
