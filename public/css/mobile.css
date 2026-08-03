@@ -486,11 +486,18 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
    DIRECT MESSAGE CHAT
    ============================================================ */
 .pm-window_ {
-  background:
-    radial-gradient(circle at 15% 0%, rgba(14, 165, 233, .12), transparent 34%),
-    #0b1220;
-    position: fixed;
-    display:none;
+  position:fixed;
+  right:460px;
+  bottom:28px;
+  width:320px;
+  height:360px;
+  background:linear-gradient(180deg,#050a16,#0a1324);
+  border-radius:10px;
+  border:1px solid rgba(160,200,255,0.12);
+  display:none;
+  flex-direction:column;
+  overflow:hidden;
+  box-shadow:0 20px 60px rgba(120,180,255,0.25);
     
 }
 
