@@ -348,10 +348,16 @@ async function loadStories(username) {
   }
 
   data.stories.forEach(s => {
+    // Stories are saved to both the owner's and the partner's profile
+    const other = s.owner === username ? s.partner : s.owner;
+    const title = s.title || `Story with ${other}`;
     const div = document.createElement("div");
     div.className = "story-item";
-    div.textContent = `${s.partner} — ${new Date(s.createdAt).toLocaleDateString()}`;
-    div.onclick = () => alert(s.story);
+    div.innerHTML = `
+      <div><strong>${escapeHtml(title)}</strong></div>
+      <div class="small">${escapeHtml(other)} — ${new Date(s.createdAt).toLocaleDateString()}</div>
+    `;
+    div.onclick = () => openStoryViewer(title, s.story);
     box.appendChild(div);
   });
 }

@@ -274,6 +274,8 @@ function openStoryPopup(targetUsername) {
 
   document.getElementById("storyEditor").value = "";
   document.getElementById("storyDate").value = "";
+  const titleInput = document.getElementById("storyTitle");
+  if (titleInput) titleInput.value = "";
 
   document.getElementById("storyLoadBtn").onclick = async () => {
     const date = document.getElementById("storyDate").value;
@@ -300,6 +302,9 @@ function openStoryPopup(targetUsername) {
   };
 
   document.getElementById("storySaveBtn").onclick = async () => {
+    const title = titleInput ? titleInput.value.trim() : "";
+    if (!title) return alert("Please enter a story title");
+
     const storyText = document.getElementById("storyEditor").value.trim();
     if (!storyText) return alert("Story is empty");
 
@@ -309,6 +314,7 @@ function openStoryPopup(targetUsername) {
       body: JSON.stringify({
         owner: getSession().username,
         partner: targetUsername,
+        title,
         story: storyText
       })
     });
@@ -529,7 +535,8 @@ document.getElementById("dmImageInput")?.addEventListener("change", e => {
 ============================================================ */
 
 socket.on("storyApprovalRequest", data => {
-  const { storyId, from } = data;
+  const { storyId, from, title } = data;
+  const safeTitle = title ? escapeHtml(title) : "";
 
   const popup = document.createElement("div");
   popup.className = "modal";
@@ -538,7 +545,7 @@ socket.on("storyApprovalRequest", data => {
       <div class="modal-header">
         <h3>Story Approval Request</h3>
       </div>
-      <p>${from} created a story involving your messages.</p>
+      <p>${from} created a story involving your messages${title ? `: <strong>"${safeTitle}"</strong>` : ""}.</p>
       <div class="modal-buttons">
         <button id="approveStoryBtn" class="small-btn" type="button">Approve</button>
         <button id="denyStoryBtn" class="ghost small-btn" type="button">Deny</button>
@@ -553,6 +560,7 @@ socket.on("storyApprovalRequest", data => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ storyId })
     });
+    alert(`Story${title ? ` "${title}"` : ""} approved. It is now saved on both profiles.`);
     popup.remove();
   };
 

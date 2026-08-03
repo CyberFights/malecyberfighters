@@ -56,6 +56,7 @@
     <button id="btnRegister" class="ghost" type="button">Register</button>
     <button id="btnOpenChat" type="button">Open Arena</button>
     <button id="btnRoster" class="ghost" type="button">User Roster</button>
+    <button id="btnArchives" class="ghost" type="button">Archives</button>
     <button id="btnDMs" class="ghost" type="button">
       DMs <span id="dmBadge" class="badge" style="display:none"></span>
     </button>
@@ -116,6 +117,7 @@
     <button id="btnLogin">Login</button>
     <button id="btnRegister" class="ghost">Register</button>
     <button id="btnRoster" class="ghost">User Roster</button>
+    <button id="btnArchives" class="ghost">Archives</button>
     <button id="btnOpenChat">Open Arena</button>
 
     <!-- NEW DM SIDEBAR BUTTON -->
@@ -372,6 +374,36 @@
   <span id="rosterPageNumber" class="small muted"></span>
   <button id="rosterNext" class="small-btn">Next</button>
 </div>
+
+  </div>
+</div>
+
+<!-- STORY ARCHIVES POPUP (every approved story from every member) -->
+<div id="modalArchives" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.6);align-items:center;justify-content:center;z-index:9999">
+  <div style="background:#111;padding:18px;border-radius:10px;width:760px;max-height:80vh;overflow:auto">
+
+    <h3 style="margin:0 0 12px 0">Story Archives</h3>
+
+    <!-- SEARCH BAR -->
+    <input
+      id="archivesSearch"
+      type="text"
+      placeholder="Search by user..."
+      style="width:100%;margin-bottom:12px"
+    >
+
+    <!-- STORY LIST -->
+    <div id="archivesList" class="roster-list"></div>
+
+    <div id="archivesPagination" style="display:flex;justify-content:center;gap:10px;margin-top:12px">
+      <button id="archivesPrev" class="small-btn">Prev</button>
+      <span id="archivesPageNumber" class="small muted"></span>
+      <button id="archivesNext" class="small-btn">Next</button>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;margin-top:12px">
+      <button id="archivesClose" class="ghost">Close</button>
+    </div>
 
   </div>
 </div>
@@ -1386,6 +1418,9 @@ Don't hesitate to contact us if you have any questions.
 <div id="storyPopup" class="modal">
   <div class="modal-content">
     <h2>Create Story</h2>
+
+    <label>Story title:</label>
+    <input type="text" id="storyTitle" placeholder="Enter a title for your story" maxlength="120">
 
     <label>Select start date:</label>
     <input type="date" id="storyDate">

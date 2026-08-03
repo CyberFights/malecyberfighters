@@ -399,12 +399,13 @@
     });
 
     /* approvals -------------------------------------------------------- */
-    socket.on("storyApprovalRequest", async ({ storyId, from }) => {
+    socket.on("storyApprovalRequest", async ({ storyId, from, title }) => {
       if (!storyId) return;
-      if (!confirm(`${from} created a story involving your messages. Approve it?`)) return;
+      const titleText = title ? `: "${title}"` : "";
+      if (!confirm(`${from} created a story involving your messages${titleText}. Approve it?`)) return;
       try {
         await postJSON("/api/story/approve", { storyId });
-        alert("Story approved.");
+        alert(`Story${title ? ` "${title}"` : ""} approved. It is now saved on both profiles.`);
       } catch (e) {
         alert("Could not approve the story right now.");
       }
@@ -874,6 +875,72 @@
     loadProfileTimeline(user.username);
   }
 
+  /* Story viewer popup ---------------------------------------------------
+     Shows the story title in an elegant script font and the story text in
+     a regular font, with a close button. Replaces the old alert().
+  ---------------------------------------------------------------------- */
+  function openStoryViewer(title, storyText) {
+    // Load the elegant script font once (falls back to system script fonts)
+    if (!document.getElementById("storyViewerFont")) {
+      const link = document.createElement("link");
+      link.id = "storyViewerFont";
+      link.rel = "stylesheet";
+      link.href = "https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap";
+      document.head.appendChild(link);
+    }
+
+    // Only one viewer at a time
+    $("storyViewerPopup")?.remove();
+
+    const overlay = document.createElement("div");
+    overlay.id = "storyViewerPopup";
+    overlay.style.cssText =
+      "position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;" +
+      "align-items:center;justify-content:center;z-index:10000;padding:20px;" +
+      "box-sizing:border-box;backdrop-filter:blur(4px);";
+
+    const box = document.createElement("div");
+    box.style.cssText =
+      "background:#111;border:1px solid rgba(0,150,255,0.4);border-radius:12px;" +
+      "box-shadow:0 0 25px rgba(0,150,255,0.4);color:#fff;padding:34px 30px;" +
+      "width:640px;max-width:95%;max-height:85vh;overflow-y:hidden;" +
+      "display:flex;flex-direction:column;text-align:center;";
+
+    const titleEl = document.createElement("div");
+    titleEl.textContent = title || "Untitled story";
+    titleEl.style.cssText =
+      'font-family:"Great Vibes","Brush Script MT","Segoe Script","Lucida Handwriting",cursive;' +
+      "font-size:44px;line-height:1.25;color:#00aaff;margin-bottom:20px;word-break:break-word;";
+
+    const textEl = document.createElement("div");
+    textEl.textContent = storyText || "";
+    textEl.style.cssText =
+      "font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;" +
+      "color:#f5f5f5;white-space:pre-wrap;word-break:break-word;text-align:left;";
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "small-btn ghost";
+    closeBtn.textContent = "Close";
+    closeBtn.style.cssText = "margin:24px auto 0;";
+
+    box.appendChild(titleEl);
+    box.appendChild(textEl);
+    box.appendChild(closeBtn);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    const close = () => {
+      document.removeEventListener("keydown", onKey);
+      overlay.remove();
+    };
+    const onKey = e => { if (e.key === "Escape") close(); };
+
+    closeBtn.onclick = close;
+    overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
+    document.addEventListener("keydown", onKey);
+  }
+
   async function loadProfileStories(username) {
     const el = $("profileStories");
     if (!el) return;
@@ -885,12 +952,27 @@
         el.innerHTML = '<div class="small muted">No stories yet.</div>';
         return;
       }
-      el.innerHTML = stories.map(s => `
-        <div class="timeline-item">
-          <div class="timeline-date">${escapeHtml(new Date(s.createdAt).toLocaleDateString())} • with @${escapeHtml(s.partner)}</div>
+      el.innerHTML = stories.map((s, i) => {
+        const other = s.owner === username ? s.partner : s.owner;
+        const title = s.title || `Story with @${other}`;
+        return `
+        <div class="timeline-item story-view-item" data-i="${i}" style="cursor:pointer">
+          <div class="timeline-date"><strong>${escapeHtml(title)}</strong></div>
+          <div class="timeline-date">${escapeHtml(new Date(s.createdAt).toLocaleDateString())} • with @${escapeHtml(other)}</div>
           <div class="timeline-desc">${escapeHtml(String(s.story).slice(0, 400))}</div>
         </div>
-      `).join("");
+        `;
+      }).join("");
+
+      // Tap a story to open it in the elegant viewer popup
+      el.querySelectorAll(".story-view-item").forEach(item => {
+        item.addEventListener("click", () => {
+          const s = stories[Number(item.dataset.i)];
+          if (!s) return;
+          const other = s.owner === username ? s.partner : s.owner;
+          openStoryViewer(s.title || `Story with @${other}`, s.story);
+        });
+      });
     } catch (e) {
       el.innerHTML = '<div class="small muted">Could not load stories.</div>';
     }
@@ -1316,8 +1398,10 @@
 
     const editor = $("storyEditor");
     const dateInput = $("storyDate");
+    const titleInput = $("storyTitle");
     if (editor) editor.value = "";
     if (dateInput) dateInput.value = "";
+    if (titleInput) titleInput.value = "";
 
     showId("storyPopup");
 
@@ -1338,10 +1422,12 @@
 
     const saveBtn = $("storySaveBtn");
     if (saveBtn) saveBtn.onclick = async () => {
+      const title = (titleInput && titleInput.value || "").trim();
+      if (!title) return alert("Please enter a story title.");
       const story = (editor && editor.value || "").trim();
       if (!story) return alert("The story is empty.");
       try {
-        const data = await postJSON("/api/story/save", { owner: s.username, partner, story });
+        const data = await postJSON("/api/story/save", { owner: s.username, partner, title, story });
         if (!data.ok) return alert("Failed to save the story.");
         alert("Story saved. Waiting for approval.");
         hideId("storyPopup");
@@ -2869,7 +2955,8 @@ document.getElementById("dmImageInput")?.addEventListener("change", e => {
 ============================================================ */
 
 socket.on("storyApprovalRequest", data => {
-  const { storyId, from } = data;
+  const { storyId, from, title } = data;
+  const safeTitle = title ? escapeHtml(title) : "";
 
   const popup = document.createElement("div");
   popup.className = "modal";
@@ -2878,7 +2965,7 @@ socket.on("storyApprovalRequest", data => {
       <div class="modal-header">
         <h3>Story Approval Request</h3>
       </div>
-      <p>${from} created a story involving your messages.</p>
+      <p>${from} created a story involving your messages${title ? `: <strong>"${safeTitle}"</strong>` : ""}.</p>
       <div class="modal-buttons">
         <button id="approveStoryBtn" class="small-btn" type="button">Approve</button>
         <button id="denyStoryBtn" class="ghost small-btn" type="button">Deny</button>
