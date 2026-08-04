@@ -105,20 +105,20 @@ header{
 }
 
 button{
-  background:linear-gradient(135deg,#7fd8ff,#b0c4ff);
+  background:#00e5ff;
   border:0;
   padding:10px 14px;
   border-radius:8px;
   color:#00121f;
   font-weight:600;
   cursor:pointer;
-  box-shadow:0 0 10px rgba(120,200,255,0.4);
+  box-shadow:0 0 14px rgba(0,229,255,0.7), 0 0 28px rgba(0,229,255,0.35);
 }
 
 button.ghost{
   background:transparent;
-  border:1px solid rgba(180,220,255,0.15);
-  color:var(--muted);
+  border:1px solid rgba(0,229,255,0.45);
+  color:#00e5ff;
 }
 
 .grid{
