@@ -189,7 +189,7 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
   background: rgba(15, 23, 42, .6);
   border-bottom: 1px solid rgba(56, 189, 248, .3);
 }
-
+.container-main {background: rgba(0, 0, 0, 0.2);}
 .brand { display: flex; align-items: center; gap: 14px; }
 .brand h1 { font-size: 19px; font-weight: 700; }
 
