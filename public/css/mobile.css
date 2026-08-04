@@ -5,8 +5,22 @@
 
 html, body { height: 100%; }
 
+html {
+  background-color: #020617;
+  background-image: url('/images/mcf3.png');
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+  background-attachment: fixed;
+}
+
 body {
-  background: #020617;
+  background-color: #020617;
+  background-image: url('/images/mcf3.png');
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+  background-attachment: fixed;
   color: #e2e8f0;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   overflow-x: hidden;
@@ -709,6 +723,63 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
   flex-direction: column;
   gap: 8px;
   margin-top: 12px;
+  background-color: rgba(0,0,0,0.45);
+  background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('/images/mcf1.png');
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+  border-radius: 10px;
+  padding: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+/* Roster and Story list backgrounds using mcf1.png - mobile */
+#rosterPage,
+#quickRoster,
+#rosterList,
+#archivesList,
+#profileStories,
+#profileRelationships,
+#profileTimeline,
+#profilePendingStories,
+#archivesList.roster-list,
+#rosterPage.roster-list,
+#rosterList.roster-list {
+  background-color: rgba(0,0,0,0.45);
+  background-image: linear-gradient(rgba(0,0,0,0.58), rgba(0,0,0,0.58)), url('/images/mcf1.png');
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+  border-radius: 10px;
+  padding: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+/* Make inner cards translucent so mcf1.png shows through - mobile */
+#profileStories .story-item,
+#profileRelationships .relationship-item,
+#profileTimeline .timeline-item,
+#profilePendingStories .story-item,
+#archivesList .story-item,
+#archivesList .roster-user,
+.roster-list .roster-user,
+#rosterPage .roster-user,
+#quickRoster .user-row,
+.roster-list .user-row,
+#rosterList .roster-user {
+  background: rgba(15, 23, 42, 0.82) !important;
+  backdrop-filter: blur(2px);
+  border: 1px solid rgba(56, 189, 248, 0.22);
+}
+
+.roster-user {
+  background: rgba(15, 23, 42, 0.82) !important;
+}
+
+.timeline-item,
+.story-item,
+.relationship-item {
+  background: rgba(15, 23, 42, 0.82) !important;
 }
 
 .roster-user {

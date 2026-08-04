@@ -1,6 +1,11 @@
 body {
   margin: 0;
-  background: #000;
+  background-color: #000;
+  background-image: url('/images/mcf3.png');
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+  background-attachment: fixed;
   overflow: hidden;
 }
 

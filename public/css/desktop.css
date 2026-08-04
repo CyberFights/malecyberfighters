@@ -18,7 +18,12 @@
 html,body{
   height:100%;
   margin:0;
-  background:linear-gradient(180deg,#020611 0%, #07101c 100%);
+  background-color:#020617;
+  background-image:url('/images/mcf3.png');
+  background-repeat:no-repeat;
+  background-position:center center;
+  background-size:cover;
+  background-attachment:fixed;
   color:#e9f6ff;
 }
 
@@ -341,6 +346,57 @@ button.ghost{
 .roster-list{
   display:flex;flex-direction:column;gap:8px;
   max-height:420px;overflow:auto;padding-right:6px;
+  background-color: rgba(0,0,0,0.45);
+  background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('/images/mcf1.png');
+  background-repeat:no-repeat;
+  background-position:center center;
+  background-size:cover;
+  background-blend-mode: normal;
+  border-radius:10px;
+  padding:10px;
+  border:1px solid rgba(160,200,255,0.2);
+}
+
+/* Roster and Story list backgrounds using mcf1.png */
+#rosterPage,
+#quickRoster,
+#rosterList,
+#archivesList,
+#profileStories,
+#profileRelationships,
+#profileTimeline,
+#profilePendingStories,
+#archivesList.roster-list,
+#rosterPage.roster-list {
+  background-color: rgba(0,0,0,0.45);
+  background-image: linear-gradient(rgba(0,0,0,0.58), rgba(0,0,0,0.58)), url('/images/mcf1.png');
+  background-repeat:no-repeat;
+  background-position:center center;
+  background-size:cover;
+  border-radius:10px;
+  padding:10px;
+  border:1px solid rgba(160,200,255,0.2);
+}
+
+/* Make inner cards translucent so mcf1.png shows through */
+#profileStories .story-item,
+#profileRelationships .relationship-item,
+#profileTimeline .timeline-item,
+#profilePendingStories .story-item,
+#archivesList .story-item,
+#archivesList .roster-user,
+.roster-list .roster-user,
+#rosterPage .roster-user,
+#quickRoster .user-row,
+.roster-list .user-row {
+  background: rgba(15, 23, 42, 0.78) !important;
+  backdrop-filter: blur(2px);
+  border: 1px solid rgba(127,216,255,0.18);
+}
+
+#profileStories .story-item.pending,
+#profilePendingStories .story-item.pending {
+  background: rgba(34, 34, 34, 0.85) !important;
 }
 .user-row {
   background: var(--glass);
