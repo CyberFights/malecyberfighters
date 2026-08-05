@@ -62,6 +62,7 @@
       DMs <span id="dmBadge" class="badge" style="display:none"></span>
     </button>
     <button id="btnRooms" class="ghost" type="button">Rooms</button>
+    <button id="btnForums" class="ghost" type="button">Forums</button>
     <button id="openSupport" type="button">Support</button>
   </div>
 
@@ -127,6 +128,7 @@
   DMs <span id="dmBadge" class="badge" style="display:none"></span>
 </button>
     <button id="btnRooms" class="ghost">Rooms</button>
+    <button id="btnForums" class="ghost">Forums</button>
 <button id="openSupport">Support</button>
 
 
@@ -666,6 +668,75 @@
     <div id="roomsList" class="rooms-list"></div>
 
     <button id="createRoomBtn" class="small-btn" type="button">Create Room</button>
+  </div>
+</div>
+
+<!-- FORUMS POPUP -->
+<div id="forumsPopup" class="forum-overlay" role="dialog" aria-modal="true" aria-labelledby="forumsPopupTitle" style="display:none">
+  <div class="forum-panel forum-list-panel">
+    <div class="forum-panel-header">
+      <h3 id="forumsPopupTitle">Forums</h3>
+      <button id="forumsClose" class="ghost small-btn" type="button" aria-label="Close forums">✕</button>
+    </div>
+
+    <div id="forumsStatus" class="small muted" role="status" aria-live="polite"></div>
+    <div id="forumsList" class="forum-list roster-list" aria-live="polite"></div>
+
+    <div class="forum-panel-actions">
+      <button id="newForumBtn" class="small-btn" type="button">New Forum</button>
+    </div>
+  </div>
+</div>
+
+<!-- NEW FORUM MODAL -->
+<div id="newForumModal" class="forum-overlay" role="dialog" aria-modal="true" aria-labelledby="newForumTitle" style="display:none">
+  <div class="forum-panel forum-form-panel">
+    <div class="forum-panel-header">
+      <h3 id="newForumTitle">New Forum</h3>
+      <button id="newForumClose" class="ghost small-btn" type="button" aria-label="Close new forum form">✕</button>
+    </div>
+
+    <div class="forum-field">
+      <label for="forumTitleInput">Forum title</label>
+      <input id="forumTitleInput" type="text" maxlength="160" placeholder="Give your forum a title" autocomplete="off">
+    </div>
+    <div class="forum-field">
+      <label for="forumBodyInput">Forum body</label>
+      <textarea id="forumBodyInput" rows="7" maxlength="10000" placeholder="Start the discussion..."></textarea>
+    </div>
+    <div id="newForumError" class="forum-error" role="alert" aria-live="polite"></div>
+
+    <div class="forum-form-actions">
+      <button id="newForumCancel" class="ghost" type="button">Cancel</button>
+      <button id="newForumCreate" type="button">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- FORUM THREAD POPUP -->
+<div id="forumThreadPopup" class="forum-overlay" role="dialog" aria-modal="true" aria-labelledby="forumThreadTitle" style="display:none" data-forum-id="">
+  <div class="forum-panel forum-thread-panel">
+    <div class="forum-panel-header">
+      <button id="forumThreadBack" class="ghost small-btn" type="button">← Forums</button>
+      <h3 id="forumThreadTitle" class="forum-thread-title">Forum</h3>
+      <button id="forumThreadClose" class="ghost small-btn" type="button" aria-label="Close forum">✕</button>
+    </div>
+
+    <div id="forumThreadStatus" class="small muted" role="status" aria-live="polite"></div>
+    <div id="forumThreadContent" class="forum-thread-content">
+      <article id="forumOriginalPost" class="forum-original-post"></article>
+      <div class="forum-replies-heading">Responses</div>
+      <div id="forumReplies" class="forum-replies" aria-live="polite"></div>
+    </div>
+
+    <div class="forum-reply-composer">
+      <label for="forumReplyBody" class="sr-only">Write a response</label>
+      <textarea id="forumReplyBody" rows="3" maxlength="5000" placeholder="Write a response..."></textarea>
+      <div class="forum-reply-actions">
+        <div id="forumReplyError" class="forum-error" role="alert" aria-live="polite"></div>
+        <button id="forumReplySubmit" type="button">Post Response</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1478,6 +1549,7 @@ Don't hesitate to contact us if you have any questions.
 <script src="/js/auth.js"></script>
 <script src="/js/register.js"></script>
 <script src="/js/chat.js"></script>
+<script src="/js/forums.js"></script>
 <script src="/js/pm.js"></script>
 <script src="/js/admin.js"></script>
   <script src="/js/admin-auth.js"></script>
