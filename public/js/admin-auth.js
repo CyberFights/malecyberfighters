@@ -4,8 +4,20 @@
 
 window.adminSessionKey = null;
 
+function getAdminEligibleUser() {
+  if (typeof getSession === "function") return getSession();
+  return JSON.parse(localStorage.getItem("cw_session_v1") || localStorage.getItem("currentUser") || "null");
+}
+
+function isAdminEligible() {
+  const user = getAdminEligibleUser();
+  return !!user && String(user.username || '').trim() === "Administrator";
+}
+
 /* Open Admin Password Modal */
 document.getElementById("btnAdmin")?.addEventListener("click", () => {
+  if (!isAdminEligible()) return;
+
   if (window.adminSessionKey) {
     if (window.loadAdminPanel) window.loadAdminPanel();
     return;

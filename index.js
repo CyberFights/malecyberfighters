@@ -566,16 +566,179 @@ app.post("/api/unblock-user", async (req, res) => {
   }
 });
 
-app.get("/api/admin/users", async (req, res) => {
+function requireAdmin(req, res, next) {
+  if (!ADMIN_KEY || req.get("x-admin-key") !== ADMIN_KEY) {
+    return res.status(403).json({ ok: false, error: "admin_denied" });
+  }
+  next();
+}
+
+async function broadcastPresence() {
+  const onlineUsers = await User.find({ online: true })
+    .select("username display imageUrl info wins losses color language age createdAt -_id")
+    .lean();
+
+  io.emit("presence", onlineUsers);
+}
+
+app.get("/api/admin/users", requireAdmin, async (req, res) => {
   try {
     const users = await User.find()
-      .select("username display email imageUrl info wins losses color language age role banned createdAt")
+      .select("username display email imageUrl info stats color language age role banned online createdAt")
+      .sort({ username: 1 })
       .lean();
 
     res.json({ ok: true, users });
   } catch (err) {
     console.error("Admin user fetch error:", err);
-    res.status(500).json({ success: false });
+    res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
+app.post("/api/admin/ban", requireAdmin, async (req, res) => {
+  const username = String(req.body.username || "").trim();
+  const banned = req.body.banned === true || req.body.banned === "true";
+
+  if (!username) {
+    return res.status(400).json({ ok: false, error: "missing_username" });
+  }
+
+  try {
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(404).json({ ok: false, error: "not_found" });
+    }
+
+    const previousSocketId = user.socketId;
+    user.banned = banned;
+
+    if (banned) {
+      user.online = false;
+      user.socketId = null;
+    }
+
+    await user.save();
+
+    if (banned && previousSocketId) {
+      io.to(previousSocketId).emit("forceLogout", { reason: "banned" });
+    }
+
+    await broadcastPresence();
+
+    res.json({
+      ok: true,
+      user: {
+        username: user.username,
+        banned: user.banned,
+        online: user.online
+      }
+    });
+  } catch (err) {
+    console.error("Admin ban error:", err);
+    res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
+app.post("/api/admin/reset-password", requireAdmin, async (req, res) => {
+  const username = String(req.body.username || "").trim();
+  const newPassword = String(req.body.newPassword || "");
+
+  if (!username || !newPassword.trim()) {
+    return res.status(400).json({ ok: false, error: "missing_fields" });
+  }
+
+  try {
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const result = await User.updateOne({ username }, { $set: { passwordHash } });
+
+    if (!result.matchedCount) {
+      return res.status(404).json({ ok: false, error: "not_found" });
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Admin reset password error:", err);
+    res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
+app.post("/api/admin/delete-user", requireAdmin, async (req, res) => {
+  const username = String(req.body.username || "").trim();
+
+  if (!username) {
+    return res.status(400).json({ ok: false, error: "missing_username" });
+  }
+
+  try {
+    const user = await User.findOneAndDelete({ username }).lean();
+    if (!user) {
+      return res.status(404).json({ ok: false, error: "not_found" });
+    }
+
+    if (user.socketId) {
+      io.to(user.socketId).emit("forceLogout", { reason: "deleted" });
+    }
+
+    await broadcastPresence();
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Admin delete user error:", err);
+    res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
+app.get("/api/admin/stats", requireAdmin, async (req, res) => {
+  try {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const [
+      totalUsers,
+      onlineUsers,
+      bannedUsers,
+      totalLogs,
+      logins24h,
+      fails24h,
+      regs24h
+    ] = await Promise.all([
+      User.countDocuments({}),
+      User.countDocuments({ online: true }),
+      User.countDocuments({ banned: true }),
+      IpLog.countDocuments({}),
+      IpLog.countDocuments({ createdAt: { $gte: since }, action: "login_success" }),
+      IpLog.countDocuments({ createdAt: { $gte: since }, action: { $in: ["login_fail", "login_error", "login_banned"] } }),
+      IpLog.countDocuments({ createdAt: { $gte: since }, action: "register" })
+    ]);
+
+    res.json({
+      ok: true,
+      totalUsers,
+      onlineUsers,
+      bannedUsers,
+      totalLogs,
+      last24h: { logins24h, fails24h, regs24h }
+    });
+  } catch (err) {
+    console.error("Admin stats error:", err);
+    res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
+app.get("/api/admin/top-ips", requireAdmin, async (req, res) => {
+  try {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const ips = await IpLog.aggregate([
+      { $match: { createdAt: { $gte: since } } },
+      { $group: { _id: { $ifNull: ["$ip", "unknown"] }, count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 10 }
+    ]);
+
+    res.json({ ok: true, ips });
+  } catch (err) {
+    console.error("Admin top IPs error:", err);
+    res.status(500).json({ ok: false, error: "server_error" });
   }
 });
 

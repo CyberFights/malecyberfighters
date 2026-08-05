@@ -136,6 +136,20 @@ function setSession(user){ localStorage.setItem(STORAGE_SESSION, JSON.stringify(
 function getSession(){ return JSON.parse(localStorage.getItem(STORAGE_SESSION) || 'null'); }
 function clearSession(){ localStorage.removeItem(STORAGE_SESSION); }
 
+function isAdministratorUser(user){
+  return !!user && String(user.username || '').trim() === 'Administrator';
+}
+
+function updateAdminButtonVisibility(user = getSession()){
+  const isAdmin = isAdministratorUser(user);
+  document.querySelectorAll('[id="btnAdmin"]').forEach(btn => {
+    btn.hidden = !isAdmin;
+  });
+  if (!isAdmin && typeof window !== 'undefined') window.adminSessionKey = null;
+}
+
+window.updateAdminButtonVisibility = updateAdminButtonVisibility;
+
 /* PUBLIC CHAT -------------------------------------------------------- */
 function loadPublic(){ return JSON.parse(localStorage.getItem(STORAGE_PUBLIC) || '[]'); }
 function savePublic(arr){ localStorage.setItem(STORAGE_PUBLIC, JSON.stringify(arr)); }
@@ -651,6 +665,7 @@ window.loadRelationshipTimeline = loadRelationshipTimeline;
 window.updateUIForSession = function() {
   const user = getSession();
   updateProfileCard(user);
+  updateAdminButtonVisibility(user);
 };
 
 /* LOAD PROFILE ON PAGE LOAD ------------------------------------------ */
@@ -661,6 +676,7 @@ window.addEventListener('load', () => {
   const user = sessionUser || legacyUser;
   if (user && !sessionUser) setSession(user);
   updateProfileCard(user);
+  updateAdminButtonVisibility(user);
 });
 
 const STORAGE_ROOM_UNREAD = 'cw_room_unread';
