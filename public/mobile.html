@@ -66,6 +66,7 @@
     <div class="me-actions">
       <button id="btnMyProfile" class="small-btn secondary" type="button">Profile</button>
       <button id="btnEditProfile" class="small-btn" type="button">Edit</button>
+      <button id="btnAccountSettings" class="small-btn secondary" type="button" style="display:none">⚙️ Settings</button>
     </div>
   </div>
 
@@ -534,6 +535,34 @@
 </div>
 
 <!-- ============================================================
+     ACCOUNT SETTINGS
+     ============================================================ -->
+<div id="modalAccountSettings" class="modal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>Account Settings</h3>
+      <button id="accountSettingsClose" class="ghost" type="button">✕</button>
+    </div>
+    <div style="border:1px solid rgba(160,200,255,0.22);padding:12px;border-radius:10px;background:rgba(160,200,255,0.06);margin-bottom:14px">
+      <h4 style="margin:0 0 8px;color:#7dd3ff">Change Password</h4>
+      <div class="field"><input id="changeCurrentPassword" type="password" placeholder="Current password"></div>
+      <div class="field"><input id="changeNewPassword" type="password" placeholder="New password (min 6 chars)"></div>
+      <div class="field"><input id="changeConfirmPassword" type="password" placeholder="Confirm new password"></div>
+      <button id="changePasswordSubmit" class="small-btn" type="button" style="width:100%">Change Password</button>
+      <div id="changePasswordError" class="error"></div>
+      <div id="changePasswordSuccess" style="display:none;color:#86efac;font-size:13px;margin-top:6px"></div>
+    </div>
+    <div style="border:1px solid rgba(239,68,68,0.35);padding:12px;border-radius:10px;background:rgba(239,68,68,0.08)">
+      <h4 style="margin:0 0 6px;color:#fca5a5">Delete Account</h4>
+      <p class="small muted" style="margin:0 0 8px">Permanent. Cannot be undone.</p>
+      <div class="field"><input id="deleteAccountPassword" type="password" placeholder="Enter password to confirm deletion"></div>
+      <button id="deleteAccountSubmit" type="button" style="width:100%;background:#ef4444">Delete My Account</button>
+      <div id="deleteAccountError" class="error"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
      STORY BUILDER
      ============================================================ -->
 <div id="storyPopup" class="modal">
@@ -774,6 +803,7 @@ Moderator decisions are final. </p>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/mobile.js"></script>
+<script src="/js/account.js"></script>
 
 
 </body>

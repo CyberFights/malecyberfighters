@@ -150,6 +150,15 @@ function updateAdminButtonVisibility(user = getSession()){
 
 window.updateAdminButtonVisibility = updateAdminButtonVisibility;
 
+function updateAccountSettingsButtonVisibility(user = getSession()){
+  const visible = !!user;
+  document.querySelectorAll('[id="btnAccountSettings"]').forEach(btn => {
+    btn.style.display = visible ? '' : 'none';
+    btn.hidden = !visible;
+  });
+}
+window.updateAccountSettingsButtonVisibility = updateAccountSettingsButtonVisibility;
+
 /* PUBLIC CHAT -------------------------------------------------------- */
 function loadPublic(){ return JSON.parse(localStorage.getItem(STORAGE_PUBLIC) || '[]'); }
 function savePublic(arr){ localStorage.setItem(STORAGE_PUBLIC, JSON.stringify(arr)); }
@@ -338,6 +347,7 @@ card.innerHTML = `
   <div id="selfProfilePendingStories"></div>
 
   <button id="btnEditProfile" class="ghost">Edit Profile</button>
+  <button id="btnAccountSettings" class="ghost">⚙️ Account Settings</button>
   <button id="logoutBtn" class="profile-logout ghost">Logout</button>
 `;
 
@@ -368,6 +378,21 @@ card.innerHTML = `
       } else {
         // Fallback: show modal directly
         const modal = document.getElementById('modalEditProfile');
+        if (modal) show(modal);
+      }
+    });
+  }
+
+  /* Attach Account Settings Listener -------------------------------- */
+  const acctBtn = document.getElementById('btnAccountSettings');
+  if (acctBtn) {
+    acctBtn.addEventListener('click', () => {
+      const u = getSession();
+      if (!u) return;
+      if (window.openAccountSettingsModal) {
+        window.openAccountSettingsModal();
+      } else {
+        const modal = document.getElementById('modalAccountSettings');
         if (modal) show(modal);
       }
     });
@@ -666,6 +691,7 @@ window.updateUIForSession = function() {
   const user = getSession();
   updateProfileCard(user);
   updateAdminButtonVisibility(user);
+  if (typeof updateAccountSettingsButtonVisibility === 'function') updateAccountSettingsButtonVisibility(user);
 };
 
 /* LOAD PROFILE ON PAGE LOAD ------------------------------------------ */
@@ -677,6 +703,7 @@ window.addEventListener('load', () => {
   if (user && !sessionUser) setSession(user);
   updateProfileCard(user);
   updateAdminButtonVisibility(user);
+  if (typeof updateAccountSettingsButtonVisibility === 'function') updateAccountSettingsButtonVisibility(user);
 });
 
 const STORAGE_ROOM_UNREAD = 'cw_room_unread';
