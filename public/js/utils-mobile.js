@@ -297,10 +297,27 @@ window.loadRelationships = loadRelationships;
 window.loadPendingRelationships = loadPendingRelationships;
 window.loadRelationshipTimeline = loadRelationshipTimeline;
 
+
+function updateAccountSettingsButtonVisibility(user) {
+  try {
+    if (typeof user === 'undefined') user = getSession();
+  } catch (e) { user = null; }
+  const visible = !!user;
+  document.querySelectorAll('[id="btnAccountSettings"]').forEach(btn => {
+    try {
+      btn.style.display = visible ? '' : 'none';
+      btn.hidden = !visible;
+    } catch (_) {}
+  });
+}
+window.updateAccountSettingsButtonVisibility = updateAccountSettingsButtonVisibility;
+
+
 /* SESSION UI SYNC ---------------------------------------------------- */
 window.updateUIForSession = function() {
   const user = getSession();
   updateProfileCard(user);
+  try { updateAccountSettingsButtonVisibility(user); } catch (e) {}
 };
 
 /* LOAD PROFILE ON PAGE LOAD ------------------------------------------ */
@@ -311,6 +328,7 @@ window.addEventListener('load', () => {
   const user = sessionUser || legacyUser;
   if (user && !sessionUser) setSession(user);
   updateProfileCard(user);
+  try { updateAccountSettingsButtonVisibility(user); } catch (e) {}
 });
 
 const STORAGE_ROOM_UNREAD = 'cw_room_unread';

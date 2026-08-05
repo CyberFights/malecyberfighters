@@ -48,6 +48,7 @@
     <div class="me-actions">
       <button id="btnMyProfile" class="small-btn secondary" type="button">Profile</button>
       <button id="btnEditProfile" class="small-btn" type="button">Edit</button>
+      <button id="btnAccountSettings" class="small-btn secondary" type="button" style="display:none">⚙️ Settings</button>
     </div>
   </div>
 
@@ -1416,6 +1417,41 @@ Don't hesitate to contact us if you have any questions.
   </div>
 </div>
 
+<!-- ACCOUNT SETTINGS MODAL -->
+<div id="modalAccountSettings" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);align-items:center;justify-content:center;z-index:10000;padding:16px">
+  <div style="background:#111;padding:22px;border-radius:12px;width:480px;max-width:95%;max-height:90vh;overflow:auto;border:1px solid rgba(127,216,255,0.35);box-shadow:0 0 24px rgba(0,150,255,0.25)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <h3 style="margin:0">Account Settings</h3>
+      <button id="accountSettingsClose" class="ghost small-btn" type="button">✕</button>
+    </div>
+
+    <!-- Change Password Section -->
+    <div style="border:1px solid rgba(160,200,255,0.22);padding:14px;border-radius:10px;background:rgba(160,200,255,0.06);margin-bottom:18px">
+      <h4 style="margin:0 0 10px 0;color:#7fd8ff">Change Password</h4>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <input id="changeCurrentPassword" type="password" placeholder="Current password">
+        <input id="changeNewPassword" type="password" placeholder="New password (min 6 chars)">
+        <input id="changeConfirmPassword" type="password" placeholder="Confirm new password">
+        <button id="changePasswordSubmit" class="small-btn" type="button" style="width:100%">Change Password</button>
+        <div id="changePasswordError" style="display:none;color:#fca5a5;font-size:13px;margin-top:4px"></div>
+        <div id="changePasswordSuccess" style="display:none;color:#86efac;font-size:13px;margin-top:4px"></div>
+      </div>
+    </div>
+
+    <!-- Delete Account Section -->
+    <div style="border:1px solid rgba(239,68,68,0.35);padding:14px;border-radius:10px;background:rgba(239,68,68,0.08)">
+      <h4 style="margin:0 0 6px 0;color:#fca5a5">Delete Account</h4>
+      <p style="font-size:12px;color:#94a3b8;margin:0 0 10px;line-height:1.4">This action is permanent and cannot be undone. All your profile data, DMs, stories, and relationships will be removed. Enter your password to confirm.</p>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <input id="deleteAccountPassword" type="password" placeholder="Enter password to confirm deletion">
+        <button id="deleteAccountSubmit" type="button" style="width:100%;background:#ef4444;box-shadow:none">Delete My Account</button>
+        <div id="deleteAccountError" style="display:none;color:#fca5a5;font-size:13px;margin-top:4px"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <div id="storyPopup" class="modal">
   <div class="modal-content">
     <h2>Create Story</h2>
@@ -1448,6 +1484,7 @@ Don't hesitate to contact us if you have any questions.
 <script src="/js/analytics.js"></script>
   <script src="/js/dm-toggle.js"></script>
   <script src="/js/profile.js"></script>
+<script src="/js/account.js"></script>
 <script src="/js/landing.js"></script>
 
 

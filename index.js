@@ -914,6 +914,102 @@ app.post('/api/update-profile', async (req, res) => {
   }
 });
 
+// ---------- API: ACCOUNT SETTINGS - CHANGE PASSWORD ----------
+app.post('/api/account/change-password', async (req, res) => {
+  const { username, currentPassword, newPassword } = req.body;
+
+  if (!username || !currentPassword || !newPassword) {
+    return res.status(400).json({ ok: false, error: 'missing_fields' });
+  }
+
+  if (String(newPassword).length < 6) {
+    return res.status(400).json({ ok: false, error: 'weak_password' });
+  }
+
+  try {
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(404).json({ ok: false, error: 'not_found' });
+    }
+
+    const match = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!match) {
+      await logIp(req, { action: 'change_password_fail', username });
+      return res.status(401).json({ ok: false, error: 'invalid_current' });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    user.passwordHash = hash;
+    await user.save();
+
+    await logIp(req, { action: 'change_password', username });
+
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('change-password error', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// ---------- API: ACCOUNT SETTINGS - DELETE ACCOUNT ----------
+app.post('/api/account/delete', async (req, res) => {
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ ok: false, error: 'missing_fields' });
+  }
+
+  try {
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(404).json({ ok: false, error: 'not_found' });
+    }
+
+    const match = await bcrypt.compare(password, user.passwordHash);
+    if (!match) {
+      await logIp(req, { action: 'delete_account_fail', username });
+      return res.status(401).json({ ok: false, error: 'invalid_credentials' });
+    }
+
+    const socketIdToKick = user.socketId;
+
+    // Delete the user account itself
+    await User.deleteOne({ username });
+
+    // Clean up related data (DMs, stories, relationships, rooms ownership)
+    try {
+      await DM.deleteMany({ $or: [{ from: username }, { to: username }] });
+    } catch (e) { console.error('cleanup DMs error', e); }
+    try {
+      await Story.deleteMany({ $or: [{ owner: username }, { partner: username }] });
+    } catch (e) { console.error('cleanup stories error', e); }
+    try {
+      await Relationship.deleteMany({ $or: [{ requester: username }, { target: username }] });
+    } catch (e) { console.error('cleanup relationships error', e); }
+    try {
+      await Room.deleteMany({ owner: username });
+      await Room.updateMany({}, { $pull: { invitedUsers: username } });
+    } catch (e) { console.error('cleanup rooms error', e); }
+
+    if (socketIdToKick) {
+      try { io.to(socketIdToKick).emit('forceLogout', { reason: 'deleted' }); } catch (_) {}
+    }
+
+    try {
+      await broadcastPresence();
+      const rooms = await Room.find().lean();
+      io.emit('roomsList', rooms);
+    } catch (e) { console.error('broadcast after delete error', e); }
+
+    await logIp(req, { action: 'delete_account', username });
+
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('delete-account error', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
 // ---------- API: REGISTER ----------
 app.post('/api/register', async (req, res) => {
   const { username, email, password, display, age, stats, info, color, language, imageUrl } = req.body;
