@@ -10,6 +10,7 @@ window.loadAdminPanel = async function loadAdminPanel() {
 
     const data = await res.json();
     if (!data.ok) {
+      window.adminSessionKey = null;
       alert('Admin access denied');
       return;
     }
@@ -89,7 +90,7 @@ document.addEventListener('click', async (e) => {
   if (e.target.classList.contains('admin-ban')) {
     const banned = e.target.textContent.trim() === 'Ban';
 
-    await fetch('/api/admin/ban', {
+    const res = await fetch('/api/admin/ban', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -97,6 +98,12 @@ document.addEventListener('click', async (e) => {
       },
       body: JSON.stringify({ username, banned })
     });
+
+    const data = await res.json();
+    if (!data.ok) {
+      alert('Failed to update ban status');
+      return;
+    }
 
     window.loadAdminPanel();
   }
@@ -123,7 +130,7 @@ document.addEventListener('click', async (e) => {
   if (e.target.classList.contains('admin-delete')) {
     if (!confirm('Delete this user?')) return;
 
-    await fetch('/api/admin/delete-user', {
+    const res = await fetch('/api/admin/delete-user', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -131,6 +138,12 @@ document.addEventListener('click', async (e) => {
       },
       body: JSON.stringify({ username })
     });
+
+    const data = await res.json();
+    if (!data.ok) {
+      alert('Failed to delete user');
+      return;
+    }
 
     window.loadAdminPanel();
   }
