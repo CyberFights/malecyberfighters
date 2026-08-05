@@ -156,6 +156,30 @@ const RoomSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+// Forums and forum replies are kept in their own collections so a thread can
+// be loaded independently from the forum list and responses remain tied to a
+// specific forum document.
+const forumSchema = new mongoose.Schema({
+  title: { type: String, required: true, trim: true, maxlength: 160 },
+  body: { type: String, required: true, trim: true, maxlength: 10000 },
+  author: { type: String, required: true, index: true },
+  authorDisplay: { type: String, required: true },
+  lastActivityAt: { type: Date, default: Date.now }
+}, { timestamps: true });
+forumSchema.index({ lastActivityAt: -1, createdAt: -1 });
+
+const forumReplySchema = new mongoose.Schema({
+  forum: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Forum',
+    required: true
+  },
+  body: { type: String, required: true, trim: true, maxlength: 5000 },
+  author: { type: String, required: true, index: true },
+  authorDisplay: { type: String, required: true }
+}, { timestamps: true });
+forumReplySchema.index({ forum: 1, createdAt: 1 });
+
 const ipLogSchema = new mongoose.Schema({
   ip: String,
   username: String,
@@ -228,6 +252,8 @@ const PublicMessage = mongoose.model("PublicMessage", publicMessageSchema);
 const RoomMessage = mongoose.model("RoomMessage", roomMessageSchema);
 const IpLog = mongoose.model('IpLog', ipLogSchema);
 const Room = mongoose.model('Room', RoomSchema);
+const Forum = mongoose.model('Forum', forumSchema);
+const ForumReply = mongoose.model('ForumReply', forumReplySchema);
 
 // ---------- HELPERS ----------
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -285,6 +311,75 @@ async function sendDiscordWebhookMessage(username, message, avatarUrl) {
   } catch (err) {
     console.error("Error sending webhook:", err);
   }
+}
+
+function serializeForum(forum, replyCount = 0) {
+  return {
+    _id: String(forum._id),
+    title: forum.title,
+    body: forum.body,
+    author: forum.author,
+    authorDisplay: forum.authorDisplay || forum.author,
+    createdAt: forum.createdAt,
+    updatedAt: forum.updatedAt,
+    lastActivityAt: forum.lastActivityAt || forum.createdAt,
+    replyCount
+  };
+}
+
+function serializeForumReply(reply) {
+  return {
+    _id: String(reply._id),
+    forum: String(reply.forum),
+    body: reply.body,
+    author: reply.author,
+    authorDisplay: reply.authorDisplay || reply.author,
+    createdAt: reply.createdAt,
+    updatedAt: reply.updatedAt
+  };
+}
+
+async function getForumsWithReplyCounts() {
+  const [forums, replyCounts] = await Promise.all([
+    Forum.find({}).sort({ lastActivityAt: -1, createdAt: -1 }).lean(),
+    ForumReply.aggregate([
+      { $group: { _id: '$forum', count: { $sum: 1 } } }
+    ])
+  ]);
+
+  const countsByForumId = new Map(
+    replyCounts.map(item => [String(item._id), item.count])
+  );
+
+  return forums.map(forum =>
+    serializeForum(forum, countsByForumId.get(String(forum._id)) || 0)
+  );
+}
+
+async function broadcastForumsList() {
+  try {
+    const forums = await getForumsWithReplyCounts();
+    io.emit('forumsList', forums);
+    return forums;
+  } catch (err) {
+    // A notification failure must not make an already saved forum/reply fail.
+    console.error('forum list broadcast error:', err);
+    return null;
+  }
+}
+
+async function getForumAuthor(username) {
+  const normalizedUsername = typeof username === 'string' ? username.trim() : '';
+  if (!normalizedUsername) return null;
+
+  // The existing client session supplies the username. Confirm that it maps to
+  // a real, non-banned member before allowing that name to create content.
+  return User.findOne({
+    username: normalizedUsername,
+    banned: { $ne: true }
+  })
+    .select('username display')
+    .lean();
 }
 
 async function updateRoomMembers(roomId) {
@@ -1218,6 +1313,136 @@ app.get("/api/allUsers", async (req, res) => {
 });
 
 
+// ---------- API: FORUMS ----------
+app.get('/api/forums', async (req, res) => {
+  try {
+    const forums = await getForumsWithReplyCounts();
+    return res.json({ ok: true, forums });
+  } catch (err) {
+    console.error('list forums error:', err);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+app.post('/api/forums', async (req, res) => {
+  const title = typeof req.body.title === 'string' ? req.body.title.trim() : '';
+  const body = typeof req.body.body === 'string' ? req.body.body.trim() : '';
+
+  if (!title || !body) {
+    return res.status(400).json({ ok: false, error: 'title_and_body_required' });
+  }
+
+  if (title.length > 160 || body.length > 10000) {
+    return res.status(400).json({ ok: false, error: 'forum_too_long' });
+  }
+
+  try {
+    const author = await getForumAuthor(req.body.author);
+    if (!author) {
+      return res.status(401).json({ ok: false, error: 'login_required' });
+    }
+
+    const forum = await Forum.create({
+      title,
+      body,
+      author: author.username,
+      authorDisplay: author.display || author.username,
+      lastActivityAt: new Date()
+    });
+
+    const savedForum = serializeForum(forum.toObject(), 0);
+    io.emit('forumCreated', savedForum);
+    void broadcastForumsList();
+
+    return res.status(201).json({ ok: true, forum: savedForum });
+  } catch (err) {
+    console.error('create forum error:', err);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+app.get('/api/forums/:forumId', async (req, res) => {
+  const { forumId } = req.params;
+  if (!mongoose.isValidObjectId(forumId)) {
+    return res.status(400).json({ ok: false, error: 'invalid_forum' });
+  }
+
+  try {
+    const [forum, replies] = await Promise.all([
+      Forum.findById(forumId).lean(),
+      ForumReply.find({ forum: forumId }).sort({ createdAt: 1 }).lean()
+    ]);
+
+    if (!forum) {
+      return res.status(404).json({ ok: false, error: 'forum_not_found' });
+    }
+
+    return res.json({
+      ok: true,
+      forum: serializeForum(forum, replies.length),
+      replies: replies.map(serializeForumReply)
+    });
+  } catch (err) {
+    console.error('load forum error:', err);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+app.post('/api/forums/:forumId/replies', async (req, res) => {
+  const { forumId } = req.params;
+  const body = typeof req.body.body === 'string' ? req.body.body.trim() : '';
+
+  if (!mongoose.isValidObjectId(forumId)) {
+    return res.status(400).json({ ok: false, error: 'invalid_forum' });
+  }
+
+  if (!body) {
+    return res.status(400).json({ ok: false, error: 'reply_body_required' });
+  }
+
+  if (body.length > 5000) {
+    return res.status(400).json({ ok: false, error: 'reply_too_long' });
+  }
+
+  try {
+    const [author, forum] = await Promise.all([
+      getForumAuthor(req.body.author),
+      Forum.findById(forumId).lean()
+    ]);
+
+    if (!author) {
+      return res.status(401).json({ ok: false, error: 'login_required' });
+    }
+
+    if (!forum) {
+      return res.status(404).json({ ok: false, error: 'forum_not_found' });
+    }
+
+    const reply = await ForumReply.create({
+      forum: forum._id,
+      body,
+      author: author.username,
+      authorDisplay: author.display || author.username
+    });
+
+    const activityAt = new Date();
+    await Forum.updateOne({ _id: forum._id }, { $set: { lastActivityAt: activityAt } });
+
+    const savedReply = serializeForumReply(reply.toObject());
+    io.emit('forumReplyCreated', {
+      forumId: String(forum._id),
+      reply: savedReply
+    });
+    void broadcastForumsList();
+
+    return res.status(201).json({ ok: true, reply: savedReply });
+  } catch (err) {
+    console.error('create forum reply error:', err);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+
 // ---------- SOCKET.IO ----------
 const onlineByUsername = new Map();
 
@@ -1226,6 +1451,12 @@ io.on("connection", async (socket) => {
 
   const rooms = await Room.find().lean();
   socket.emit("roomsList", rooms);
+
+  try {
+    socket.emit('forumsList', await getForumsWithReplyCounts());
+  } catch (err) {
+    console.error('initial forum list error:', err);
+  }
 
   socket.on('login', async (user) => {
     socket.username = user.username;
