@@ -25,7 +25,6 @@ html,body{
   background-size:cover;
   background-attachment:fixed;
   color:#e9f6ff;
-  overflow-y: auto;
 }
 
 body::after{
@@ -58,6 +57,8 @@ body::after{
   max-width:1100px;
   margin:36px auto;
   padding:28px;
+  overflow: hidden;
+  overflow-y: auto;
   background:linear-gradient(180deg, rgba(0,16,122,0.05), transparent);
   border-radius:12px;
   box-shadow:0 8px 30px rgba(120,180,255,0.25);
