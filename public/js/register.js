@@ -38,6 +38,40 @@ $('btnUploadImage').addEventListener('click', async () => {
   }
 });
 
+// Register with Discord flow (opens popup and listens for postMessage)
+if ($('regDiscord')) {
+  $('regDiscord').addEventListener('click', () => {
+    // Redirect-based OAuth flow for registration
+    window.location.href = '/auth/discord';
+  });
+}
+
+// Fetch authoritative session from server (session cookie-based)
+async function fetchSessionFromServer() {
+  try {
+    const resp = await fetch('/api/session');
+    const data = await resp.json();
+    if (!data.ok || !data.user) return;
+
+    setSession(data.user);
+    localStorage.setItem('currentUser', JSON.stringify(data.user));
+    if (typeof socket !== 'undefined' && socket) socket.emit('login', data.user);
+    hide($('modalRegister'));
+    if (window.updateUIForSession) updateUIForSession();
+    if (window.updateProfileCard) updateProfileCard(data.user);
+    if (window.updateDMListSidebar) updateDMListSidebar();
+
+    // remove any oauthUser param
+    const url = new URL(window.location.href);
+    url.searchParams.delete('oauthUser');
+    window.history.replaceState({}, '', url.pathname + url.search);
+  } catch (e) {
+    console.error('fetchSessionFromServer failed', e);
+  }
+}
+
+fetchSessionFromServer();
+
 $('regSubmit').addEventListener('click', async () => {
   const username = $('regUser').value.trim().toLowerCase();
   const email = $('regEmail').value.trim().toLowerCase();

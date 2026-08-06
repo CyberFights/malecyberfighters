@@ -1,4 +1,4 @@
-require('dotenv').config();
+﻿require('dotenv').config();
 const FormData = require('form-data');
 const express = require('express');
 const http = require('http');
@@ -129,7 +129,9 @@ const userSchema = new mongoose.Schema({
   online:   { type: Boolean, default: false },
   socketId: { type: String, default: null },
   role:     { type: String, default: 'user' },
-  banned:   { type: Boolean, default: false }
+  banned:   { type: Boolean, default: false },
+  // Optional Discord OAuth linkage
+  discordId: { type: String, unique: true, sparse: true }
 }, { timestamps: true });
 
 const publicMessageSchema = new mongoose.Schema({
@@ -156,30 +158,6 @@ const RoomSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-// Forums and forum replies are kept in their own collections so a thread can
-// be loaded independently from the forum list and responses remain tied to a
-// specific forum document.
-const forumSchema = new mongoose.Schema({
-  title: { type: String, required: true, trim: true, maxlength: 160 },
-  body: { type: String, required: true, trim: true, maxlength: 10000 },
-  author: { type: String, required: true, index: true },
-  authorDisplay: { type: String, required: true },
-  lastActivityAt: { type: Date, default: Date.now }
-}, { timestamps: true });
-forumSchema.index({ lastActivityAt: -1, createdAt: -1 });
-
-const forumReplySchema = new mongoose.Schema({
-  forum: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Forum',
-    required: true
-  },
-  body: { type: String, required: true, trim: true, maxlength: 5000 },
-  author: { type: String, required: true, index: true },
-  authorDisplay: { type: String, required: true }
-}, { timestamps: true });
-forumReplySchema.index({ forum: 1, createdAt: 1 });
-
 const ipLogSchema = new mongoose.Schema({
   ip: String,
   username: String,
@@ -202,7 +180,6 @@ const dmSchema = new mongoose.Schema({
   imageUrl: { type: String },
 
   relationshipId: { type: String },
-  storyId: { type: String },
   // system / approval / normal
   type: { type: String, default: "normal" }, 
   // values:
@@ -218,7 +195,6 @@ const dmSchema = new mongoose.Schema({
 const storySchema = new mongoose.Schema({
   owner: { type: String, required: true },
   partner: { type: String, required: true },
-  title: { type: String, default: "" },
   story: { type: String, required: true },
 
   approvalOwner: { type: Boolean, default: true },
@@ -252,8 +228,6 @@ const PublicMessage = mongoose.model("PublicMessage", publicMessageSchema);
 const RoomMessage = mongoose.model("RoomMessage", roomMessageSchema);
 const IpLog = mongoose.model('IpLog', ipLogSchema);
 const Room = mongoose.model('Room', RoomSchema);
-const Forum = mongoose.model('Forum', forumSchema);
-const ForumReply = mongoose.model('ForumReply', forumReplySchema);
 
 // ---------- HELPERS ----------
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -367,75 +341,6 @@ async function sendDiscordWebhookMessage(username, message, avatarUrl) {
   }
 }
 
-function serializeForum(forum, replyCount = 0) {
-  return {
-    _id: String(forum._id),
-    title: forum.title,
-    body: forum.body,
-    author: forum.author,
-    authorDisplay: forum.authorDisplay || forum.author,
-    createdAt: forum.createdAt,
-    updatedAt: forum.updatedAt,
-    lastActivityAt: forum.lastActivityAt || forum.createdAt,
-    replyCount
-  };
-}
-
-function serializeForumReply(reply) {
-  return {
-    _id: String(reply._id),
-    forum: String(reply.forum),
-    body: reply.body,
-    author: reply.author,
-    authorDisplay: reply.authorDisplay || reply.author,
-    createdAt: reply.createdAt,
-    updatedAt: reply.updatedAt
-  };
-}
-
-async function getForumsWithReplyCounts() {
-  const [forums, replyCounts] = await Promise.all([
-    Forum.find({}).sort({ lastActivityAt: -1, createdAt: -1 }).lean(),
-    ForumReply.aggregate([
-      { $group: { _id: '$forum', count: { $sum: 1 } } }
-    ])
-  ]);
-
-  const countsByForumId = new Map(
-    replyCounts.map(item => [String(item._id), item.count])
-  );
-
-  return forums.map(forum =>
-    serializeForum(forum, countsByForumId.get(String(forum._id)) || 0)
-  );
-}
-
-async function broadcastForumsList() {
-  try {
-    const forums = await getForumsWithReplyCounts();
-    io.emit('forumsList', forums);
-    return forums;
-  } catch (err) {
-    // A notification failure must not make an already saved forum/reply fail.
-    console.error('forum list broadcast error:', err);
-    return null;
-  }
-}
-
-async function getForumAuthor(username) {
-  const normalizedUsername = typeof username === 'string' ? username.trim() : '';
-  if (!normalizedUsername) return null;
-
-  // The existing client session supplies the username. Confirm that it maps to
-  // a real, non-banned member before allowing that name to create content.
-  return User.findOne({
-    username: normalizedUsername,
-    banned: { $ne: true }
-  })
-    .select('username display')
-    .lean();
-}
-
 async function updateRoomMembers(roomId) {
   try {
     const sockets = await io.in(roomId).fetchSockets();
@@ -471,36 +376,32 @@ async function updateRoomMembers(roomId) {
 }
 
 app.post("/api/story/save", async (req, res) => {
-  const { owner, partner, story, title } = req.body;
+  const { owner, partner, story } = req.body;
 
   const saved = await Story.create({
     owner,
     partner,
-    title: title || "",
     story,
     approvalOwner: true,
     approvalPartner: false,
     approved: false
   });
 
-  const storyTitle = saved.title || "Untitled story";
   const partnerUser = await User.findOne({ username: partner }).lean();
 
   // If partner is online → real-time popup
   if (partnerUser?.socketId) {
     io.to(partnerUser.socketId).emit("storyApprovalRequest", {
       storyId: saved._id,
-      from: owner,
-      title: saved.title
+      from: owner
     });
   } else {
     // If partner is offline → send DM notification
     await DM.create({
       from: "SYSTEM",
       to: partner,
-      text: `${owner} created a story involving your messages: "${storyTitle}". Please approve it.`,
+      text: `${owner} created a story involving your messages. Please approve it.`,
       type: "storyApproval",
-      storyId: saved._id,
       time: new Date()
     });
   }
@@ -523,16 +424,14 @@ app.post("/api/story/approve", async (req, res) => {
 
   await story.save();
 
-  res.json({ ok: true, approved: story.approved, title: story.title });
+  res.json({ ok: true, approved: story.approved });
 });
 
 app.get("/api/story/pending", async (req, res) => {
   const { username } = req.query;
 
-  // Pending stories for both sides: the owner (approvalOwner) who created
-  // the story and the partner (approvalPartner) who still has to approve it.
   const stories = await Story.find({
-    $or: [{ owner: username }, { partner: username }],
+    owner: username,
     approved: false
   }).sort({ createdAt: -1 }).lean();
 
@@ -549,8 +448,7 @@ app.post("/api/story/resend", async (req, res) => {
   if (partnerUser?.socketId) {
     io.to(partnerUser.socketId).emit("storyApprovalRequest", {
       storyId,
-      from: story.owner,
-      title: story.title
+      from: story.owner
     });
   }
 
@@ -715,179 +613,16 @@ app.post("/api/unblock-user", async (req, res) => {
   }
 });
 
-function requireAdmin(req, res, next) {
-  if (!ADMIN_KEY || req.get("x-admin-key") !== ADMIN_KEY) {
-    return res.status(403).json({ ok: false, error: "admin_denied" });
-  }
-  next();
-}
-
-async function broadcastPresence() {
-  const onlineUsers = await User.find({ online: true })
-    .select("username display imageUrl info wins losses color language age createdAt -_id")
-    .lean();
-
-  io.emit("presence", onlineUsers);
-}
-
-app.get("/api/admin/users", requireAdmin, async (req, res) => {
+app.get("/api/admin/users", async (req, res) => {
   try {
     const users = await User.find()
-      .select("username display email imageUrl info stats color language age role banned online createdAt")
-      .sort({ username: 1 })
+      .select("username display email imageUrl info wins losses color language age role banned createdAt")
       .lean();
 
     res.json({ ok: true, users });
   } catch (err) {
     console.error("Admin user fetch error:", err);
-    res.status(500).json({ ok: false, error: "server_error" });
-  }
-});
-
-app.post("/api/admin/ban", requireAdmin, async (req, res) => {
-  const username = String(req.body.username || "").trim();
-  const banned = req.body.banned === true || req.body.banned === "true";
-
-  if (!username) {
-    return res.status(400).json({ ok: false, error: "missing_username" });
-  }
-
-  try {
-    const user = await User.findOne({ username });
-    if (!user) {
-      return res.status(404).json({ ok: false, error: "not_found" });
-    }
-
-    const previousSocketId = user.socketId;
-    user.banned = banned;
-
-    if (banned) {
-      user.online = false;
-      user.socketId = null;
-    }
-
-    await user.save();
-
-    if (banned && previousSocketId) {
-      io.to(previousSocketId).emit("forceLogout", { reason: "banned" });
-    }
-
-    await broadcastPresence();
-
-    res.json({
-      ok: true,
-      user: {
-        username: user.username,
-        banned: user.banned,
-        online: user.online
-      }
-    });
-  } catch (err) {
-    console.error("Admin ban error:", err);
-    res.status(500).json({ ok: false, error: "server_error" });
-  }
-});
-
-app.post("/api/admin/reset-password", requireAdmin, async (req, res) => {
-  const username = String(req.body.username || "").trim();
-  const newPassword = String(req.body.newPassword || "");
-
-  if (!username || !newPassword.trim()) {
-    return res.status(400).json({ ok: false, error: "missing_fields" });
-  }
-
-  try {
-    const passwordHash = await bcrypt.hash(newPassword, 10);
-    const result = await User.updateOne({ username }, { $set: { passwordHash } });
-
-    if (!result.matchedCount) {
-      return res.status(404).json({ ok: false, error: "not_found" });
-    }
-
-    res.json({ ok: true });
-  } catch (err) {
-    console.error("Admin reset password error:", err);
-    res.status(500).json({ ok: false, error: "server_error" });
-  }
-});
-
-app.post("/api/admin/delete-user", requireAdmin, async (req, res) => {
-  const username = String(req.body.username || "").trim();
-
-  if (!username) {
-    return res.status(400).json({ ok: false, error: "missing_username" });
-  }
-
-  try {
-    const user = await User.findOneAndDelete({ username }).lean();
-    if (!user) {
-      return res.status(404).json({ ok: false, error: "not_found" });
-    }
-
-    if (user.socketId) {
-      io.to(user.socketId).emit("forceLogout", { reason: "deleted" });
-    }
-
-    await broadcastPresence();
-
-    res.json({ ok: true });
-  } catch (err) {
-    console.error("Admin delete user error:", err);
-    res.status(500).json({ ok: false, error: "server_error" });
-  }
-});
-
-app.get("/api/admin/stats", requireAdmin, async (req, res) => {
-  try {
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-    const [
-      totalUsers,
-      onlineUsers,
-      bannedUsers,
-      totalLogs,
-      logins24h,
-      fails24h,
-      regs24h
-    ] = await Promise.all([
-      User.countDocuments({}),
-      User.countDocuments({ online: true }),
-      User.countDocuments({ banned: true }),
-      IpLog.countDocuments({}),
-      IpLog.countDocuments({ createdAt: { $gte: since }, action: "login_success" }),
-      IpLog.countDocuments({ createdAt: { $gte: since }, action: { $in: ["login_fail", "login_error", "login_banned"] } }),
-      IpLog.countDocuments({ createdAt: { $gte: since }, action: "register" })
-    ]);
-
-    res.json({
-      ok: true,
-      totalUsers,
-      onlineUsers,
-      bannedUsers,
-      totalLogs,
-      last24h: { logins24h, fails24h, regs24h }
-    });
-  } catch (err) {
-    console.error("Admin stats error:", err);
-    res.status(500).json({ ok: false, error: "server_error" });
-  }
-});
-
-app.get("/api/admin/top-ips", requireAdmin, async (req, res) => {
-  try {
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-    const ips = await IpLog.aggregate([
-      { $match: { createdAt: { $gte: since } } },
-      { $group: { _id: { $ifNull: ["$ip", "unknown"] }, count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 10 }
-    ]);
-
-    res.json({ ok: true, ips });
-  } catch (err) {
-    console.error("Admin top IPs error:", err);
-    res.status(500).json({ ok: false, error: "server_error" });
+    res.status(500).json({ success: false });
   }
 });
 
@@ -909,21 +644,10 @@ app.post("/api/story/load", async (req, res) => {
 app.get("/api/story/list", async (req, res) => {
   const { username } = req.query;
 
-  // Approved stories are saved to both profiles: the owner (approvalOwner)
-  // and the partner (approvalPartner) each see the story on their profile.
   const stories = await Story.find({
-    $or: [{ owner: username }, { partner: username }],
+    owner: username,
     approved: true
   }).sort({ createdAt: -1 }).lean();
-
-  res.json({ ok: true, stories });
-});
-
-// Public archives: every approved story from every member
-app.get("/api/story/archives", async (req, res) => {
-  const stories = await Story.find({ approved: true })
-    .sort({ createdAt: -1 })
-    .lean();
 
   res.json({ ok: true, stories });
 });
@@ -1063,156 +787,10 @@ app.post('/api/update-profile', async (req, res) => {
   }
 });
 
-// ---------- API: ACCOUNT SETTINGS - CHANGE PASSWORD ----------
-app.post('/api/account/change-password', async (req, res) => {
-  const { username, currentPassword, newPassword } = req.body;
-
-  if (!username || !currentPassword || !newPassword) {
-    return res.status(400).json({ ok: false, error: 'missing_fields' });
-  }
-
-  if (String(newPassword).length < 6) {
-    return res.status(400).json({ ok: false, error: 'weak_password' });
-  }
-
-  try {
-    const user = await User.findOne({ username });
-    if (!user) {
-      return res.status(404).json({ ok: false, error: 'not_found' });
-    }
-
-    const match = await bcrypt.compare(currentPassword, user.passwordHash);
-    if (!match) {
-      await logIp(req, { action: 'change_password_fail', username });
-      return res.status(401).json({ ok: false, error: 'invalid_current' });
-    }
-
-    const hash = await bcrypt.hash(newPassword, 10);
-    user.passwordHash = hash;
-    await user.save();
-
-    await logIp(req, { action: 'change_password', username });
-
-    return res.json({ ok: true });
-  } catch (e) {
-    console.error('change-password error', e);
-    return res.status(500).json({ ok: false, error: 'server_error' });
-  }
-});
-
-// ---------- API: ACCOUNT SETTINGS - DELETE ACCOUNT ----------
-app.post('/api/account/delete', async (req, res) => {
-  const { username, password } = req.body;
-
-  if (!username || !password) {
-    return res.status(400).json({ ok: false, error: 'missing_fields' });
-  }
-
-  try {
-    const user = await User.findOne({ username });
-    if (!user) {
-      return res.status(404).json({ ok: false, error: 'not_found' });
-    }
-
-    const match = await bcrypt.compare(password, user.passwordHash);
-    if (!match) {
-      await logIp(req, { action: 'delete_account_fail', username });
-      return res.status(401).json({ ok: false, error: 'invalid_credentials' });
-    }
-
-    const socketIdToKick = user.socketId;
-
-    // Delete the user account itself
-    await User.deleteOne({ username });
-
-    // Clean up related data (DMs, stories, relationships, rooms ownership)
-    try {
-      await DM.deleteMany({ $or: [{ from: username }, { to: username }] });
-    } catch (e) { console.error('cleanup DMs error', e); }
-    try {
-      await Story.deleteMany({ $or: [{ owner: username }, { partner: username }] });
-    } catch (e) { console.error('cleanup stories error', e); }
-    try {
-      await Relationship.deleteMany({ $or: [{ requester: username }, { target: username }] });
-    } catch (e) { console.error('cleanup relationships error', e); }
-    try {
-      await Room.deleteMany({ owner: username });
-      await Room.updateMany({}, { $pull: { invitedUsers: username } });
-    } catch (e) { console.error('cleanup rooms error', e); }
-
-    if (socketIdToKick) {
-      try { io.to(socketIdToKick).emit('forceLogout', { reason: 'deleted' }); } catch (_) {}
-    }
-
-    try {
-      await broadcastPresence();
-      const rooms = await Room.find().lean();
-      io.emit('roomsList', rooms);
-    } catch (e) { console.error('broadcast after delete error', e); }
-
-    await logIp(req, { action: 'delete_account', username });
-
-    return res.json({ ok: true });
-  } catch (e) {
-    console.error('delete-account error', e);
-    return res.status(500).json({ ok: false, error: 'server_error' });
-  }
-});
-
 // ---------- API: REGISTER ----------
-app.post('/api/register', async (req, res) => {
-  const { username, email, password, display, age, stats, info, color, language, imageUrl } = req.body;
-  if (!username || !email || !password) {
-    await logIp(req, { action: 'register_fail', username });
-    return res.status(400).json({ ok: false, error: 'missing_fields' });
-  }
 
-  try {
-    const existing = await User.findOne({ $or: [{ username }, { email }] }).lean();
-    if (existing) {
-      const conflict = {};
-      if (existing.username === username) conflict.username = true;
-      if (existing.email === email) conflict.email = true;
-      await logIp(req, { action: 'register_conflict', username });
-      return res.status(409).json({ ok: false, conflict });
-    }
-
-    const hash = await bcrypt.hash(password, 10);
-
-    const user = new User({
-      username,
-      email,
-      passwordHash: hash,
-      display: display || username,
-      age: age ? Number(age) : undefined,
-      stats: stats || {},
-      info: info || '',
-      color: color || '',
-      language: language || 'en',
-      imageUrl: imageUrl || ''
-    });
-
-    await user.save();
-    await logIp(req, { action: 'register', username });
-
-    createSessionForUser(user, res);
-    return res.json({
-      ok: true,
-      user: {
-        username: user.username,
-        display: user.display,
-        imageUrl: user.imageUrl
-      }
-    });
-  } catch (e) {
-    console.error('register error', e);
-    await logIp(req, { action: 'register_error', username });
-    return res.status(500).json({ ok: false, error: 'server_error' });
-  }
-});
-
-// ---------- OAuth: Discord (server-side session cookie)
-// Requires DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET in env
+// ---------- OAuth: Discord ----------
+// Requires environment variables: DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_REDIRECT_URI
 app.get('/auth/discord', (req, res) => {
   const clientId = process.env.DISCORD_CLIENT_ID;
   const redirect = process.env.DISCORD_REDIRECT_URI || (req.protocol + '://' + req.get('host') + '/auth/discord/callback');
@@ -1228,6 +806,8 @@ app.get('/auth/discord', (req, res) => {
   res.redirect(`https://discord.com/api/oauth2/authorize?${params.toString()}`);
 });
 
+// OAuth callback: exchange code, fetch user info, create or login local user, then postMessage back to opener
+// OAuth callback: exchange code, fetch user info, create or login local user, then create server-side session
 app.get('/auth/discord/callback', async (req, res) => {
   const code = req.query.code;
   const clientId = process.env.DISCORD_CLIENT_ID;
@@ -1249,21 +829,15 @@ app.get('/auth/discord/callback', async (req, res) => {
       })
     });
 
-    const tokenJson = await tokenResp.json();
-    if (!tokenJson.access_token) {
-      console.error('Discord token exchange failed', tokenJson);
-      return res.status(500).send('Discord token exchange failed');
-    }
-
-    const meResp = await fetch('https://discord.com/api/users/@me', {
-      headers: { Authorization: `Bearer ${tokenJson.access_token}` }
-    });
+    
 
     const me = await meResp.json();
 
+    // Build a safe unique username
     let proposedUsername = (me.username || 'discord-user').toLowerCase();
     if (me.discriminator) proposedUsername = `${proposedUsername}-${me.discriminator}`;
 
+    // Ensure uniqueness by checking DB
     let user = await User.findOne({ discordId: me.id }).lean();
     if (!user) {
       const email = me.email || `${me.id}@discord.local`;
@@ -1321,12 +895,158 @@ app.get('/auth/discord/callback', async (req, res) => {
       };
     }
 
-    createSessionForUser(user, res);
-    return res.redirect(302, '/');
+    // Create server-side session cookie and redirect to app root
+    try {
+      createSessionForUser(user, res);
+      return res.redirect(302, '/');
+    } catch (e) {
+      console.error('Discord OAuth redirect error', e);
+      return res.status(500).send('Discord OAuth failed');
+    }
 
   } catch (err) {
     console.error('Discord OAuth error', err);
     return res.status(500).send('Discord OAuth failed');
+  }
+});
+
+    const tokenJson = await tokenResp.json();
+    if (!tokenJson.access_token) {
+      console.error('Discord token exchange failed', tokenJson);
+      return res.status(500).send('Discord token exchange failed');
+    }
+
+    const meResp = await fetch('https://discord.com/api/users/@me', {
+      headers: { Authorization: `Bearer ${tokenJson.access_token}` }
+    });
+
+    const me = await meResp.json();
+
+    // Build a safe unique username
+    let proposedUsername = (me.username || 'discord-user').toLowerCase();
+    // If discriminator present, append it so names like "Foo#1234" remain unique-ish
+    if (me.discriminator) proposedUsername = `${proposedUsername}-${me.discriminator}`;
+
+    // Ensure uniqueness by checking DB
+    let user = await User.findOne({ discordId: me.id }).lean();
+    if (!user) {
+      // if email exists in response use it, otherwise synthesize one to satisfy schema
+      const email = me.email || `${me.id}@discord.local`;
+
+      // ensure username uniqueness
+      let username = proposedUsername;
+      const existingUser = await User.findOne({ username }).lean();
+      if (existingUser) {
+        username = `${username}_${me.id}`;
+      }
+
+      // construct avatar URL
+      let imageUrl = '';
+      if (me.avatar) {
+        const format = me.avatar.startsWith('a_') ? 'gif' : 'png';
+        imageUrl = `https://cdn.discordapp.com/avatars/${me.id}/${me.avatar}.${format}?size=256`;
+      }
+
+      // create a random password hash so schema constraints satisfied
+      const pw = Math.random().toString(36).slice(2) + me.id;
+      const hash = await bcrypt.hash(pw, 10);
+
+      const newUser = new User({
+        username,
+        email,
+        passwordHash: hash,
+        display: me.username || username,
+        age: undefined,
+        stats: {},
+        info: '',
+        color: '',
+        language: 'en',
+        imageUrl: imageUrl || '',
+        discordId: me.id
+      });
+
+      await newUser.save();
+
+      user = {
+        username: newUser.username,
+        display: newUser.display,
+        imageUrl: newUser.imageUrl,
+        color: newUser.color,
+        language: newUser.language,
+        role: newUser.role,
+        stats: newUser.stats,
+        info: newUser.info,
+        age: newUser.age
+      };
+    } else {
+      // existing user linked by discordId
+      user = {
+        username: user.username,
+        display: user.display,
+        imageUrl: user.imageUrl,
+        color: user.color,
+        language: user.language,
+        role: user.role,
+        stats: user.stats,
+        info: user.info,
+        age: user.age
+      };
+    }
+
+    
+
+app.post('/api/register', async (req, res) => {
+  const { username, email, password, display, age, stats, info, color, language, imageUrl } = req.body;
+  if (!username || !email || !password) {
+    await logIp(req, { action: 'register_fail', username });
+    return res.status(400).json({ ok: false, error: 'missing_fields' });
+  }
+
+  try {
+    const existing = await User.findOne({ $or: [{ username }, { email }] }).lean();
+    if (existing) {
+      const conflict = {};
+      if (existing.username === username) conflict.username = true;
+      if (existing.email === email) conflict.email = true;
+      await logIp(req, { action: 'register_conflict', username });
+      return res.status(409).json({ ok: false, conflict });
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+
+    const user = new User({
+      username,
+      email,
+      passwordHash: hash,
+      display: display || username,
+      age: age ? Number(age) : undefined,
+      stats: stats || {},
+      info: info || '',
+      color: color || '',
+      language: language || 'en',
+      imageUrl: imageUrl || ''
+    });
+
+    await user.save();
+    await logIp(req, { action: 'register', username });
+
+        const sessionUser = {
+      username: user.username,
+      display: user.display,
+      imageUrl: user.imageUrl,
+      color: user.color || '',
+      language: user.language || 'en',
+      role: user.role || 'user',
+      stats: user.stats || {},
+      info: user.info || '',
+      age: user.age || null
+    };
+    createSessionForUser(sessionUser, res);
+    return res.json({ ok: true, user: sessionUser });
+  } catch (e) {
+    console.error('register error', e);
+    await logIp(req, { action: 'register_error', username });
+    return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });
 
@@ -1335,6 +1055,17 @@ app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
     await logIp(req, { action: 'login_fail', username });
+// ---------- API: SESSION ----------
+app.get('/api/session', (req, res) => {
+  try {
+    const user = getSessionUser(req);
+    if (!user) return res.json({ ok: false });
+    return res.json({ ok: true, user });
+  } catch (e) {
+    console.error('session endpoint error', e);
+    return res.json({ ok: false });
+  }
+});
     return res.status(400).json({ ok: false, error: 'missing_fields' });
   }
 
@@ -1358,36 +1089,22 @@ app.post('/api/login', async (req, res) => {
 
     await logIp(req, { action: 'login_success', username });
 
-    createSessionForUser(user, res);
-    return res.json({
-      ok: true,
-      user: {
-        username: user.username,
-        display: user.display,
-        imageUrl: user.imageUrl,
-        color: user.color,
-        language: user.language,
-        role: user.role,
-        stats: user.stats,
-        info: user.info,
-        age: user.age
-      }
-    });
+        const sessionUser = {
+      username: user.username,
+      display: user.display,
+      imageUrl: user.imageUrl,
+      color: user.color || '',
+      language: user.language || 'en',
+      role: user.role || 'user',
+      stats: user.stats || {},
+      info: user.info || '',
+      age: user.age || null
+    };
+    createSessionForUser(sessionUser, res);
+    return res.json({ ok: true, user: sessionUser });
   } catch (e) {
     console.error(e);
     await logIp(req, { action: 'login_error', username });
-    return res.status(500).json({ ok: false, error: 'server_error' });
-  }
-});
-
-// ---------- API: SESSION (server-side session cookie) ----------
-app.get('/api/session', (req, res) => {
-  try {
-    const user = getSessionUser(req);
-    if (!user) return res.json({ ok: true, user: null });
-    return res.json({ ok: true, user });
-  } catch (e) {
-    console.error('session endpoint error', e);
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });
@@ -1500,136 +1217,6 @@ app.get("/api/allUsers", async (req, res) => {
 });
 
 
-// ---------- API: FORUMS ----------
-app.get('/api/forums', async (req, res) => {
-  try {
-    const forums = await getForumsWithReplyCounts();
-    return res.json({ ok: true, forums });
-  } catch (err) {
-    console.error('list forums error:', err);
-    return res.status(500).json({ ok: false, error: 'server_error' });
-  }
-});
-
-app.post('/api/forums', async (req, res) => {
-  const title = typeof req.body.title === 'string' ? req.body.title.trim() : '';
-  const body = typeof req.body.body === 'string' ? req.body.body.trim() : '';
-
-  if (!title || !body) {
-    return res.status(400).json({ ok: false, error: 'title_and_body_required' });
-  }
-
-  if (title.length > 160 || body.length > 10000) {
-    return res.status(400).json({ ok: false, error: 'forum_too_long' });
-  }
-
-  try {
-    const author = await getForumAuthor(req.body.author);
-    if (!author) {
-      return res.status(401).json({ ok: false, error: 'login_required' });
-    }
-
-    const forum = await Forum.create({
-      title,
-      body,
-      author: author.username,
-      authorDisplay: author.display || author.username,
-      lastActivityAt: new Date()
-    });
-
-    const savedForum = serializeForum(forum.toObject(), 0);
-    io.emit('forumCreated', savedForum);
-    void broadcastForumsList();
-
-    return res.status(201).json({ ok: true, forum: savedForum });
-  } catch (err) {
-    console.error('create forum error:', err);
-    return res.status(500).json({ ok: false, error: 'server_error' });
-  }
-});
-
-app.get('/api/forums/:forumId', async (req, res) => {
-  const { forumId } = req.params;
-  if (!mongoose.isValidObjectId(forumId)) {
-    return res.status(400).json({ ok: false, error: 'invalid_forum' });
-  }
-
-  try {
-    const [forum, replies] = await Promise.all([
-      Forum.findById(forumId).lean(),
-      ForumReply.find({ forum: forumId }).sort({ createdAt: 1 }).lean()
-    ]);
-
-    if (!forum) {
-      return res.status(404).json({ ok: false, error: 'forum_not_found' });
-    }
-
-    return res.json({
-      ok: true,
-      forum: serializeForum(forum, replies.length),
-      replies: replies.map(serializeForumReply)
-    });
-  } catch (err) {
-    console.error('load forum error:', err);
-    return res.status(500).json({ ok: false, error: 'server_error' });
-  }
-});
-
-app.post('/api/forums/:forumId/replies', async (req, res) => {
-  const { forumId } = req.params;
-  const body = typeof req.body.body === 'string' ? req.body.body.trim() : '';
-
-  if (!mongoose.isValidObjectId(forumId)) {
-    return res.status(400).json({ ok: false, error: 'invalid_forum' });
-  }
-
-  if (!body) {
-    return res.status(400).json({ ok: false, error: 'reply_body_required' });
-  }
-
-  if (body.length > 5000) {
-    return res.status(400).json({ ok: false, error: 'reply_too_long' });
-  }
-
-  try {
-    const [author, forum] = await Promise.all([
-      getForumAuthor(req.body.author),
-      Forum.findById(forumId).lean()
-    ]);
-
-    if (!author) {
-      return res.status(401).json({ ok: false, error: 'login_required' });
-    }
-
-    if (!forum) {
-      return res.status(404).json({ ok: false, error: 'forum_not_found' });
-    }
-
-    const reply = await ForumReply.create({
-      forum: forum._id,
-      body,
-      author: author.username,
-      authorDisplay: author.display || author.username
-    });
-
-    const activityAt = new Date();
-    await Forum.updateOne({ _id: forum._id }, { $set: { lastActivityAt: activityAt } });
-
-    const savedReply = serializeForumReply(reply.toObject());
-    io.emit('forumReplyCreated', {
-      forumId: String(forum._id),
-      reply: savedReply
-    });
-    void broadcastForumsList();
-
-    return res.status(201).json({ ok: true, reply: savedReply });
-  } catch (err) {
-    console.error('create forum reply error:', err);
-    return res.status(500).json({ ok: false, error: 'server_error' });
-  }
-});
-
-
 // ---------- SOCKET.IO ----------
 const onlineByUsername = new Map();
 
@@ -1638,12 +1225,6 @@ io.on("connection", async (socket) => {
 
   const rooms = await Room.find().lean();
   socket.emit("roomsList", rooms);
-
-  try {
-    socket.emit('forumsList', await getForumsWithReplyCounts());
-  } catch (err) {
-    console.error('initial forum list error:', err);
-  }
 
   socket.on('login', async (user) => {
     socket.username = user.username;
@@ -1813,45 +1394,20 @@ socket.on('publicMessage', async (msg) => {
   });
 
   socket.on("joinRoom", async ({ room }) => {
-    const roomId = room == null ? "" : String(room);
-    if (!roomId) return;
+    socket.join(room);
+    socket.currentRoom = room;
 
-    // A socket can only be a member of the room it currently has open.
-    // Leave the previous room before joining another one so its member list
-    // is updated immediately instead of retaining a stale user.
-    const previousRoom = socket.currentRoom;
-    if (previousRoom && previousRoom !== roomId) {
-      socket.leave(previousRoom);
-      socket.currentRoom = null;
-      // Do not delay the new join while refreshing the old room.
-      updateRoomMembers(previousRoom);
-    }
+    const history = await RoomMessage.find({ room }).sort({ time: 1 }).limit(200).lean();
+    io.to(socket.id).emit("roomHistory", { room, history });
 
-    socket.join(roomId);
-    socket.currentRoom = roomId;
-
-    const history = await RoomMessage.find({ room: roomId }).sort({ time: 1 }).limit(200).lean();
-    io.to(socket.id).emit("roomHistory", { room: roomId, history });
-
-    await updateRoomMembers(roomId);
-  });
-
-  // Remove this socket from a room when its chat window closes.
-  socket.on("leaveRoom", async ({ room } = {}) => {
-    const roomId = room == null || room === "" ? socket.currentRoom : String(room);
-    if (!roomId) return;
-
-    socket.leave(roomId);
-    if (socket.currentRoom === roomId) socket.currentRoom = null;
-    await updateRoomMembers(roomId);
+    updateRoomMembers(room);
   });
 
   // Allow clients to request a members refresh for a room (client emits "requestRoomMembers")
   socket.on("requestRoomMembers", async ({ room }) => {
     try {
-      const roomId = room == null ? "" : String(room);
-      if (!roomId || !socket.rooms.has(roomId)) return;
-      await updateRoomMembers(roomId);
+      if (!room) return;
+      await updateRoomMembers(room);
     } catch (err) {
       console.error("requestRoomMembers handler error:", err);
     }
@@ -1983,3 +1539,9 @@ socket.on('publicMessage', async (msg) => {
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Server listening on http://localhost:${PORT}`);
 });
+
+
+
+
+
+
