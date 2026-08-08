@@ -1,2 +1,1 @@
-- add more languages
 - add discord account login/account registration
