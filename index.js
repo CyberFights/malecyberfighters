@@ -960,8 +960,7 @@ app.post('/api/upload-image', upload.single('image'), async (req, res) => {
 
     const resp = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, {
       method: "POST",
-      body: form,
-      headers: form.getHeaders()
+      body: form
     });
 
     const data = await resp.json();
