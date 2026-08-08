@@ -382,6 +382,57 @@ function openStoryPopup(targetUsername) {
    RECEIVE DM FROM SERVER
 ============================================================ */
 
+let dmAlertSound = null;
+
+function playDMAlertSound(){
+  try {
+    if (!dmAlertSound){
+      dmAlertSound = new Audio('/sounds/ui-alert.mp3');
+      dmAlertSound.preload = 'auto';
+    }
+    dmAlertSound.currentTime = 0;
+    const p = dmAlertSound.play();
+    if (p && typeof p.catch === 'function') p.catch(() => {});
+  } catch (e) {
+    // Ignore audio errors (e.g., browser autoplay policy).
+  }
+}
+
+/* ============================================================
+   DM NOTIFICATION POPUP
+============================================================ */
+let dmNotifTimer = null;
+
+function showDMNotification(username){
+  const notif = document.getElementById('dmNotification');
+  if (!notif) return;
+
+  const userEl = document.getElementById('dmNotificationUser');
+  if (userEl) userEl.textContent = username ? '@' + username : '';
+
+  notif.style.display = 'flex';
+
+  // Restart the slide-in animation even if the popup is already visible
+  notif.style.animation = 'none';
+  void notif.offsetWidth;
+  notif.style.animation = '';
+
+  // Auto-hide after 8 seconds
+  clearTimeout(dmNotifTimer);
+  dmNotifTimer = setTimeout(() => {
+    notif.style.display = 'none';
+  }, 8000);
+
+  // Clicking the popup dismisses it and opens the DM window
+  notif.onclick = () => {
+    clearTimeout(dmNotifTimer);
+    notif.style.display = 'none';
+    if (username && typeof openPrivateWindow === 'function'){
+      openPrivateWindow(username);
+    }
+  };
+}
+
 socket.on("privateMessage", pm => {
   const me = getSession();
   if (!me) return;
@@ -389,6 +440,13 @@ socket.on("privateMessage", pm => {
   // Don't count our own echo as unread
   const other = pm.from === me.username ? pm.to : pm.from;
   if (!other || other === me.username) return;
+
+  // Play an alert for every incoming DM from another user
+  // (whether the DM window is open or not).
+  playDMAlertSound();
+
+  // Show the popup notification at the top of the screen.
+  showDMNotification(other);
 
   const body = document.getElementById("pmBody_" + other);
   const windowOpen = !!document.getElementById("pmWindow_" + other);

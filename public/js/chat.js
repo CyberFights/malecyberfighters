@@ -62,6 +62,25 @@ async function uploadImageToServer(file) {
 }
 
 /* ============================================================
+   NEW PUBLIC CHAT MESSAGE SOUND
+============================================================ */
+let publicMessageSound = null;
+
+function playPublicMessageSound(){
+  try {
+    if (!publicMessageSound){
+      publicMessageSound = new Audio('/sounds/computer.mp3');
+      publicMessageSound.preload = 'auto';
+    }
+    publicMessageSound.currentTime = 0;
+    const p = publicMessageSound.play();
+    if (p && typeof p.catch === 'function') p.catch(() => {});
+  } catch (e) {
+    // Ignore audio errors (e.g., browser autoplay policy).
+  }
+}
+
+/* ============================================================
    AVATAR RENDERING
 ============================================================ */
 function renderMessageAvatar(username, display, imageUrl, size = 36){
@@ -625,7 +644,7 @@ async function loadPublicMessages(){
   const data = await res.json();
   if (!data.ok) return;
 
-  data.messages.forEach(m => appendPublicMessage(m));
+  data.messages.forEach(m => appendPublicMessage(m, false));
 }
 
 /* ============================================================
@@ -677,7 +696,7 @@ socket.on("externalPublicMessage", msg => {
 /* ============================================================
    PUBLIC CHAT — RENDER MESSAGE
 ============================================================ */
-function appendPublicMessage(msg){
+function appendPublicMessage(msg, playSound = true){
   const feed = $('publicFeed');
   if (!feed) return;
 
@@ -707,6 +726,10 @@ function appendPublicMessage(msg){
 
   feed.appendChild(div);
   feed.scrollTop = feed.scrollHeight;
+
+  // Play the new-message sound only for incoming messages from others
+  // (never for your own messages or when loading message history).
+  if (playSound && (!s || msg.from !== s.username)) playPublicMessageSound();
 }
 
 /* ============================================================
