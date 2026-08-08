@@ -1,3 +1,4 @@
+- registration images fixed (make support report if otherwise)
 - avatar images 
 - dm chats 
 - fix user roster button  
