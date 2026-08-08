@@ -1,0 +1,14 @@
+- avatar images 
+- dm chats 
+- fix user roster button  
+- working on public/private rooms 
+- private room invites 
+- support system 
+- image uploads in dm and custom rooms 
+- story creation 
+- user relationships 
+- relationship timeline 
+- story/relationship approval
+- added forums
+- added public story list
+- fixed mobile UI 
