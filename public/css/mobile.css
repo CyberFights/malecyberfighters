@@ -485,6 +485,7 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
 
 .chat-input {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 10px;
@@ -495,6 +496,88 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
 }
 .chat-input input[type="text"] { flex: 1; min-width: 0; }
 .chat-input button { width: auto; margin-top: 0; flex: 0 0 auto; padding: 11px 14px; }
+
+/* ============================================================
+   MESSAGE EDIT + REPLY
+   ============================================================ */
+.reply-bar {
+  flex: 1 1 100%;
+  order: -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #94a3b8;
+  background: rgba(56, 189, 248, .1);
+  border: 1px solid rgba(56, 189, 248, .3);
+  border-radius: 8px;
+  padding: 7px 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.reply-bar b { color: #7dd3fc; font-weight: 600; }
+.reply-cancel {
+  margin-left: auto;
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid rgba(56, 189, 248, .35);
+  border-radius: 6px;
+  color: #94a3b8;
+  padding: 3px 9px;
+  font-size: 12px;
+  width: auto;
+  margin-top: 0;
+}
+.reply-cancel:active { color: #fff; }
+
+.reply-preview {
+  font-size: 12px;
+  color: #94a3b8;
+  background: rgba(56, 189, 248, .1);
+  border-left: 3px solid #7dd3fc;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reply-preview b { color: #7dd3fc; }
+
+.edited-marker { color: #94a3b8; font-style: italic; }
+
+.message-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.msg-action {
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: rgba(56, 189, 248, .12);
+  border: 1px solid rgba(56, 189, 248, .3);
+  color: #bae6fd;
+  font-size: 12px;
+  width: auto;
+  margin-top: 0;
+}
+.msg-action:active { background: rgba(56, 189, 248, .28); }
+
+.edit-box {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.edit-input {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(56, 189, 248, .5);
+  background: rgba(56, 189, 248, .08);
+  color: #e2e8f0;
+}
+.edit-buttons { display: flex; gap: 8px; }
 
 /* ============================================================
    DIRECT MESSAGE CHAT

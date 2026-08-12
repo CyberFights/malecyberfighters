@@ -38,6 +38,17 @@ function getSession(){
   }
 }
 
+// A message is "mine" (eligible for editing) only when it was sent by the
+// current session user. Compared case-insensitively so a username case
+// mismatch can never cause someone else's message to appear editable.
+function isOwnMessage(msg){
+  const s = getSession();
+  if (!s || !msg) return false;
+  const from = String(msg.from || '').toLowerCase();
+  const me = String(s.username || '').toLowerCase();
+  return from.length > 0 && from === me;
+}
+
 function fileToBase64(file) {
   return new Promise(resolve => {
     const reader = new FileReader();
@@ -632,6 +643,165 @@ window.addEventListener("beforeunload", () => {
 });
 
 /* ============================================================
+   MESSAGE EDIT + REPLY (public chat & rooms)
+============================================================ */
+let publicReplyTo = null;
+let roomReplyTo = null;
+
+function setPublicReply(msg){
+  if (!msg) return;
+  publicReplyTo = {
+    id: msg._id || msg.id || null,
+    from: msg.from,
+    display: msg.display || msg.from,
+    text: msg.text || ""
+  };
+  const bar = $('publicReplyBar');
+  if (bar) {
+    const snippet = (publicReplyTo.text || "").slice(0, 80);
+    bar.innerHTML = `↩ Replying to <b>@${escapeHtml(publicReplyTo.from)}</b>: ${escapeHtml(snippet)} <button type="button" class="reply-cancel" aria-label="Cancel reply">✕</button>`;
+    bar.style.display = 'flex';
+    bar.querySelector('.reply-cancel').onclick = clearPublicReply;
+  }
+  const input = $('publicMessage');
+  if (input) input.focus();
+}
+
+function clearPublicReply(){
+  publicReplyTo = null;
+  const bar = $('publicReplyBar');
+  if (bar) { bar.style.display = 'none'; bar.innerHTML = ''; }
+}
+
+function setRoomReply(msg){
+  if (!msg) return;
+  roomReplyTo = {
+    id: msg._id || msg.id || null,
+    from: msg.from,
+    display: msg.display || msg.from,
+    text: msg.text || ""
+  };
+  const bar = $('roomReplyBar');
+  if (bar) {
+    const snippet = (roomReplyTo.text || "").slice(0, 80);
+    bar.innerHTML = `↩ Replying to <b>@${escapeHtml(roomReplyTo.from)}</b>: ${escapeHtml(snippet)} <button type="button" class="reply-cancel" aria-label="Cancel reply">✕</button>`;
+    bar.style.display = 'flex';
+    bar.querySelector('.reply-cancel').onclick = clearRoomReply;
+  }
+  const input = $('roomMessageInput');
+  if (input) input.focus();
+}
+
+function clearRoomReply(){
+  roomReplyTo = null;
+  const bar = $('roomReplyBar');
+  if (bar) { bar.style.display = 'none'; bar.innerHTML = ''; }
+}
+
+function markEdited(div){
+  if (!div) return;
+  const small = div.querySelector('.small');
+  if (!small || small.querySelector('.edited-marker')) return;
+  const marker = document.createElement('span');
+  marker.className = 'edited-marker';
+  marker.textContent = ' (edited)';
+  small.appendChild(marker);
+}
+
+function startPublicEdit(div, msg){
+  if (!isOwnMessage(msg)) return; // only the sender may edit
+  const textEl = div.querySelector('.message-text');
+  if (!textEl) return;
+  const current = msg.text || '';
+
+  const editor = document.createElement('div');
+  editor.className = 'edit-box';
+  editor.innerHTML = `
+    <input type="text" class="edit-input" maxlength="500" value="${escapeHtml(current)}">
+    <div class="edit-buttons">
+      <button type="button" class="msg-action edit-save">Save</button>
+      <button type="button" class="msg-action edit-cancel">Cancel</button>
+    </div>
+  `;
+  textEl.style.display = 'none';
+  textEl.insertAdjacentElement('afterend', editor);
+
+  const input = editor.querySelector('.edit-input');
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+
+  const save = () => {
+    const newText = input.value.trim();
+    if (!newText || newText === current) { cancel(); return; }
+    const s = getSession();
+    if (!s) { cancel(); return; }
+    socket.emit('editPublicMessage', { id: div.dataset.id, from: s.username, text: newText });
+    // Optimistic local update
+    msg.text = newText;
+    msg.edited = true;
+    textEl.textContent = newText;
+    markEdited(div);
+    cancel();
+  };
+  const cancel = () => {
+    editor.remove();
+    textEl.style.display = '';
+  };
+  editor.querySelector('.edit-save').onclick = save;
+  editor.querySelector('.edit-cancel').onclick = cancel;
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') save();
+    if (e.key === 'Escape') cancel();
+  });
+}
+
+function startRoomEdit(div, msg){
+  if (!isOwnMessage(msg)) return; // only the sender may edit
+  const textEl = div.querySelector('.message-text');
+  if (!textEl) return;
+  const current = msg.text || '';
+
+  const editor = document.createElement('div');
+  editor.className = 'edit-box';
+  editor.innerHTML = `
+    <input type="text" class="edit-input" maxlength="500" value="${escapeHtml(current)}">
+    <div class="edit-buttons">
+      <button type="button" class="msg-action edit-save">Save</button>
+      <button type="button" class="msg-action edit-cancel">Cancel</button>
+    </div>
+  `;
+  textEl.style.display = 'none';
+  textEl.insertAdjacentElement('afterend', editor);
+
+  const input = editor.querySelector('.edit-input');
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+
+  const save = () => {
+    const newText = input.value.trim();
+    if (!newText || newText === current) { cancel(); return; }
+    const s = getSession();
+    if (!s) { cancel(); return; }
+    socket.emit('editRoomMessage', { id: div.dataset.id, from: s.username, text: newText });
+    msg.text = newText;
+    msg.edited = true;
+    textEl.textContent = newText;
+    markEdited(div);
+    cancel();
+  };
+  const cancel = () => {
+    editor.remove();
+    textEl.style.display = '';
+  };
+  editor.querySelector('.edit-save').onclick = save;
+  editor.querySelector('.edit-cancel').onclick = cancel;
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') save();
+    if (e.key === 'Escape') cancel();
+  });
+}
+
+/* ============================================================
    PUBLIC CHAT — HISTORY
 ============================================================ */
 async function loadPublicMessages(){
@@ -669,7 +839,8 @@ function sendPublicMessage(){
     from: s.username,
     display: s.display || s.username,
     text,
-    time: new Date().toISOString()
+    time: new Date().toISOString(),
+    replyTo: publicReplyTo
   };
 
   socket.emit('publicMessage', msg);
@@ -678,6 +849,7 @@ function sendPublicMessage(){
   appendPublicMessage(msg);
 
   input.value = '';
+  clearPublicReply();
 }
 
 /* ============================================================
@@ -685,8 +857,42 @@ function sendPublicMessage(){
 ============================================================ */
 socket.on('publicMessage', msg => {
   const s = getSession();
-  if (s && msg.from === s.username) return; // prevent double render
+  if (s && msg.from === s.username) {
+    // Already rendered locally; attach the server-provided id so the
+    // Edit/Reply buttons can reference this message.
+    updateOwnPublicMessage(msg);
+    return;
+  }
   appendPublicMessage(msg);
+});
+
+// The server broadcasts back our own message including its real id.
+// Find the freshly-rendered local copy and attach that id.
+function updateOwnPublicMessage(msg){
+  const feed = $('publicFeed');
+  if (!feed || !msg) return;
+  const rows = feed.querySelectorAll('.message-row.me');
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (!rows[i].dataset.id) {
+      rows[i].dataset.id = msg._id;
+      return;
+    }
+  }
+}
+
+// A public message was edited — update it in place on every client.
+socket.on('publicMessageEdited', data => {
+  const feed = $('publicFeed');
+  if (!feed || !data) return;
+  const rows = feed.querySelectorAll('.message-row');
+  for (const r of rows) {
+    if (r.dataset.id === String(data._id)) {
+      const textEl = r.querySelector('.message-text');
+      if (textEl) textEl.textContent = data.text;
+      markEdited(r);
+      break;
+    }
+  }
 });
 
 socket.on("externalPublicMessage", msg => {
@@ -701,6 +907,7 @@ function appendPublicMessage(msg, playSound = true){
   if (!feed) return;
 
   const s = getSession();
+  const isMine = isOwnMessage(msg);
   const user = (window.users || []).find(u => u.username === msg.from);
   const avatar = renderMessageAvatar(
     msg.from,
@@ -709,11 +916,18 @@ function appendPublicMessage(msg, playSound = true){
   );
 
   const div = document.createElement('div');
-  div.className = 'message-row ' + (s && msg.from === s.username ? 'me' : '');
+  div.className = 'message-row ' + (isMine ? 'me' : '');
+  if (msg._id) div.dataset.id = msg._id;
 
   const imageHtml = msg.imageUrl
     ? `<img src="${escapeHtml(msg.imageUrl)}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${escapeHtml(msg.imageUrl)}">`
     : '';
+
+  const replyHtml = msg.replyTo
+    ? `<div class="reply-preview">↩ <b>@${escapeHtml(msg.replyTo.display || msg.replyTo.from || '')}</b> — ${escapeHtml((msg.replyTo.text || '').slice(0, 80))}</div>`
+    : '';
+
+  const editedHtml = msg.edited ? `<span class="edited-marker"> (edited)</span>` : '';
 
   div.innerHTML = `
     <div class="message-avatar">${avatar}</div>
@@ -721,16 +935,28 @@ function appendPublicMessage(msg, playSound = true){
       <div style="font-weight:700; color:${user?.color || '#7fd8ff'}">
         ${escapeHtml(msg.display || msg.from || '')}
         <span class="small" style="color:${user?.color || '#7fd8ff'}">
-          @${escapeHtml(msg.from || '')} • ${new Date(msg.time).toLocaleTimeString()}
+          @${escapeHtml(msg.from || '')} • ${new Date(msg.time).toLocaleTimeString()}${editedHtml}
         </span>
       </div>
-      ${msg.text ? `<div>${escapeHtml(msg.text)}</div>` : ''}
+      ${replyHtml}
+      ${msg.text ? `<div class="message-text">${escapeHtml(msg.text)}</div>` : ''}
       ${imageHtml}
+      <div class="message-actions">
+        <button type="button" class="msg-action action-reply">Reply</button>
+        ${isMine && msg.text ? `<button type="button" class="msg-action action-edit">Edit</button>` : ''}
+      </div>
     </div>
   `;
 
   div.querySelectorAll('.chat-image').forEach(img => {
     img.addEventListener('click', () => window.open(img.dataset.url, '_blank'));
+  });
+
+  div.querySelector('.action-reply')?.addEventListener('click', () => setPublicReply(msg));
+  div.querySelector('.action-edit')?.addEventListener('click', () => {
+    if (!isOwnMessage(msg)) return; // only the sender may edit
+    if (!div.dataset.id) return; // server id not attached yet
+    startPublicEdit(div, msg);
   });
 
   feed.appendChild(div);
@@ -757,9 +983,11 @@ function sendRoomMessage(room, text){
     from: s.username,
     display: s.display || s.username,
     text,
-    time: new Date().toISOString()
+    time: new Date().toISOString(),
+    replyTo: roomReplyTo
   });
   // Server will broadcast back (including to sender) after translate/save
+  clearRoomReply();
 }
 
 socket.on('roomHistory', ({ room, history }) => {
@@ -792,16 +1020,25 @@ function appendRoomMessage(msg){
   const feed = $('roomFeed');
   if (!feed) return;
 
+  const s = getSession();
+  const isMine = isOwnMessage(msg);
   const user = (window.users || []).find(u => u.username === msg.from);
   const avatar = renderMessageAvatar(msg.from, msg.display, user?.imageUrl || msg.avatar);
 
   const div = document.createElement('div');
   div.className = 'message-row';
+  if (msg._id) div.dataset.id = msg._id;
 
-  const textHtml = msg.text ? `<div>${escapeHtml(msg.text)}</div>` : '';
+  const textHtml = msg.text ? `<div class="message-text">${escapeHtml(msg.text)}</div>` : '';
   const imageHtml = msg.imageUrl
     ? `<img src="${msg.imageUrl}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${msg.imageUrl}">`
     : '';
+
+  const replyHtml = msg.replyTo
+    ? `<div class="reply-preview">↩ <b>@${escapeHtml(msg.replyTo.display || msg.replyTo.from || '')}</b> — ${escapeHtml((msg.replyTo.text || '').slice(0, 80))}</div>`
+    : '';
+
+  const editedHtml = msg.edited ? `<span class="edited-marker"> (edited)</span>` : '';
 
   div.innerHTML = `
     <div class="message-avatar">${avatar}</div>
@@ -809,11 +1046,16 @@ function appendRoomMessage(msg){
       <div style="font-weight:700; color:${user?.color || '#7fd8ff'}">
         ${escapeHtml(msg.display || msg.from || '')}
         <span class="small" style="color:${user?.color || '#7fd8ff'}">
-          @${escapeHtml(msg.from || '')} • ${new Date(msg.time).toLocaleTimeString()}
+          @${escapeHtml(msg.from || '')} • ${new Date(msg.time).toLocaleTimeString()}${editedHtml}
         </span>
       </div>
+      ${replyHtml}
       ${textHtml}
       ${imageHtml}
+      <div class="message-actions">
+        <button type="button" class="msg-action action-reply">Reply</button>
+        ${isMine && msg.text ? `<button type="button" class="msg-action action-edit">Edit</button>` : ''}
+      </div>
     </div>
   `;
 
@@ -821,9 +1063,31 @@ function appendRoomMessage(msg){
     img.addEventListener('click', () => window.open(img.dataset.url, '_blank'));
   });
 
+  div.querySelector('.action-reply')?.addEventListener('click', () => setRoomReply(msg));
+  div.querySelector('.action-edit')?.addEventListener('click', () => {
+    if (!isOwnMessage(msg)) return; // only the sender may edit
+    if (!div.dataset.id) return;
+    startRoomEdit(div, msg);
+  });
+
   feed.appendChild(div);
   feed.scrollTop = feed.scrollHeight;
 }
+
+// A room message was edited — update it in place on every client.
+socket.on('roomMessageEdited', data => {
+  const feed = $('roomFeed');
+  if (!feed || !data) return;
+  const rows = feed.querySelectorAll('.message-row');
+  for (const r of rows) {
+    if (r.dataset.id === String(data._id)) {
+      const textEl = r.querySelector('.message-text');
+      if (textEl) textEl.textContent = data.text;
+      markEdited(r);
+      break;
+    }
+  }
+});
 
 document.getElementById("roomImageBtn")?.addEventListener("click", () => {
   document.getElementById("roomImageInput").click();
