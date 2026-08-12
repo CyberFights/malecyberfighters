@@ -38,7 +38,7 @@ app.use(
         scriptSrc: ["'self'"],
         scriptSrcAttr: ["'none'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "https://i.ibb.co", "https://ibb.co"],
+        imgSrc: ["'self'", "data:", "https://i.ibb.co", "https://ibb.co", "https://cdn.discordapp.com", "https://media.discordapp.net"],
         connectSrc: ["'self'", "ws:", "wss:"],
         fontSrc: ["'self'", "data:"],
         frameAncestors: ["'self'"],
@@ -136,6 +136,7 @@ const publicMessageSchema = new mongoose.Schema({
   from: String,
   display: String,
   text: String,
+  imageUrl: String,
   time: { type: Date, default: Date.now }
 });
 
@@ -1208,8 +1209,14 @@ app.post('/api/login', async (req, res) => {
 app.post("/api/chatMessage", async (req, res) => {
   try {
     const { username, message, timestamp, avatar } = req.body;
+    const attachments = Array.isArray(req.body.attachments) ? req.body.attachments : [];
+    const imageUrl = req.body.imageUrl || req.body.image || req.body.image_url ||
+      attachments.find(a => a && (a.url || a.proxy_url) && String(a.content_type || a.contentType || "").startsWith("image/"))?.url ||
+      attachments.find(a => a && (a.url || a.proxy_url))?.url ||
+      attachments.find(a => a && (a.url || a.proxy_url))?.proxy_url ||
+      null;
 
-    if (!username || !message) {
+    if (!username || (!message && !imageUrl)) {
       return res.status(400).json({ error: "Username and message are required" });
     }
 
@@ -1218,7 +1225,8 @@ app.post("/api/chatMessage", async (req, res) => {
     const enriched = {
       from: username,
       display: username,
-      text: message,
+      text: message || "",
+      imageUrl: imageUrl || null,
       time: msgTimestamp
     };
 
@@ -1227,8 +1235,9 @@ app.post("/api/chatMessage", async (req, res) => {
     io.emit("externalPublicMessage", {
       from: username,
       display: username,
-      text: message,
+      text: message || "",
       avatar: avatar || null,
+      imageUrl: imageUrl || null,
       time: msgTimestamp.toISOString()
     });
 
