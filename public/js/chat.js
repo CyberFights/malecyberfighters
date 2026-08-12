@@ -711,6 +711,10 @@ function appendPublicMessage(msg, playSound = true){
   const div = document.createElement('div');
   div.className = 'message-row ' + (s && msg.from === s.username ? 'me' : '');
 
+  const imageHtml = msg.imageUrl
+    ? `<img src="${escapeHtml(msg.imageUrl)}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${escapeHtml(msg.imageUrl)}">`
+    : '';
+
   div.innerHTML = `
     <div class="message-avatar">${avatar}</div>
     <div class="message">
@@ -720,9 +724,14 @@ function appendPublicMessage(msg, playSound = true){
           @${escapeHtml(msg.from || '')} • ${new Date(msg.time).toLocaleTimeString()}
         </span>
       </div>
-      <div>${escapeHtml(msg.text || '')}</div>
+      ${msg.text ? `<div>${escapeHtml(msg.text)}</div>` : ''}
+      ${imageHtml}
     </div>
   `;
+
+  div.querySelectorAll('.chat-image').forEach(img => {
+    img.addEventListener('click', () => window.open(img.dataset.url, '_blank'));
+  });
 
   feed.appendChild(div);
   feed.scrollTop = feed.scrollHeight;

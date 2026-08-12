@@ -618,9 +618,13 @@
     const author = directoryUser(msg.from) || {};
     const isMe = !!(s && msg.from === s.username);
     const display = msg.display || author.display || msg.from || "";
-    const avatarSource = msg.avatar || msg.imageUrl || author.imageUrl
-      ? { imageUrl: msg.avatar || msg.imageUrl || author.imageUrl, display }
+    const avatarSource = msg.avatar || author.imageUrl
+      ? { imageUrl: msg.avatar || author.imageUrl, display }
       : { imageUrl: author.imageUrl, display };
+
+    const imageHtml = msg.imageUrl
+      ? `<img src="${escapeHtml(msg.imageUrl)}" class="chat-image" alt="attachment" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer">`
+      : "";
 
     const row = document.createElement("div");
     row.className = "message-row" + (isMe ? " me" : "");
@@ -631,9 +635,12 @@
           ${escapeHtml(display)}
           <span class="small muted">@${escapeHtml(msg.from || "")} • ${escapeHtml(timeLabel(msg.time))}</span>
         </div>
-        <div>${escapeHtml(msg.text || "")}</div>
+        ${msg.text ? `<div>${escapeHtml(msg.text)}</div>` : ""}
+        ${imageHtml}
       </div>
     `;
+    const imgEl = row.querySelector(".chat-image");
+    if (imgEl) imgEl.addEventListener("click", () => window.open(msg.imageUrl, "_blank"));
     feed.appendChild(row);
     feed.scrollTop = feed.scrollHeight;
   }

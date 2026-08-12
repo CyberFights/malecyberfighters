@@ -441,12 +441,13 @@ socket.on("privateMessage", pm => {
   const other = pm.from === me.username ? pm.to : pm.from;
   if (!other || other === me.username) return;
 
-  // Play an alert for every incoming DM from another user
-  // (whether the DM window is open or not).
-  playDMAlertSound();
+  const isIncoming = pm.from !== me.username;
 
-  // Show the popup notification at the top of the screen.
-  showDMNotification(other);
+  // Sound + toast only for messages we received, not ones we sent
+  if (isIncoming) {
+    playDMAlertSound();
+    showDMNotification(other);
+  }
 
   const body = document.getElementById("pmBody_" + other);
   const windowOpen = !!document.getElementById("pmWindow_" + other);
