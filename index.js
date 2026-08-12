@@ -137,6 +137,10 @@ const publicMessageSchema = new mongoose.Schema({
   display: String,
   text: String,
   imageUrl: String,
+  // true once a message has been edited by its author
+  edited: { type: Boolean, default: false },
+  // optional quoted/replied-to message metadata
+  replyTo: { type: Object, default: null },
   time: { type: Date, default: Date.now }
 });
 
@@ -146,6 +150,8 @@ const roomMessageSchema = new mongoose.Schema({
   display: String,
   text: String,
   imageUrl: String,
+  edited: { type: Boolean, default: false },
+  replyTo: { type: Object, default: null },
   time: { type: Date, default: Date.now }
 });
 
@@ -1518,10 +1524,11 @@ socket.on('publicMessage', async (msg) => {
       from: msg.from,
       display: msg.display,
       text: msg.text,
+      replyTo: msg.replyTo || null,
       time: new Date()
     };
 
-    await PublicMessage.create(enriched);
+    const created = await PublicMessage.create(enriched);
 
     // ⭐ Fetch sender avatar ONCE
     const sender = await User.findOne({ username: msg.from }).lean();
@@ -1546,6 +1553,7 @@ socket.on('publicMessage', async (msg) => {
 
         io.to(u.socketId).emit("publicMessage", {
           ...enriched,
+          _id: created._id,
           text: translated,
           avatar: avatarUrl
         });
@@ -1554,6 +1562,35 @@ socket.on('publicMessage', async (msg) => {
 
   } catch (err) {
     console.error("Error in publicMessage:", err);
+  }
+});
+
+// Edit an existing public message (author only). Broadcasts the new text
+// translated for each recipient, matching how new messages are delivered.
+socket.on("editPublicMessage", async (data) => {
+  try {
+    const { id, from, text } = data || {};
+    if (!id || !from || typeof text !== "string" || !text.trim()) return;
+
+    const msg = await PublicMessage.findById(id);
+    if (!msg || msg.from !== from) return; // only the author may edit
+
+    msg.text = text.trim();
+    msg.edited = true;
+    await msg.save();
+
+    const onlineUsers = await User.find({ online: true }).lean();
+    await Promise.all(onlineUsers.map(async u => {
+      if (!u.socketId) return;
+      const translated = await translateText(msg.text, u.language || "en");
+      io.to(u.socketId).emit("publicMessageEdited", {
+        _id: id,
+        text: translated,
+        edited: true
+      });
+    }));
+  } catch (err) {
+    console.error("editPublicMessage error:", err);
   }
 });
 
@@ -1685,11 +1722,13 @@ socket.on('publicMessage', async (msg) => {
       display: msg.display,
       text: msg.text || null,
       imageUrl: msg.imageUrl || null,
+      replyTo: msg.replyTo || null,
       time: new Date()
     };
 
+    let created = null;
     try {
-      await RoomMessage.create(enriched);
+      created = await RoomMessage.create(enriched);
     } catch (err) {
       console.error("Failed to save room message:", err);
     }
@@ -1698,7 +1737,10 @@ socket.on('publicMessage', async (msg) => {
 
     if (msg.imageUrl) {
       members.forEach(u => {
-        io.to(u.socketId).emit("roomMessage", enriched);
+        io.to(u.socketId).emit("roomMessage", {
+          ...enriched,
+          _id: created?._id
+        });
       });
       return;
     }
@@ -1708,9 +1750,39 @@ socket.on('publicMessage', async (msg) => {
 
       io.to(u.socketId).emit("roomMessage", {
         ...enriched,
+        _id: created?._id,
         text: translated
       });
     });
+  });
+
+  // Edit an existing room message (author only). Broadcasts the new text
+  // translated for each recipient, matching how room messages are delivered.
+  socket.on("editRoomMessage", async (data) => {
+    try {
+      const { id, from, text } = data || {};
+      if (!id || !from || typeof text !== "string" || !text.trim()) return;
+
+      const msg = await RoomMessage.findById(id);
+      if (!msg || msg.from !== from) return; // only the author may edit
+
+      msg.text = text.trim();
+      msg.edited = true;
+      await msg.save();
+
+      const members = await User.find({ socketId: { $ne: null } }).lean();
+      members.forEach(async u => {
+        const translated = await translateText(msg.text, u.language || "en");
+        io.to(u.socketId).emit("roomMessageEdited", {
+          room: msg.room,
+          _id: id,
+          text: translated,
+          edited: true
+        });
+      });
+    } catch (err) {
+      console.error("editRoomMessage error:", err);
+    }
   });
 
   socket.on("typingDM", ({ from, to }) => {

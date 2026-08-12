@@ -13,4 +13,6 @@
 - story/relationship approval
 - added forums
 - added public story list
-- fixed mobile UI 
+- fixed mobile UI
+- added message editing (edit your own public + room messages)
+- added message replying (quote/reply to any public + room message)

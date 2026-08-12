@@ -515,11 +515,100 @@ button.ghost{
 
 .chat-input{
   display:flex;
+  flex-wrap:wrap;
   padding:10px;
   border-top:1px solid rgba(160,200,255,0.12);
   gap:8px;
   width:110%;
 }
+
+/* ============================================================
+   MESSAGE EDIT + REPLY
+============================================================ */
+.reply-bar{
+  flex:1 1 100%;
+  order:-1;
+  align-items:center;
+  gap:8px;
+  font-size:12px;
+  color:var(--muted);
+  background:rgba(127,216,255,0.08);
+  border:1px solid rgba(127,216,255,0.25);
+  border-radius:8px;
+  padding:6px 10px;
+  margin-bottom:4px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.reply-bar b{ color:var(--accent); font-weight:600; }
+.reply-cancel{
+  margin-left:auto;
+  flex:0 0 auto;
+  background:transparent;
+  border:1px solid rgba(160,200,255,0.3);
+  border-radius:6px;
+  color:var(--muted);
+  padding:2px 8px;
+  font-size:12px;
+  cursor:pointer;
+  box-shadow:none;
+}
+.reply-cancel:hover{ color:#fff; border-color:var(--accent); }
+
+.reply-preview{
+  font-size:12px;
+  color:var(--muted);
+  background:rgba(160,200,255,0.08);
+  border-left:3px solid var(--accent);
+  padding:4px 8px;
+  border-radius:4px;
+  margin-bottom:6px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.reply-preview b{ color:var(--accent); }
+
+.edited-marker{ color:var(--muted); font-style:italic; }
+
+.message-actions{
+  display:flex;
+  gap:6px;
+  margin-top:6px;
+  opacity:0;
+  transition:opacity 0.15s ease;
+}
+.message:hover .message-actions,
+.message:focus-within .message-actions{ opacity:1; }
+
+.msg-action{
+  padding:2px 8px;
+  border-radius:6px;
+  background:transparent;
+  border:1px solid rgba(160,200,255,0.25);
+  color:var(--muted);
+  font-size:11px;
+  cursor:pointer;
+  box-shadow:none;
+}
+.msg-action:hover{ color:#fff; border-color:var(--accent); background:rgba(127,216,255,0.1); }
+
+.edit-box{
+  margin-top:6px;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.edit-input{
+  width:100%;
+  padding:6px 8px;
+  border-radius:6px;
+  border:1px solid rgba(127,216,255,0.5);
+  background:rgba(127,216,255,0.06);
+  color:#e9f6ff;
+}
+.edit-buttons{ display:flex; gap:6px; }
 
 .pm-window{
   position:fixed;
