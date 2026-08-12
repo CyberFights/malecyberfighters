@@ -1,3 +1,6 @@
+- added edit and replying to messages
+- added image displaying from discord to public chat
+- added new message sounds and notifications
 - added more languages (make support report for any language request not listed)
 - registration images fixed (make support report if otherwise)
 - avatar images 
