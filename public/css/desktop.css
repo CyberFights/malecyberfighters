@@ -1149,6 +1149,7 @@ footer{
 }
 
 #modalLogin,
+#modalForgot,
 #modalRegister,
 #modalAdmin,
 #modalAdminPassword,
@@ -1161,6 +1162,7 @@ footer{
 }
 
 #modalLogin > div,
+#modalForgot > div,
 #modalAdminPassword > div {
   background:#111;
   padding:20px;
@@ -1367,6 +1369,7 @@ input, select, textarea {
 }
 
 #modalLogin input,
+#modalForgot input,
 #modalRegister input,
 #modalRegister select,
 #modalRegister textarea,
@@ -1742,5 +1745,77 @@ input, select, textarea {
   @keyframes dmNotifInMobile{
     from{ opacity:0; transform:translateY(-12px); }
     to{ opacity:1; transform:translateY(0); }
+  }
+}
+
+
+/* ============================================================
+   FORGOT PASSWORD
+   ============================================================ */
+.forgot-row {
+  margin-top: 10px;
+  text-align: center;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #7fd8ff;
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.link-btn:hover {
+  color: #bde9ff;
+}
+
+.forgot-help {
+  font-size: 13px;
+  color: rgba(230,246,255,0.75);
+  margin: 0 0 10px;
+  line-height: 1.45;
+}
+
+#forgotError {
+  color: #ff6b6b;
+  font-size: 13px;
+  margin: 6px 0;
+}
+
+#forgotSuccess {
+  color: #63e6a8;
+  font-size: 13px;
+  margin: 6px 0;
+}
+
+.forgot-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* Mobile view of the shared login / forgot modals */
+@media (max-width: 768px) {
+  #modalLogin > div,
+  #modalForgot > div {
+    width: min(360px, calc(100vw - 32px));
+    padding: 18px;
+  }
+
+  .forgot-actions {
+    flex-wrap: wrap;
+  }
+
+  .forgot-actions button {
+    flex: 1 1 auto;
+  }
+
+  .link-btn {
+    font-size: 14px;
+    padding: 6px 0;
   }
 }

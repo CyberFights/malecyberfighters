@@ -9,6 +9,7 @@ const multer = require('multer');
 const fetch = require('node-fetch');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cors = require("cors");
@@ -26,6 +27,16 @@ const ADMIN_KEY = process.env.ADMIN_KEY;
 
 const DISCORD_WEBHOOK_URL = process.env.Discord_webhook || null;
 const DISCORD_SUPPORT_URL = process.env.Discord_Support || null;
+
+// ---------- PASSWORD RESET / EMAIL CONFIG ----------
+// Emails are sent through the Resend HTTP API (no extra dependency needed).
+const RESEND_API_KEY = process.env.RESEND_API_KEY || null;
+const RESET_FROM_EMAIL = process.env.RESET_FROM_EMAIL || 'Male Cyber Fighters <noreply@malecyberfighters.com>';
+// Public base URL used to build the reset link (e.g. https://malecyberfighters.com).
+// Falls back to the incoming request's origin when unset.
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 60 minutes
+if (!RESEND_API_KEY) console.warn('Warning: RESEND_API_KEY not set — password reset emails will fail until it is configured');
 
 
 
@@ -100,6 +111,17 @@ const authLimiter = rateLimit({
 });
 app.use('/api/login', authLimiter);
 app.use('/api/register', authLimiter);
+
+// Password reset requests are cheap to fire but expensive to serve (email send),
+// so they get their own tighter limiter.
+const passwordResetLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false, error: 'rate_limited' }
+});
+app.use('/api/forgot-password', passwordResetLimiter);
 app.use(cors({ origin: true, credentials: true }));
 // Request client hints so modern browsers will include Sec-CH-UA-Mobile on subsequent navigations.
 // This improves server-side mobile detection without relying solely on User-Agent sniffing.
@@ -251,6 +273,20 @@ const relationshipSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+// One-time password reset tokens. Only a SHA-256 hash of the token is stored,
+// so a database leak cannot be replayed against the reset endpoint.
+const passwordResetSchema = new mongoose.Schema({
+  username: { type: String, required: true, index: true },
+  email: { type: String, required: true },
+  tokenHash: { type: String, required: true, unique: true, index: true },
+  expiresAt: { type: Date, required: true },
+  usedAt: { type: Date, default: null },
+  requestedIp: { type: String, default: '' }
+}, { timestamps: true });
+
+// Let Mongo clean up long-dead tokens automatically (24h after expiry).
+passwordResetSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 });
+
 const Relationship = mongoose.model("Relationship", relationshipSchema);
 const Story = mongoose.model("Story", storySchema);
 const DM = mongoose.model("DM", dmSchema);
@@ -261,6 +297,7 @@ const IpLog = mongoose.model('IpLog', ipLogSchema);
 const Room = mongoose.model('Room', RoomSchema);
 const Forum = mongoose.model('Forum', forumSchema);
 const ForumReply = mongoose.model('ForumReply', forumReplySchema);
+const PasswordReset = mongoose.model('PasswordReset', passwordResetSchema);
 
 // ---------- HELPERS ----------
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -318,6 +355,81 @@ async function sendDiscordWebhookMessage(username, message, avatarUrl) {
   } catch (err) {
     console.error("Error sending webhook:", err);
   }
+}
+
+async function sendEmail({ to, subject, html, text }) {
+  if (!RESEND_API_KEY) {
+    console.error('sendEmail: RESEND_API_KEY is not configured');
+    return { ok: false, error: 'email_not_configured' };
+  }
+
+  try {
+    const resp = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${RESEND_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ from: RESET_FROM_EMAIL, to: [to], subject, html, text })
+    });
+
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '');
+      console.error('sendEmail failed:', resp.status, body);
+      return { ok: false, error: 'email_failed' };
+    }
+
+    return { ok: true };
+  } catch (err) {
+    console.error('sendEmail error:', err);
+    return { ok: false, error: 'email_failed' };
+  }
+}
+
+function getBaseUrl(req) {
+  if (PUBLIC_BASE_URL) return PUBLIC_BASE_URL;
+  const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  return `${proto}://${host}`;
+}
+
+function hashResetToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function buildResetEmail(displayName, resetUrl) {
+  const safeName = String(displayName || 'Fighter').replace(/[<>&]/g, '');
+  const text = [
+    `Hi ${safeName},`,
+    '',
+    'We received a request to reset your Male Cyber Fighters password.',
+    'Open the link below to choose a new one. It expires in 60 minutes and can only be used once.',
+    '',
+    resetUrl,
+    '',
+    'If you did not request this, you can safely ignore this email — your password will not change.',
+    '',
+    '— Male Cyber Fighters'
+  ].join('\n');
+
+  const html = `
+  <div style="background:#0b1220;padding:32px 16px;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#e6f6ff">
+    <div style="max-width:520px;margin:0 auto;background:#111827;border:1px solid rgba(127,216,255,0.3);border-radius:12px;padding:28px">
+      <h1 style="margin:0 0 16px;font-size:20px;color:#7fd8ff">Reset your password</h1>
+      <p style="margin:0 0 12px;line-height:1.5">Hi ${safeName},</p>
+      <p style="margin:0 0 12px;line-height:1.5">We received a request to reset your Male Cyber Fighters password. Click the button below to choose a new one.</p>
+      <p style="margin:24px 0;text-align:center">
+        <a href="${resetUrl}" style="display:inline-block;background:#38bdf8;color:#04121f;font-weight:700;text-decoration:none;padding:12px 24px;border-radius:8px">Choose a New Password</a>
+      </p>
+      <p style="margin:0 0 12px;line-height:1.5;font-size:13px;color:rgba(230,246,255,0.75)">This link expires in 60 minutes and can only be used once.</p>
+      <p style="margin:0 0 12px;line-height:1.5;font-size:13px;color:rgba(230,246,255,0.75)">If the button does not work, copy and paste this address into your browser:<br>
+        <span style="word-break:break-all;color:#7fd8ff">${resetUrl}</span>
+      </p>
+      <p style="margin:16px 0 0;line-height:1.5;font-size:13px;color:rgba(230,246,255,0.6)">If you did not request this, you can safely ignore this email — your password will not change.</p>
+    </div>
+  </div>`;
+
+  return { text, html };
 }
 
 function serializeForum(forum, replyCount = 0) {
@@ -1207,6 +1319,115 @@ app.post('/api/login', async (req, res) => {
   } catch (e) {
     console.error(e);
     await logIp(req, { action: 'login_error', username });
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// ---------- API: FORGOT PASSWORD (send reset link) ----------
+app.post('/api/forgot-password', async (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ ok: false, error: 'invalid_email' });
+  }
+
+  try {
+    // Registration does not normalise case, so match the email case-insensitively.
+    const emailPattern = new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    const user = await User.findOne({ email: emailPattern }).lean();
+    if (!user) {
+      await logIp(req, { action: 'password_reset_unknown_email' });
+      return res.status(404).json({ ok: false, error: 'not_found' });
+    }
+
+    // Invalidate any outstanding tokens for this account first.
+    await PasswordReset.updateMany(
+      { username: user.username, usedAt: null },
+      { $set: { usedAt: new Date() } }
+    );
+
+    const token = crypto.randomBytes(32).toString('hex');
+    await PasswordReset.create({
+      username: user.username,
+      email: user.email,
+      tokenHash: hashResetToken(token),
+      expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+      requestedIp: getIp(req)
+    });
+
+    const resetUrl = `${getBaseUrl(req)}/reset-password.html?token=${token}`;
+    const { html, text } = buildResetEmail(user.display || user.username, resetUrl);
+
+    const sent = await sendEmail({
+      to: user.email,
+      subject: 'Reset your Male Cyber Fighters password',
+      html,
+      text
+    });
+
+    if (!sent.ok) {
+      await logIp(req, { action: 'password_reset_email_failed', username: user.username });
+      return res.status(502).json({ ok: false, error: sent.error });
+    }
+
+    await logIp(req, { action: 'password_reset_requested', username: user.username });
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('forgot-password error', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// ---------- API: VERIFY RESET TOKEN ----------
+app.get('/api/reset-password/verify', async (req, res) => {
+  const token = String(req.query?.token || '');
+  if (!token) return res.status(400).json({ ok: false, error: 'invalid_token' });
+
+  try {
+    const record = await PasswordReset.findOne({ tokenHash: hashResetToken(token) }).lean();
+    if (!record) return res.status(400).json({ ok: false, error: 'invalid_token' });
+    if (record.usedAt) return res.status(400).json({ ok: false, error: 'used_token' });
+    if (new Date(record.expiresAt).getTime() < Date.now()) {
+      return res.status(400).json({ ok: false, error: 'expired_token' });
+    }
+
+    return res.json({ ok: true, username: record.username });
+  } catch (e) {
+    console.error('reset-password verify error', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// ---------- API: RESET PASSWORD ----------
+app.post('/api/reset-password', async (req, res) => {
+  const token = String(req.body?.token || '');
+  const password = String(req.body?.password || '');
+
+  if (!token || !password) return res.status(400).json({ ok: false, error: 'missing_fields' });
+  if (password.length < 8) return res.status(400).json({ ok: false, error: 'weak_password' });
+
+  try {
+    const tokenHash = hashResetToken(token);
+    const record = await PasswordReset.findOne({ tokenHash });
+    if (!record) return res.status(400).json({ ok: false, error: 'invalid_token' });
+    if (record.usedAt) return res.status(400).json({ ok: false, error: 'used_token' });
+    if (new Date(record.expiresAt).getTime() < Date.now()) {
+      return res.status(400).json({ ok: false, error: 'expired_token' });
+    }
+
+    const user = await User.findOne({ username: record.username });
+    if (!user) return res.status(400).json({ ok: false, error: 'invalid_token' });
+
+    user.passwordHash = await bcrypt.hash(password, 10);
+    await user.save();
+
+    record.usedAt = new Date();
+    await record.save();
+
+    await logIp(req, { action: 'password_reset_completed', username: user.username });
+    return res.json({ ok: true, username: user.username });
+  } catch (e) {
+    console.error('reset-password error', e);
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });

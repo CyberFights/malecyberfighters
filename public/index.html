@@ -200,6 +200,24 @@
       <button id="loginCancel" class="ghost">Cancel</button>
       <button id="loginSubmit">Login</button>
     </div>
+    <div class="forgot-row">
+      <button id="btnForgotPassword" class="link-btn" type="button">Forgot password?</button>
+    </div>
+  </div>
+</div>
+
+<!-- FORGOT PASSWORD MODAL -->
+<div id="modalForgot" style="display:none;position:fixed;inset:0;background:black;align-items:center;justify-content:center">
+  <div>
+    <h3>Reset Password</h3>
+    <p class="forgot-help">Enter the email address you signed up with and we'll send you a link to reset your password. The link expires in 60 minutes.</p>
+    <input id="forgotEmail" type="email" autocomplete="email" placeholder="Email address">
+    <div id="forgotError" style="display:none"></div>
+    <div id="forgotSuccess" style="display:none"></div>
+    <div class="forgot-actions">
+      <button id="forgotCancel" class="ghost" type="button">Cancel</button>
+      <button id="forgotSubmit" type="button">Send Reset Link</button>
+    </div>
   </div>
 </div>
 
@@ -1584,6 +1602,7 @@ Don't hesitate to contact us if you have any questions.
 <script src="/js/utils.js"></script>
 <script src="/js/socket.js"></script>
 <script src="/js/auth.js"></script>
+<script src="/js/forgot-password.js"></script>
 <script src="/js/register.js"></script>
 <script src="/js/chat.js"></script>
 <script src="/js/forums.js"></script>
