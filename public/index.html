@@ -7,6 +7,39 @@
    
 <link rel="stylesheet" href="/css/desktop.css">
 
+<style>
+/* Logged-in profile card (#userProfileCard) on mobile.
+   On phones this page is served with mobile.css, whose
+   .user-profile-card.logged-in rules force the card into a
+   horizontal row that was designed for the old mobile card
+   markup — the logged-in profile (avatar, bio, stats, stories
+   and buttons) ends up squeezed sideways. Stack it into a
+   full-width column instead. */
+@media (max-width: 768px) {
+  #userProfileCard {
+    width: auto;
+    max-width: none;
+    margin: 16px 20px 0;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    text-align: left;
+    gap: 12px;
+  }
+  #userProfileCard .profile-avatar {
+    width: 52px;
+    height: 52px;
+    font-size: 22px;
+    align-self: flex-start;
+  }
+  #userProfileCard .profile-bio { max-width: none; }
+  #userProfileCard .profile-stats { flex-wrap: wrap; gap: 14px; }
+  #userProfileCard .profile-stat { align-items: flex-start; }
+  #userProfileCard button { margin-top: 0; }
+}
+</style>
+
 
 </head>
 
