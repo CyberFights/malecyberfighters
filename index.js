@@ -23,6 +23,8 @@ const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/cyberfights';
 if (!process.env.MONGO_URI) console.warn('Warning: MONGO_URI not set — defaulting to mongodb://127.0.0.1:27017/cyberfights (may fail if Mongo is not running)');
 const ADMIN_KEY = process.env.ADMIN_KEY;
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const MAX_EXTRA_PROFILE_PHOTOS = 10;
 
 const DISCORD_WEBHOOK_URL = process.env.Discord_webhook || null;
 const DISCORD_SUPPORT_URL = process.env.Discord_Support || null;
@@ -125,6 +127,22 @@ const userSchema = new mongoose.Schema({
   color:    { type: String },
   language: { type: String },
   imageUrl: { type: String },
+  // ImgBB URLs for the additional photos shown in the user's profile gallery.
+  // The image bytes stay on ImgBB; MongoDB only stores the durable URLs.
+  extraPhotos: {
+    type: [{
+      type: String,
+      validate: {
+        validator: isImgBBUrl,
+        message: 'Extra profile photos must be HTTPS ImgBB URLs'
+      }
+    }],
+    default: [],
+    validate: {
+      validator: photos => photos.length <= MAX_EXTRA_PROFILE_PHOTOS,
+      message: `A profile can contain at most ${MAX_EXTRA_PROFILE_PHOTOS} extra photos`
+    }
+  },
   blockedUsers: { type: [String], default: [] },
   online:   { type: Boolean, default: false },
   socketId: { type: String, default: null },
@@ -263,7 +281,62 @@ const Forum = mongoose.model('Forum', forumSchema);
 const ForumReply = mongoose.model('ForumReply', forumReplySchema);
 
 // ---------- HELPERS ----------
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_IMAGE_SIZE }
+});
+
+function isImgBBUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    const isImgBBHost = url.hostname === 'ibb.co' || url.hostname.endsWith('.ibb.co');
+    return url.protocol === 'https:' && isImgBBHost;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function uploadImageToImgBB(file) {
+  const imgbbKey = process.env.IMGBB_API_KEY;
+  if (!imgbbKey) {
+    const error = new Error('ImgBB API key is not configured');
+    error.code = 'no_imgbb_key';
+    throw error;
+  }
+
+  if (!file || !file.buffer) {
+    const error = new Error('No image file was supplied');
+    error.code = 'no_file';
+    throw error;
+  }
+
+  if (!String(file.mimetype || '').startsWith('image/')) {
+    const error = new Error('Only image files can be uploaded');
+    error.code = 'invalid_file_type';
+    throw error;
+  }
+
+  const form = new FormData();
+  form.append('image', file.buffer.toString('base64'));
+
+  const response = await fetch(
+    `https://api.imgbb.com/1/upload?key=${encodeURIComponent(imgbbKey)}`,
+    { method: 'POST', body: form }
+  );
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok || !data?.success || !isImgBBUrl(data?.data?.url)) {
+    const error = new Error('ImgBB rejected the image upload');
+    error.code = 'upload_failed';
+    error.details = data;
+    throw error;
+  }
+
+  return {
+    imageUrl: data.data.url,
+    viewerUrl: data.data.url_viewer || null
+  };
+}
 
 function getIp(req) {
   return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress;
@@ -677,7 +750,7 @@ function requireAdmin(req, res, next) {
 
 async function broadcastPresence() {
   const onlineUsers = await User.find({ online: true })
-    .select("username display imageUrl info wins losses color language age createdAt -_id")
+    .select("username display imageUrl extraPhotos info wins losses color language age createdAt -_id")
     .lean();
 
   io.emit("presence", onlineUsers);
@@ -686,7 +759,7 @@ async function broadcastPresence() {
 app.get("/api/admin/users", requireAdmin, async (req, res) => {
   try {
     const users = await User.find()
-      .select("username display email imageUrl info stats color language age role banned online createdAt")
+      .select("username display email imageUrl extraPhotos info stats color language age role banned online createdAt")
       .sort({ username: 1 })
       .lean();
 
@@ -954,37 +1027,157 @@ app.get("/api/public-messages", async (req, res) => {
 });
 
 // ---------- API: IMAGE UPLOAD ----------
+// Used for avatars and chat attachments. Extra profile photos use the
+// dedicated endpoint below so their URLs are persisted to the user document
+// as part of the same request.
 app.post('/api/upload-image', upload.single('image'), async (req, res) => {
-  const IMGBB_KEY = process.env.IMGBB_API_KEY;
-  if (!IMGBB_KEY) return res.status(500).json({ ok: false, error: 'no_imgbb_key' });
   if (!req.file) return res.status(400).json({ ok: false, error: 'no_file' });
 
   try {
-    const base64 = req.file.buffer.toString('base64');
-
-    const form = new FormData();
-    form.append("image", base64);
-
-    const resp = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, {
-      method: "POST",
-      body: form
+    const uploaded = await uploadImageToImgBB(req.file);
+    return res.json({
+      ok: true,
+      imageUrl: uploaded.imageUrl,
+      viewer: uploaded.viewerUrl
     });
+  } catch (e) {
+    console.error('upload error', e);
+    const status = e.code === 'no_file' || e.code === 'invalid_file_type' ? 400 : 500;
+    return res.status(status).json({
+      ok: false,
+      error: e.code || 'upload_error',
+      ...(e.details ? { details: e.details } : {})
+    });
+  }
+});
 
-    const data = await resp.json();
+// ---------- API: EXTRA PROFILE PHOTOS ----------
+app.get('/api/profile/photos', async (req, res) => {
+  const username = String(req.query.username || '').trim();
+  if (!username) {
+    return res.status(400).json({ ok: false, error: 'missing_username' });
+  }
 
-    if (!data.success) {
-      return res.status(500).json({ ok: false, error: 'upload_failed', details: data });
+  try {
+    const user = await User.findOne({ username }).select('extraPhotos -_id').lean();
+    if (!user) {
+      return res.status(404).json({ ok: false, error: 'not_found' });
     }
 
     return res.json({
       ok: true,
-      imageUrl: data.data.url,
-      viewer: data.data.url_viewer
+      extraPhotos: (user.extraPhotos || []).filter(isImgBBUrl)
     });
-
   } catch (e) {
-    console.error("upload error", e);
-    return res.status(500).json({ ok: false, error: 'upload_error' });
+    console.error('get profile photos error', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+const receiveExtraProfilePhotos = upload.array('photos', MAX_EXTRA_PROFILE_PHOTOS);
+
+app.post('/api/profile/photos', (req, res) => {
+  receiveExtraProfilePhotos(req, res, async uploadError => {
+    if (uploadError) {
+      const isClientError = uploadError instanceof multer.MulterError;
+      return res.status(isClientError ? 400 : 500).json({
+        ok: false,
+        error: uploadError.code === 'LIMIT_FILE_SIZE'
+          ? 'file_too_large'
+          : uploadError.code === 'LIMIT_UNEXPECTED_FILE'
+            ? 'too_many_photos'
+            : 'upload_error',
+        maxPhotos: MAX_EXTRA_PROFILE_PHOTOS,
+        maxFileSize: MAX_IMAGE_SIZE
+      });
+    }
+
+    const username = String(req.body.username || '').trim();
+    const files = Array.isArray(req.files) ? req.files : [];
+
+    if (!username) {
+      return res.status(400).json({ ok: false, error: 'missing_username' });
+    }
+    if (!files.length) {
+      return res.status(400).json({ ok: false, error: 'no_file' });
+    }
+    if (files.some(file => !String(file.mimetype || '').startsWith('image/'))) {
+      return res.status(400).json({ ok: false, error: 'invalid_file_type' });
+    }
+
+    try {
+      const user = await User.findOne({ username });
+      if (!user) {
+        return res.status(404).json({ ok: false, error: 'not_found' });
+      }
+
+      const existingPhotos = Array.isArray(user.extraPhotos)
+        ? user.extraPhotos.filter(isImgBBUrl)
+        : [];
+      const availableSlots = MAX_EXTRA_PROFILE_PHOTOS - existingPhotos.length;
+
+      if (availableSlots <= 0 || files.length > availableSlots) {
+        return res.status(400).json({
+          ok: false,
+          error: 'profile_photo_limit',
+          maxPhotos: MAX_EXTRA_PROFILE_PHOTOS,
+          remainingSlots: Math.max(0, availableSlots)
+        });
+      }
+
+      const uploadedPhotos = [];
+      for (const file of files) {
+        const uploaded = await uploadImageToImgBB(file);
+        uploadedPhotos.push(uploaded.imageUrl);
+      }
+
+      user.extraPhotos = [...new Set([...existingPhotos, ...uploadedPhotos])];
+      await user.save();
+
+      return res.json({
+        ok: true,
+        uploadedPhotos,
+        extraPhotos: user.extraPhotos,
+        maxPhotos: MAX_EXTRA_PROFILE_PHOTOS
+      });
+    } catch (e) {
+      console.error('profile photo upload error', e);
+      const status = e.code === 'invalid_file_type' || e.code === 'no_file' ? 400 : 500;
+      return res.status(status).json({
+        ok: false,
+        error: e.code || 'upload_error',
+        ...(e.details ? { details: e.details } : {})
+      });
+    }
+  });
+});
+
+app.delete('/api/profile/photos', async (req, res) => {
+  const username = String(req.body.username || '').trim();
+  const photoUrl = String(req.body.photoUrl || '').trim();
+
+  if (!username || !photoUrl) {
+    return res.status(400).json({ ok: false, error: 'missing_fields' });
+  }
+
+  try {
+    const user = await User.findOneAndUpdate(
+      { username },
+      { $pull: { extraPhotos: photoUrl } },
+      { new: true }
+    ).select('extraPhotos -_id');
+
+    if (!user) {
+      return res.status(404).json({ ok: false, error: 'not_found' });
+    }
+
+    return res.json({
+      ok: true,
+      extraPhotos: (user.extraPhotos || []).filter(isImgBBUrl)
+    });
+  } catch (e) {
+    console.error('remove profile photo error', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });
 
@@ -1000,7 +1193,7 @@ app.post('/api/update-profile', async (req, res) => {
     const user = await User.findOneAndUpdate(
       { username },
       updates,
-      { new: true }
+      { new: true, runValidators: true }
     ).select('-passwordHash');
 
     if (!user) {
@@ -1152,7 +1345,8 @@ app.post('/api/register', async (req, res) => {
       user: {
         username: user.username,
         display: user.display,
-        imageUrl: user.imageUrl
+        imageUrl: user.imageUrl,
+        extraPhotos: user.extraPhotos || []
       }
     });
   } catch (e) {
@@ -1196,6 +1390,7 @@ app.post('/api/login', async (req, res) => {
         username: user.username,
         display: user.display,
         imageUrl: user.imageUrl,
+        extraPhotos: user.extraPhotos || [],
         color: user.color,
         language: user.language,
         role: user.role,
@@ -1316,7 +1511,7 @@ app.post("/api/dm/clear", async (req, res) => {
 app.get("/api/allUsers", async (req, res) => {
   try {
     const users = await User.find()
-      .select("username display imageUrl info wins losses color language age createdAt")
+      .select("username display imageUrl extraPhotos info wins losses color language age createdAt")
       .lean();
 
     res.json({ success: true, users });
@@ -1482,7 +1677,7 @@ io.on("connection", async (socket) => {
     if (!u) return;
 
     const onlineUsers = await User.find({ online: true })
-      .select('username display imageUrl info wins losses color language age createdAt -_id')
+      .select('username display imageUrl extraPhotos info wins losses color language age createdAt -_id')
       .lean();
 
     io.emit('presence', onlineUsers);
@@ -1497,7 +1692,7 @@ io.on("connection", async (socket) => {
     );
 
     const onlineUsers = await User.find({ online: true })
-      .select("username display imageUrl info wins losses color language age createdAt -_id")
+      .select("username display imageUrl extraPhotos info wins losses color language age createdAt -_id")
       .lean();
 
     io.emit("presence", onlineUsers);
@@ -1512,7 +1707,7 @@ io.on("connection", async (socket) => {
     );
 
     const onlineUsers = await User.find({ online: true })
-      .select("username display imageUrl info wins losses color language age createdAt -_id")
+      .select("username display imageUrl extraPhotos info wins losses color language age createdAt -_id")
       .lean();
 
     io.emit("presence", onlineUsers);
@@ -1858,7 +2053,7 @@ socket.on("editPublicMessage", async (data) => {
 
     if (u) {
       const onlineUsers = await User.find({ online: true })
-        .select('username display imageUrl info wins losses color language age createdAt -_id')
+        .select('username display imageUrl extraPhotos info wins losses color language age createdAt -_id')
         .lean();
 
       io.emit('presence', onlineUsers);

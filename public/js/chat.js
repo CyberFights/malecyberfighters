@@ -249,7 +249,10 @@ async function openRosterModal() {
 
 // OPEN PROFILE (hook into your existing profile modal)
 function openUserProfile(username) {
-  const user = (window.allUsers || []).find(u => u.username === username);
+  const sessionUser = typeof getSession === 'function' ? getSession() : null;
+  const user = (window.allUsers || []).find(u => u.username === username) ||
+    (window.users || []).find(u => u.username === username) ||
+    (sessionUser?.username === username ? sessionUser : null);
   if (!user) return;
 
   // Existing profile fields
@@ -262,6 +265,15 @@ function openUserProfile(username) {
   if ($('vpAge')) $('vpAge').textContent = user.age || "Unknown";
   if ($('vpColorBox')) $('vpColorBox').style.background = user.color || "#7fd8ff";
   if ($('vpAvatar')) $('vpAvatar').src = user.imageUrl || "https://via.placeholder.com/120?text=No+Image";
+  if (window.renderProfilePhotoGallery) {
+    window.renderProfilePhotoGallery($('vpExtraPhotos'), user.extraPhotos);
+  }
+
+  const currentUser = typeof getSession === 'function' ? getSession() : null;
+  const isSelf = currentUser?.username === user.username;
+  if ($('vpDMButton')) $('vpDMButton').style.display = isSelf ? 'none' : '';
+  if ($('vpBlockButton')) $('vpBlockButton').style.display = isSelf ? 'none' : '';
+  if ($('vpRelationshipSection')) $('vpRelationshipSection').style.display = isSelf ? 'none' : '';
 
   document.getElementById("vpBlockButton").onclick = async () => {
     const me = getSession();
@@ -329,6 +341,12 @@ $('vpClose')?.addEventListener('click', () => {
 
 // OPEN ROSTER POPUP
 $('btnRoster')?.addEventListener('click', openRosterModal);
+
+// Open the signed-in user's profile from the compact mobile header.
+$('btnMyProfile')?.addEventListener('click', () => {
+  const user = typeof getSession === 'function' ? getSession() : null;
+  if (user) openUserProfile(user.username);
+});
 
 // CLOSE ROSTER POPUP
 $('rosterClose')?.addEventListener('click', () => {
