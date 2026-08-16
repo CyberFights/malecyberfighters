@@ -295,11 +295,22 @@
         <input id="editLosses" type="number" placeholder="Losses">
       </div>
 
-      <div style="display:flex;gap:8px;align-items:center">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <input id="editImageFile" type="file" accept="image/*">
-        <button id="btnEditUploadImage" class="small-btn">Upload Image</button>
+        <button id="btnEditUploadImage" class="small-btn" type="button">Upload Main Image</button>
         <div id="editUploadStatus">No image uploaded</div>
       </div>
+
+      <section class="profile-photo-manager" aria-labelledby="editExtraPhotosLabel">
+        <div>
+          <strong id="editExtraPhotosLabel">Extra Profile Photos</strong>
+          <div class="small muted">Add up to 10 photos (5 MB each). Photos are saved as soon as they upload.</div>
+        </div>
+        <input id="editExtraPhotosFile" type="file" accept="image/*" multiple>
+        <button id="btnUploadExtraPhotos" class="small-btn" type="button">Upload Selected Photos</button>
+        <div id="editExtraPhotosStatus" class="small muted" role="status" aria-live="polite"></div>
+        <div id="editExtraPhotosPreview" class="profile-photo-grid profile-photo-editor-grid"></div>
+      </section>
 
       <div style="display:flex;justify-content:flex-end;gap:8px">
         <button id="editCancel" class="ghost">Cancel</button>
@@ -577,6 +588,12 @@
 
       </div>
     </div>
+
+    <!-- EXTRA PROFILE PHOTOS -->
+    <section class="profile-gallery-section" aria-labelledby="vpPhotosHeading">
+      <h3 id="vpPhotosHeading">Photos</h3>
+      <div id="vpExtraPhotos" class="profile-photo-grid"></div>
+    </section>
 
     <!-- STORIES + RELATIONSHIPS SIDE BY SIDE -->
     <div style="display:flex;gap:20px;margin-top:20px">

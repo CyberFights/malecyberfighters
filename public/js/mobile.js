@@ -82,6 +82,54 @@
     return `<div class="avatar-fallback" style="width:${size}px;height:${size}px;border-radius:50%">${escapeHtml(initials(name))}</div>`;
   }
 
+  function normalizeProfilePhotos(photos) {
+    if (!Array.isArray(photos)) return [];
+
+    const safeUrls = photos.map(photo => {
+      try {
+        const url = new URL(String(photo || "").trim());
+        const isImgBB = url.hostname === "ibb.co" || url.hostname.endsWith(".ibb.co");
+        return url.protocol === "https:" && isImgBB ? url.href : "";
+      } catch (_) {
+        return "";
+      }
+    }).filter(Boolean);
+
+    return [...new Set(safeUrls)];
+  }
+
+  function renderProfilePhotoGallery(container, photos, emptyText = "No extra photos yet") {
+    if (!container) return;
+    container.replaceChildren();
+
+    const urls = normalizeProfilePhotos(photos);
+    if (!urls.length) {
+      const empty = document.createElement("div");
+      empty.className = "small muted profile-photo-empty";
+      empty.textContent = emptyText;
+      container.appendChild(empty);
+      return;
+    }
+
+    urls.forEach((url, index) => {
+      const link = document.createElement("a");
+      link.className = "profile-photo-tile";
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.setAttribute("aria-label", `Open profile photo ${index + 1}`);
+
+      const image = document.createElement("img");
+      image.src = url;
+      image.alt = `Profile photo ${index + 1}`;
+      image.loading = "lazy";
+      image.referrerPolicy = "no-referrer";
+
+      link.appendChild(image);
+      container.appendChild(link);
+    });
+  }
+
   /* ---------------------------------------------------------------------
      Network helpers
      --------------------------------------------------------------------- */
@@ -862,6 +910,7 @@
 
     const vpAvatar = $("vpAvatar");
     if (vpAvatar) vpAvatar.innerHTML = avatarHtml(user, 96);
+    renderProfilePhotoGallery($("vpExtraPhotos"), user.extraPhotos);
 
     const colorBox = $("vpColorBox");
     if (colorBox) colorBox.style.background = user.color || "transparent";
@@ -1089,7 +1138,177 @@
   /* ---------------------------------------------------------------------
      Edit profile
      --------------------------------------------------------------------- */
+  const MAX_EXTRA_PROFILE_PHOTOS = 10;
+  const MAX_PROFILE_PHOTO_BYTES = 5 * 1024 * 1024;
   let editImageUrl = "";
+  let editExtraPhotos = [];
+  let editingProfileUsername = "";
+
+  function setExtraPhotoStatus(message, isError = false) {
+    const status = $("editExtraPhotosStatus");
+    if (!status) return;
+    status.textContent = message || "";
+    status.classList.toggle("profile-photo-error", !!isError);
+  }
+
+  function applyExtraPhotos(photos) {
+    editExtraPhotos = normalizeProfilePhotos(photos);
+    const session = getSession();
+    if (session && session.username === editingProfileUsername) {
+      setSession(Object.assign({}, session, { extraPhotos: [...editExtraPhotos] }));
+    }
+    mergeIntoDirectory([{
+      username: editingProfileUsername,
+      extraPhotos: [...editExtraPhotos]
+    }]);
+  }
+
+  function renderExtraPhotoEditor() {
+    const preview = $("editExtraPhotosPreview");
+    if (!preview) return;
+    preview.replaceChildren();
+
+    if (!editExtraPhotos.length) {
+      const empty = document.createElement("div");
+      empty.className = "small muted profile-photo-empty";
+      empty.textContent = "No extra photos uploaded yet";
+      preview.appendChild(empty);
+      return;
+    }
+
+    editExtraPhotos.forEach((url, index) => {
+      const tile = document.createElement("div");
+      tile.className = "profile-photo-tile profile-photo-edit-tile";
+
+      const image = document.createElement("img");
+      image.src = url;
+      image.alt = `Extra profile photo ${index + 1}`;
+      image.loading = "lazy";
+      image.referrerPolicy = "no-referrer";
+
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "profile-photo-remove";
+      remove.textContent = "×";
+      remove.title = "Remove photo from profile";
+      remove.setAttribute("aria-label", `Remove profile photo ${index + 1}`);
+      remove.addEventListener("click", () => removeExtraProfilePhoto(url, remove));
+
+      tile.append(image, remove);
+      preview.appendChild(tile);
+    });
+  }
+
+  async function refreshExtraProfilePhotos(username) {
+    try {
+      const data = await getJSON(`/api/profile/photos?username=${encodeURIComponent(username)}`);
+      if (!data?.ok || editingProfileUsername !== username) return;
+      applyExtraPhotos(data.extraPhotos);
+      renderExtraPhotoEditor();
+      setExtraPhotoStatus(`${editExtraPhotos.length} of ${MAX_EXTRA_PROFILE_PHOTOS} photos uploaded`);
+    } catch (error) {
+      console.error("Could not refresh profile photos", error);
+    }
+  }
+
+  async function removeExtraProfilePhoto(photoUrl, button) {
+    if (!editingProfileUsername || !photoUrl) return;
+    button.disabled = true;
+    setExtraPhotoStatus("Removing photo...");
+
+    try {
+      const response = await fetch("/api/profile/photos", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: editingProfileUsername, photoUrl })
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.ok) {
+        button.disabled = false;
+        setExtraPhotoStatus("The photo could not be removed.", true);
+        return;
+      }
+
+      applyExtraPhotos(data.extraPhotos);
+      renderExtraPhotoEditor();
+      setExtraPhotoStatus("Photo removed from your profile.");
+    } catch (error) {
+      console.error("Profile photo removal error", error);
+      button.disabled = false;
+      setExtraPhotoStatus("The photo could not be removed.", true);
+    }
+  }
+
+  function extraPhotoErrorMessage(data) {
+    if (data?.error === "profile_photo_limit" || data?.error === "too_many_photos") {
+      return `Profiles can have up to ${data.maxPhotos || MAX_EXTRA_PROFILE_PHOTOS} extra photos.`;
+    }
+    if (data?.error === "file_too_large") return "Each photo must be 5 MB or smaller.";
+    if (data?.error === "invalid_file_type") return "Please select image files only.";
+    if (data?.error === "no_imgbb_key") return "Photo uploads are not configured right now.";
+    return "The photos could not be uploaded. Please try again.";
+  }
+
+  async function uploadExtraProfilePhotos() {
+    const input = $("editExtraPhotosFile");
+    const button = $("btnUploadExtraPhotos");
+    const files = Array.from(input?.files || []);
+
+    if (!editingProfileUsername) {
+      setExtraPhotoStatus("Please log in before uploading photos.", true);
+      return;
+    }
+    if (!files.length) {
+      setExtraPhotoStatus("Select one or more photos first.", true);
+      return;
+    }
+    if (files.some(file => !String(file.type || "").startsWith("image/"))) {
+      setExtraPhotoStatus("Please select image files only.", true);
+      return;
+    }
+    if (files.some(file => file.size > MAX_PROFILE_PHOTO_BYTES)) {
+      setExtraPhotoStatus("Each photo must be 5 MB or smaller.", true);
+      return;
+    }
+
+    const remainingSlots = MAX_EXTRA_PROFILE_PHOTOS - editExtraPhotos.length;
+    if (files.length > remainingSlots) {
+      setExtraPhotoStatus(
+        `You can select ${remainingSlots} more photo${remainingSlots === 1 ? "" : "s"}.`,
+        true
+      );
+      return;
+    }
+
+    const form = new FormData();
+    form.append("username", editingProfileUsername);
+    files.forEach(file => form.append("photos", file));
+    button.disabled = true;
+    input.disabled = true;
+    setExtraPhotoStatus(`Uploading ${files.length} photo${files.length === 1 ? "" : "s"} to ImgBB...`);
+
+    try {
+      const response = await fetch("/api/profile/photos", { method: "POST", body: form });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.ok) {
+        setExtraPhotoStatus(extraPhotoErrorMessage(data), true);
+        return;
+      }
+
+      applyExtraPhotos(data.extraPhotos);
+      renderExtraPhotoEditor();
+      input.value = "";
+      setExtraPhotoStatus(
+        `${data.uploadedPhotos.length} photo${data.uploadedPhotos.length === 1 ? "" : "s"} uploaded and saved.`
+      );
+    } catch (error) {
+      console.error("Extra profile photo upload error", error);
+      setExtraPhotoStatus("The photos could not be uploaded. Please try again.", true);
+    } finally {
+      button.disabled = false;
+      input.disabled = false;
+    }
+  }
 
   function openEditProfile() {
     const s = getSession();
@@ -1107,8 +1326,16 @@
     setVal("editLosses", statOf(user, "losses"));
 
     editImageUrl = user.imageUrl || "";
+    editingProfileUsername = user.username;
+    editExtraPhotos = normalizeProfilePhotos(user.extraPhotos);
+
     const status = $("editUploadStatus");
-    if (status) status.textContent = editImageUrl ? "Current image kept" : "No image uploaded";
+    if (status) status.textContent = editImageUrl ? "Current main image kept" : "No main image uploaded";
+    const extraInput = $("editExtraPhotosFile");
+    if (extraInput) extraInput.value = "";
+    setExtraPhotoStatus(`${editExtraPhotos.length} of ${MAX_EXTRA_PROFILE_PHOTOS} photos uploaded`);
+    renderExtraPhotoEditor();
+    refreshExtraProfilePhotos(user.username);
 
     setError($("editError"), "");
     showId("modalEditProfile");
@@ -2025,6 +2252,10 @@
       const url = await uploadImage(file);
       if (url) { editImageUrl = url; status.textContent = "Uploaded"; }
       else if (status) status.textContent = "Upload failed";
+    });
+    on($("btnUploadExtraPhotos"), "click", e => {
+      e.preventDefault();
+      uploadExtraProfilePhotos();
     });
 
     on($("btnMyProfile"), "click", () => {

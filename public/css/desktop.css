@@ -1744,3 +1744,117 @@ input, select, textarea {
     to{ opacity:1; transform:translateY(0); }
   }
 }
+
+/* ============================================================
+   EXTRA PROFILE PHOTOS
+   ============================================================ */
+.profile-gallery-section,
+.self-profile-photos {
+  margin-top: 18px;
+}
+
+.profile-gallery-section h3,
+.self-profile-photos h3 {
+  margin: 0 0 10px;
+}
+
+.profile-photo-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid rgba(127, 216, 255, 0.28);
+  border-radius: 10px;
+  background: rgba(127, 216, 255, 0.06);
+}
+
+.profile-photo-manager > button {
+  align-self: flex-start;
+}
+
+.profile-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+.profile-photo-tile {
+  position: relative;
+  display: block;
+  min-width: 0;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border: 1px solid rgba(127, 216, 255, 0.32);
+  border-radius: 10px;
+  background: rgba(2, 8, 20, 0.8);
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.3);
+}
+
+.profile-photo-tile:hover,
+.profile-photo-tile:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 18px rgba(127, 216, 255, 0.34);
+}
+
+.profile-photo-tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-photo-edit-tile {
+  cursor: default;
+}
+
+.profile-photo-remove {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  border-radius: 50%;
+  background: rgba(185, 28, 28, 0.94);
+  color: #fff;
+  font-size: 21px;
+  line-height: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.profile-photo-remove:hover,
+.profile-photo-remove:focus-visible {
+  background: #ef4444;
+}
+
+.profile-photo-remove:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.profile-photo-empty {
+  grid-column: 1 / -1;
+  padding: 10px;
+  border: 1px dashed rgba(127, 216, 255, 0.22);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.profile-photo-error {
+  color: #fca5a5 !important;
+}
+
+@media (max-width: 560px) {
+  .profile-photo-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .profile-photo-manager > button {
+    width: 100%;
+  }
+}

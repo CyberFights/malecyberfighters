@@ -126,6 +126,57 @@ function escapeHtml(s){
   }[c]));
 }
 
+function normalizeProfilePhotos(photos) {
+  if (!Array.isArray(photos)) return [];
+
+  const safeUrls = photos.map(photo => {
+    try {
+      const url = new URL(String(photo || '').trim());
+      const isImgBB = url.hostname === 'ibb.co' || url.hostname.endsWith('.ibb.co');
+      return url.protocol === 'https:' && isImgBB ? url.href : '';
+    } catch (_) {
+      return '';
+    }
+  }).filter(Boolean);
+
+  return [...new Set(safeUrls)];
+}
+
+function renderProfilePhotoGallery(container, photos, emptyText = 'No extra photos yet') {
+  if (!container) return;
+  container.replaceChildren();
+
+  const urls = normalizeProfilePhotos(photos);
+  if (!urls.length) {
+    const empty = document.createElement('div');
+    empty.className = 'small muted profile-photo-empty';
+    empty.textContent = emptyText;
+    container.appendChild(empty);
+    return;
+  }
+
+  urls.forEach((url, index) => {
+    const link = document.createElement('a');
+    link.className = 'profile-photo-tile';
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.setAttribute('aria-label', `Open profile photo ${index + 1}`);
+
+    const image = document.createElement('img');
+    image.src = url;
+    image.alt = `Profile photo ${index + 1}`;
+    image.loading = 'lazy';
+    image.referrerPolicy = 'no-referrer';
+
+    link.appendChild(image);
+    container.appendChild(link);
+  });
+}
+
+window.normalizeProfilePhotos = normalizeProfilePhotos;
+window.renderProfilePhotoGallery = renderProfilePhotoGallery;
+
 const STORAGE_SESSION = 'cw_session_v1';
 const STORAGE_PUBLIC  = 'cw_public_v1';
 const STORAGE_DM_PREFIX = 'cw_dm_';
@@ -343,6 +394,10 @@ card.innerHTML = `
       </div>
     </div>
   </div>
+  <section class="self-profile-photos">
+    <h3>Photos</h3>
+    <div id="selfProfilePhotos" class="profile-photo-grid"></div>
+  </section>
   <div id="selfProfileStories"></div>
   <div id="selfProfilePendingStories"></div>
 
@@ -352,6 +407,12 @@ card.innerHTML = `
 `;
 
   card.classList.add('logged-in');
+
+  renderProfilePhotoGallery(
+    document.getElementById('selfProfilePhotos'),
+    user.extraPhotos,
+    'Upload extra photos from Edit Profile'
+  );
 
   // Load stories after containers exist in the DOM
   loadSelfStories(user.username);

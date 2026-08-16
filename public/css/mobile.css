@@ -1324,3 +1324,113 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
   .forum-reply-actions { align-items:flex-end; flex-direction:column; }
   .forum-reply-actions .forum-error { align-self:stretch; }
 }
+
+/* ============================================================
+   EXTRA PROFILE PHOTOS
+   ============================================================ */
+#modalEditProfile {
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  box-sizing: border-box;
+  background: rgba(2, 6, 23, 0.88);
+  z-index: 10000;
+}
+
+#modalEditProfile > div {
+  width: min(480px, 100%) !important;
+  max-height: 90vh;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+#modalViewProfile {
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+#modalViewProfile > div {
+  width: min(520px, 100%) !important;
+  box-sizing: border-box;
+}
+
+.profile-gallery-section,
+.self-profile-photos {
+  margin-top: 16px;
+}
+
+.profile-gallery-section h3,
+.self-profile-photos h3 {
+  margin: 0 0 10px;
+}
+
+.profile-photo-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: 10px;
+  background: rgba(56, 189, 248, 0.06);
+}
+
+.profile-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.profile-photo-tile {
+  position: relative;
+  display: block;
+  min-width: 0;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border: 1px solid rgba(56, 189, 248, 0.34);
+  border-radius: 9px;
+  background: rgba(2, 8, 20, 0.82);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+}
+
+.profile-photo-tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-photo-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  background: rgba(185, 28, 28, 0.95);
+  color: #fff;
+  font-size: 21px;
+  line-height: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+}
+
+.profile-photo-remove:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.profile-photo-empty {
+  grid-column: 1 / -1;
+  padding: 10px;
+  border: 1px dashed rgba(56, 189, 248, 0.24);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.profile-photo-error {
+  color: #fca5a5 !important;
+}

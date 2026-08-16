@@ -246,11 +246,22 @@
     </div>
 
     <div class="field">
-      <label for="editImageFile">Profile image</label>
+      <label for="editImageFile">Main profile image</label>
       <input id="editImageFile" type="file" accept="image/*">
-      <button id="btnEditUploadImage" class="small-btn" type="button" style="margin-top:8px">Upload Image</button>
+      <button id="btnEditUploadImage" class="small-btn" type="button" style="margin-top:8px">Upload Main Image</button>
       <div id="editUploadStatus" class="small muted" style="margin-top:6px">No image uploaded</div>
     </div>
+
+    <section class="profile-photo-manager" aria-labelledby="editExtraPhotosLabel">
+      <div>
+        <strong id="editExtraPhotosLabel">Extra Profile Photos</strong>
+        <div class="small muted">Add up to 10 photos (5 MB each). Photos are saved as soon as they upload.</div>
+      </div>
+      <input id="editExtraPhotosFile" type="file" accept="image/*" multiple>
+      <button id="btnUploadExtraPhotos" class="small-btn" type="button">Upload Selected Photos</button>
+      <div id="editExtraPhotosStatus" class="small muted" role="status" aria-live="polite"></div>
+      <div id="editExtraPhotosPreview" class="profile-photo-grid profile-photo-editor-grid"></div>
+    </section>
 
     <div id="editError" class="error"></div>
 
@@ -461,6 +472,11 @@
         <div id="vpLang">—</div>
       </div>
     </div>
+
+    <section class="profile-gallery-section" aria-labelledby="vpPhotosHeading">
+      <h4 id="vpPhotosHeading">Photos</h4>
+      <div id="vpExtraPhotos" class="profile-photo-grid"></div>
+    </section>
 
     <h4>Stories</h4>
     <div id="profileStories"></div>
