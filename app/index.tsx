@@ -71,8 +71,8 @@ const FALLBACK: RepoPayload = {
 async function getRepository(): Promise<RepoPayload> {
   const headers = { Accept: 'application/vnd.github+json' };
   const [repoResponse, issueResponse] = await Promise.all([
-    fetch('https://api.github.com/repos/malecyberfighters/malecyberfighters', { headers }),
-    fetch('https://api.github.com/repos/malecyberfighters/malecyberfighters/issues?state=open&per_page=3', { headers }),
+    fetch('https://api.github.com/repos/CyberFights/malecyberfighters', { headers }),
+    fetch('https://api.github.com/repos/CyberFights/malecyberfighters/issues?state=open&per_page=3', { headers }),
   ]);
 
   if (!repoResponse.ok) throw new Error('GitHub data is temporarily unavailable');
