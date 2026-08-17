@@ -1769,3 +1769,103 @@ h3{
     transition: none;
   }
 }
+
+/* ============================================================
+   3D PRIMARY ACTION BUTTONS
+   The main navigation controls use a beveled face, a solid lower edge,
+   and a cast shadow so they feel raised and visibly depress on tap.
+   ============================================================ */
+.actions > button {
+  --action-depth: #00394c;
+  --action-shadow: rgba(0, 0, 0, 0.58);
+  --action-glow: rgba(0, 229, 255, 0.42);
+  position: relative;
+  isolation: isolate;
+  border: 1px solid #40eaff;
+  border-top-color: #b8fbff;
+  border-bottom-color: #00546b;
+  background-color: #008ba8;
+  background-image:
+    linear-gradient(112deg, transparent 16%, rgba(255, 255, 255, 0.32) 36%, transparent 53%),
+    linear-gradient(180deg, #20d7e9 0%, #0097b7 48%, #00677f 72%, #004e65 100%);
+  background-position: 120% 0, 0 0;
+  background-size: 220% 100%, 100% 100%;
+  background-repeat: no-repeat;
+  color: #f4fdff;
+  letter-spacing: 0.025em;
+  text-shadow: 0 1px 0 #002b38, 0 0 7px rgba(215, 251, 255, 0.46);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.48),
+    inset 2px 0 0 rgba(255, 255, 255, 0.1),
+    inset -2px 0 0 rgba(0, 25, 40, 0.32),
+    inset 0 -3px 0 rgba(0, 31, 44, 0.58),
+    0 6px 0 var(--action-depth),
+    0 9px 13px var(--action-shadow),
+    0 0 17px var(--action-glow);
+  transform: translateY(-3px);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    filter 160ms ease,
+    background-position 220ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.actions > button.ghost {
+  --action-depth: #020a18;
+  --action-glow: rgba(83, 195, 255, 0.28);
+  border-color: #459bc3;
+  border-top-color: #a8ddf4;
+  border-bottom-color: #102d43;
+  background-color: #10283d;
+  background-image:
+    linear-gradient(112deg, transparent 16%, rgba(255, 255, 255, 0.2) 36%, transparent 53%),
+    linear-gradient(180deg, #274c67 0%, #17354d 48%, #0b2438 73%, #071827 100%);
+  color: #dff7ff;
+}
+
+@media (hover: hover) {
+  .actions > button:hover:not(:disabled) {
+    filter: brightness(1.13) saturate(1.12);
+    background-position: -35% 0, 0 0;
+    transform: translateY(-5px);
+    box-shadow:
+      inset 0 2px 0 rgba(255, 255, 255, 0.56),
+      inset 2px 0 0 rgba(255, 255, 255, 0.12),
+      inset -2px 0 0 rgba(0, 25, 40, 0.3),
+      inset 0 -3px 0 rgba(0, 31, 44, 0.56),
+      0 8px 0 var(--action-depth),
+      0 13px 18px var(--action-shadow),
+      0 0 24px var(--action-glow);
+  }
+}
+
+.actions > button:active:not(:disabled) {
+  filter: brightness(0.94);
+  transform: translateY(3px);
+  box-shadow:
+    inset 0 3px 6px rgba(0, 20, 34, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 1px 0 var(--action-depth),
+    0 3px 5px rgba(0, 0, 0, 0.42),
+    0 0 10px var(--action-glow);
+}
+
+.actions > button:focus-visible {
+  outline: 2px solid #e5fcff;
+  outline-offset: 5px;
+}
+
+.actions > button:disabled {
+  transform: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 2px 0 var(--action-depth),
+    0 4px 7px rgba(0, 0, 0, 0.34);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .actions > button {
+    transition: none;
+  }
+}
