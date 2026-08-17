@@ -1,239 +1,159 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { Platform } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import * as Haptics from 'expo-haptics';
 import {
-  Activity,
-  AlertCircle,
-  ArrowUpRight,
-  Bell,
-  BookOpen,
-  CheckCircle2,
+  Button,
+  Card,
   ChevronRight,
-  CircleDot,
-  Code2,
-  GitBranch,
-  GitPullRequest,
-  Github,
-  CircleAlert,
-  ShieldCheck,
+  Circle,
+  H2,
+  Heart,
+  Home as HomeIcon,
+  Image,
+  Input,
+  Paragraph,
+  Radio,
+  ScrollView,
+  SizableText,
+  Sparkles,
   Star,
-  Users,
+  Sword,
+  Swords,
+  Trophy,
+  UserRound,
   XStack,
   YStack,
-  ScrollView,
-  Card,
-  Button,
-  H1,
-  H3,
-  Paragraph,
-  SizableText,
-  Separator,
 } from '@blinkdotnew/mobile-ui';
 
-type Repo = {
-  name: string;
-  description: string;
-  stars: number;
-  forks: number;
-  watchers: number;
-  openIssues: number;
-  language: string;
-  updated: string;
-  visibility: string;
-};
+const fighters = [
+  { name: 'Neon Ronin', className: 'Blade runner', rating: '2,480', color: '#FF4D8D', image: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?auto=format&fit=crop&w=500&q=85' },
+  { name: 'Null Vector', className: 'Code breaker', rating: '2,325', color: '#8B5CF6', image: 'https://images.unsplash.com/photo-1519608487953-e999c86e7455?auto=format&fit=crop&w=500&q=85' },
+  { name: 'Chrome Saint', className: 'Signal monk', rating: '2,190', color: '#00D4B8', image: 'https://images.unsplash.com/photo-1534791547706-9a7f0f5f2f57?auto=format&fit=crop&w=500&q=85' },
+];
 
-type Issue = { title: string; number: number; labels: string[]; age: string };
+const fights = [
+  { title: 'Midnight Protocol', meta: '2v2 · Tokyo Sector', reward: '450 XP', live: true },
+  { title: 'Firewall Cathedral', meta: 'Ranked duel · 3 min', reward: '680 XP', live: false },
+];
 
-type RepoPayload = {
-  repo: Repo;
-  issues: Issue[];
-};
-
-const FALLBACK: RepoPayload = {
-  repo: {
-    name: 'malecyberfighters',
-    description: 'CyberFighters project hub for code, collaboration, and open-source experiments.',
-    stars: 128,
-    forks: 24,
-    watchers: 19,
-    openIssues: 7,
-    language: 'TypeScript',
-    updated: 'Today, 09:42',
-    visibility: 'Public',
-  },
-  issues: [
-    { title: 'Polish the mobile command center experience', number: 42, labels: ['enhancement'], age: '2h ago' },
-    { title: 'Document local development setup', number: 39, labels: ['documentation'], age: 'yesterday' },
-    { title: 'Add release checklist for contributors', number: 36, labels: ['process'], age: '3d ago' },
-  ],
-};
-
-async function getRepository(): Promise<RepoPayload> {
-  const headers = { Accept: 'application/vnd.github+json' };
-  const [repoResponse, issueResponse] = await Promise.all([
-    fetch('https://api.github.com/repos/CyberFights/malecyberfighters', { headers }),
-    fetch('https://api.github.com/repos/CyberFights/malecyberfighters/issues?state=open&per_page=3', { headers }),
-  ]);
-
-  if (!repoResponse.ok) throw new Error('GitHub data is temporarily unavailable');
-  const repo = await repoResponse.json();
-  const issues = issueResponse.ok ? await issueResponse.json() : [];
-  return {
-    repo: {
-      name: repo.name,
-      description: repo.description || FALLBACK.repo.description,
-      stars: repo.stargazers_count,
-      forks: repo.forks_count,
-      watchers: repo.subscribers_count || repo.watchers_count,
-      openIssues: repo.open_issues_count,
-      language: repo.language || 'Mixed stack',
-      updated: new Date(repo.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-      visibility: repo.private ? 'Private' : 'Public',
-    },
-    issues: issues.filter((item: { pull_request?: unknown }) => !item.pull_request).map((item: { title: string; number: number; labels: { name: string }[] }) => ({
-      title: item.title,
-      number: item.number,
-      labels: item.labels.slice(0, 1).map((label) => label.name),
-      age: 'open now',
-    })),
-  };
-}
-
-function StatCard({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
-  return (
-    <Card bordered backgroundColor="#111D35" borderColor="#263A5D" padding="$3" flex={1} minWidth={140}>
-      <XStack alignItems="center" gap="$2">
-        {icon}
-        <SizableText color="#89A2C7" size="$2">{label}</SizableText>
-      </XStack>
-      <SizableText color="#F2F7FF" size="$7" fontWeight="800" marginTop="$2">{value}</SizableText>
-    </Card>
-  );
+async function tapFeedback() {
+  if (Platform.OS !== 'web') await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 }
 
 export default function Home() {
-  const [tab, setTab] = useState<'overview' | 'issues'>('overview');
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['github-repository'],
-    queryFn: getRepository,
-    placeholderData: FALLBACK,
-  });
-  const content = data || FALLBACK;
-  const repo = content.repo;
+  const [activeTab, setActiveTab] = useState('Arena');
+  const [joined, setJoined] = useState(false);
+  const [search, setSearch] = useState('');
 
-  const feedback = () => {
-    if (Platform.OS !== 'web') {
-      // Native haptics can be added without affecting the web preview.
-    }
+  const joinFight = async () => {
+    await tapFeedback();
+    setJoined(true);
   };
 
   return (
-    <YStack flex={1} backgroundColor="#08111F">
-      <ScrollView contentContainerStyle={{ paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
-        <YStack paddingHorizontal="$4" paddingTop="$6" gap="$5" maxWidth={720} width="100%" alignSelf="center">
-          <XStack justifyContent="space-between" alignItems="center">
+    <YStack flex={1} backgroundColor="#090A12">
+      <ScrollView flex={1} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 36 }}>
+        <YStack paddingHorizontal="$4" paddingTop="$6" gap="$5">
+          <XStack alignItems="center" justifyContent="space-between">
             <XStack alignItems="center" gap="$3">
-              <YStack width={42} height={42} borderRadius="$4" backgroundColor="#12375A" alignItems="center" justifyContent="center">
-                <Github size={24} color="#63D9FF" />
-              </YStack>
+              <Circle size={42} backgroundColor="#171322" borderWidth={1} borderColor="#FF4D8D">
+                <SizableText color="#FF4D8D" size="$5" fontWeight="800">M</SizableText>
+              </Circle>
               <YStack>
-                <SizableText color="#7693BB" size="$2" fontWeight="700" letterSpacing={1.5}>CYBERFIGHTERS</SizableText>
-                <SizableText color="#F2F7FF" size="$5" fontWeight="800">Mobile Hub</SizableText>
+                <SizableText color="#7C7F93" size="$2" fontWeight="700" letterSpacing={1.5}>WELCOME BACK</SizableText>
+                <SizableText color="#F8F7FF" size="$5" fontWeight="800">MALCOLM // 07</SizableText>
               </YStack>
             </XStack>
-            <Button circular size="$4" chromeless backgroundColor="#111D35" onPress={feedback} accessibilityLabel="Notifications">
-              <Bell size={20} color="#9AB4D8" />
-            </Button>
+            <Button chromeless circular size="$4" icon={<Heart size={21} color="#F8F7FF" />} accessibilityLabel="Notifications" />
           </XStack>
 
           <YStack gap="$2">
-            <XStack alignItems="center" gap="$2">
-              <SizableText color="#63D9FF" size="$3" fontWeight="700">REPOSITORY OVERVIEW</SizableText>
-              <YStack backgroundColor="#143A38" borderRadius="$2" paddingHorizontal="$2" paddingVertical="$1"><SizableText color="#6CE7C2" size="$2" fontWeight="700">{repo.visibility}</SizableText></YStack>
-            </XStack>
-            <H1 color="#F2F7FF" fontSize={32} lineHeight={38} fontWeight="800">{repo.name}</H1>
-            <Paragraph color="#9AB4D8" size="$4" lineHeight={23}>{repo.description}</Paragraph>
+            <SizableText color="#FF4D8D" size="$2" fontWeight="800" letterSpacing={2}>CYBERFIGHTS / 03</SizableText>
+            <H2 color="#F8F7FF" fontSize={32} lineHeight={36} fontWeight="900" letterSpacing={-0.8}>THE ARENA IS<br />AWAITING.</H2>
+            <Paragraph color="#9A9CAF" size="$4" maxWidth={310} lineHeight={22}>Deploy your fighter, break the firewall, and climb the global circuit.</Paragraph>
           </YStack>
 
-          <Card bordered backgroundColor="#0D1A2E" borderColor="#1B3556" padding="$4" gap="$4">
-            <XStack justifyContent="space-between" alignItems="center">
-              <XStack alignItems="center" gap="$2">
-                <Activity size={18} color="#63D9FF" />
-                <SizableText color="#F2F7FF" fontWeight="700">Workspace pulse</SizableText>
+          <Card backgroundColor="#141522" borderWidth={1} borderColor="#2C2D40" borderRadius="$5" overflow="hidden">
+            <YStack padding="$4" gap="$4">
+              <XStack justifyContent="space-between" alignItems="center">
+                <XStack alignItems="center" gap="$2">
+                  <Circle size={15} backgroundColor="#00D4B8" />
+                  <SizableText color="#00D4B8" size="$2" fontWeight="800" letterSpacing={1.2}>LIVE CHALLENGE</SizableText>
+                </XStack>
+                <XStack backgroundColor="#2A1829" paddingHorizontal="$2" paddingVertical="$1" borderRadius="$2"><SizableText color="#FF4D8D" size="$2" fontWeight="800">RANKED</SizableText></XStack>
               </XStack>
+              <YStack gap="$1">
+                <SizableText color="#F8F7FF" size="$7" fontWeight="800">Blackout Relay</SizableText>
+                <SizableText color="#85889C" size="$3">Enter before the signal drops in 04:28</SizableText>
+              </YStack>
               <XStack alignItems="center" gap="$2">
-                <YStack width={7} height={7} borderRadius={7} backgroundColor={isError ? '#F4B860' : '#63E6BE'} />
-                <SizableText color="#89A2C7" size="$2">{isLoading ? 'Syncing' : isError ? 'Cached' : 'Live'}</SizableText>
+                <Trophy size={17} color="#F5B942" />
+                <SizableText color="#F5B942" size="$3" fontWeight="700">1,200 XP bounty</SizableText>
+                <SizableText color="#626579" size="$3">·</SizableText>
+                <SizableText color="#85889C" size="$3">128 fighters queued</SizableText>
               </XStack>
-            </XStack>
-            <XStack gap="$3">
-              <YStack flex={1} height={64} backgroundColor="#102844" borderRadius="$3" padding="$3" justifyContent="space-between">
-                <SizableText color="#7E9BC2" size="$2">Last updated</SizableText>
-                <SizableText color="#F2F7FF" fontWeight="700">{repo.updated}</SizableText>
-              </YStack>
-              <YStack flex={1} height={64} backgroundColor="#102844" borderRadius="$3" padding="$3" justifyContent="space-between">
-                <SizableText color="#7E9BC2" size="$2">Primary stack</SizableText>
-                <XStack alignItems="center" gap="$2"><Code2 size={14} color="#F4B860" /><SizableText color="#F2F7FF" fontWeight="700">{repo.language}</SizableText></XStack>
-              </YStack>
-            </XStack>
+              <Button height={50} backgroundColor={joined ? '#00A88F' : '#FF4D8D'} color="#0C0B13" fontWeight="800" fontSize="$4" borderRadius="$3" onPress={joinFight} pressStyle={{ opacity: 0.82, scale: 0.98 }}>
+                {joined ? 'QUEUE CONFIRMED' : 'ENTER THE FIGHT'}
+              </Button>
+            </YStack>
           </Card>
 
-          <XStack gap="$3" flexWrap="wrap">
-            <StatCard icon={<Star size={16} color="#F4B860" />} label="Stars" value={repo.stars.toLocaleString()} />
-            <StatCard icon={<GitBranch size={16} color="#63D9FF" />} label="Forks" value={repo.forks.toLocaleString()} />
-            <StatCard icon={<CircleAlert size={16} color="#6CE7C2" />} label="Open issues" value={repo.openIssues.toLocaleString()} />
+          <XStack justifyContent="space-between" alignItems="center">
+            <SizableText color="#F8F7FF" size="$6" fontWeight="800">Featured fighters</SizableText>
+            <Button chromeless paddingHorizontal="$1" color="#FF4D8D" fontSize="$3" onPress={tapFeedback} iconAfter={<ChevronRight size={15} color="#FF4D8D" />}>View all</Button>
           </XStack>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
+            {fighters.map((fighter) => (
+              <Button key={fighter.name} unstyled padding={0} width={174} height={218} backgroundColor="#151624" borderRadius="$4" overflow="hidden" borderWidth={1} borderColor="#292B3D" onPress={tapFeedback} pressStyle={{ opacity: 0.86, scale: 0.97 }}>
+                <YStack flex={1} width="100%">
+                  <Image source={{ uri: fighter.image }} width="100%" height={126} objectFit="cover" />
+                  <YStack padding="$3" gap="$1">
+                    <SizableText color="#F8F7FF" size="$4" fontWeight="800">{fighter.name}</SizableText>
+                    <SizableText color="#85889C" size="$2">{fighter.className}</SizableText>
+                    <XStack alignItems="center" gap="$1" marginTop="$1"><Star size={13} color={fighter.color} fill={fighter.color} /><SizableText color={fighter.color} size="$2" fontWeight="800">{fighter.rating}</SizableText></XStack>
+                  </YStack>
+                </YStack>
+              </Button>
+            ))}
+          </ScrollView>
 
-          <XStack backgroundColor="#0D1A2E" borderRadius="$4" padding="$1" gap="$1">
-            <Button flex={1} height={44} backgroundColor={tab === 'overview' ? '#1C4B70' : 'transparent'} color={tab === 'overview' ? '#F2F7FF' : '#89A2C7'} onPress={() => { setTab('overview'); feedback(); }}>
-              <BookOpen size={16} /> Overview
-            </Button>
-            <Button flex={1} height={44} backgroundColor={tab === 'issues' ? '#1C4B70' : 'transparent'} color={tab === 'issues' ? '#F2F7FF' : '#89A2C7'} onPress={() => { setTab('issues'); feedback(); }}>
-              <CircleDot size={16} /> Issues {repo.openIssues > 0 ? `· ${repo.openIssues}` : ''}
-            </Button>
+          <XStack justifyContent="space-between" alignItems="center" marginTop="$2">
+            <SizableText color="#F8F7FF" size="$6" fontWeight="800">Active fights</SizableText>
+            <XStack backgroundColor="#142B2B" paddingHorizontal="$2" paddingVertical="$1" borderRadius="$2"><SizableText color="#00D4B8" size="$2" fontWeight="800">{fights.length} OPEN</SizableText></XStack>
           </XStack>
-
-          {tab === 'overview' ? (
-            <YStack gap="$3">
-              <XStack justifyContent="space-between" alignItems="center">
-                <H3 color="#F2F7FF" fontWeight="800">Quick actions</H3>
-                <SizableText color="#63D9FF" size="$2">{repo.watchers} watching</SizableText>
-              </XStack>
-              <Card bordered backgroundColor="#101F35" borderColor="#213B60" padding="$1">
-                <Button chromeless justifyContent="flex-start" height={56} paddingHorizontal="$3" onPress={feedback}>
-                  <GitPullRequest size={19} color="#6CE7C2" /><YStack flex={1} alignItems="flex-start" marginLeft="$3"><SizableText color="#F2F7FF" fontWeight="700">Review pull requests</SizableText><SizableText color="#89A2C7" size="$2">Keep collaboration moving</SizableText></YStack><ChevronRight size={18} color="#58769E" />
-                </Button>
-                <Separator borderColor="#213B60" />
-                <Button chromeless justifyContent="flex-start" height={56} paddingHorizontal="$3" onPress={() => { setTab('issues'); feedback(); }}>
-                  <AlertCircle size={19} color="#F4B860" /><YStack flex={1} alignItems="flex-start" marginLeft="$3"><SizableText color="#F2F7FF" fontWeight="700">Triage open issues</SizableText><SizableText color="#89A2C7" size="$2">{repo.openIssues} threads need attention</SizableText></YStack><ChevronRight size={18} color="#58769E" />
-                </Button>
-                <Separator borderColor="#213B60" />
-                <Button chromeless justifyContent="flex-start" height={56} paddingHorizontal="$3" onPress={feedback}>
-                  <ShieldCheck size={19} color="#63D9FF" /><YStack flex={1} alignItems="flex-start" marginLeft="$3"><SizableText color="#F2F7FF" fontWeight="700">Open project security</SizableText><SizableText color="#89A2C7" size="$2">Check the repository posture</SizableText></YStack><ArrowUpRight size={18} color="#58769E" />
-                </Button>
+          <YStack gap="$3">
+            {fights.map((fight) => (
+              <Card key={fight.title} backgroundColor="#11121E" borderWidth={1} borderColor="#27293A" borderRadius="$4">
+                <Card.Header padded>
+                  <XStack alignItems="center" justifyContent="space-between">
+                    <XStack alignItems="center" gap="$3" flex={1}>
+                      <Circle size={40} backgroundColor={fight.live ? '#2A1829' : '#19233A'}><Swords size={19} color={fight.live ? '#FF4D8D' : '#8B9FFF'} /></Circle>
+                      <YStack flex={1} gap="$1"><SizableText color="#F8F7FF" size="$4" fontWeight="700">{fight.title}</SizableText><SizableText color="#85889C" size="$2">{fight.meta}</SizableText></YStack>
+                    </XStack>
+                    <YStack alignItems="flex-end" gap="$1"><SizableText color="#F5B942" size="$3" fontWeight="800">{fight.reward}</SizableText><SizableText color={fight.live ? '#00D4B8' : '#626579'} size="$2" fontWeight="700">{fight.live ? 'LIVE' : 'STARTING SOON'}</SizableText></YStack>
+                  </XStack>
+                </Card.Header>
               </Card>
-            </YStack>
-          ) : (
-            <YStack gap="$3">
-              <XStack justifyContent="space-between" alignItems="center">
-                <H3 color="#F2F7FF" fontWeight="800">Recent issues</H3>
-                <Button chromeless paddingHorizontal="$2" onPress={() => refetch()}><SizableText color="#63D9FF" size="$3">Refresh</SizableText></Button>
-              </XStack>
-              {content.issues.length === 0 ? (
-                <Card backgroundColor="#102844" padding="$4" alignItems="center" gap="$2"><CheckCircle2 size={32} color="#6CE7C2" /><SizableText color="#F2F7FF" fontWeight="700">All clear</SizableText><Paragraph color="#89A2C7" textAlign="center">No open issues are showing right now.</Paragraph></Card>
-              ) : content.issues.map((issue) => (
-                <Card key={issue.number} bordered backgroundColor="#101F35" borderColor="#213B60" padding="$4" gap="$3">
-                  <XStack justifyContent="space-between" alignItems="flex-start" gap="$3"><XStack flex={1} gap="$2"><CircleDot size={18} color="#F4B860" marginTop="$1" /><SizableText color="#F2F7FF" fontWeight="700" size="$4">{issue.title}</SizableText></XStack><SizableText color="#6485AE" size="$2">#{issue.number}</SizableText></XStack>
-                  <XStack alignItems="center" gap="$2"><YStack backgroundColor="#17334A" borderRadius="$2" paddingHorizontal="$2" paddingVertical="$1"><SizableText color="#63D9FF" size="$2" fontWeight="700">{issue.labels[0] || 'open'}</SizableText></YStack><SizableText color="#7895BB" size="$2">{issue.age}</SizableText></XStack>
-                </Card>
-              ))}
-            </YStack>
-          )}
+            ))}
+          </YStack>
 
-          {isError && <Button chromeless onPress={() => refetch()}><SizableText color="#F4B860" size="$2">GitHub is rate-limited. Showing cached project data — tap to retry.</SizableText></Button>}
-          <XStack alignItems="center" gap="$2" justifyContent="center" paddingTop="$2"><Users size={14} color="#58769E" /><SizableText color="#58769E" size="$2">Built for the malecyberfighters crew</SizableText></XStack>
+          <Card backgroundColor="#10111C" borderWidth={1} borderColor="#27293A" borderRadius="$4">
+            <Card.Header padded><XStack alignItems="center" gap="$3"><Circle size={38} backgroundColor="#211B32"><Sparkles size={18} color="#B18CFF" /></Circle><YStack flex={1}><SizableText color="#F8F7FF" size="$3" fontWeight="800">Your next unlock</SizableText><SizableText color="#85889C" size="$2">420 XP to unlock the Spectre skin</SizableText></YStack><SizableText color="#B18CFF" size="$3" fontWeight="800">72%</SizableText></XStack></Card.Header>
+          </Card>
         </YStack>
       </ScrollView>
+
+      <YStack paddingHorizontal="$4" paddingTop="$3" paddingBottom="$4" backgroundColor="#0E0F19" borderTopWidth={1} borderColor="#202131" gap="$3">
+        <Input value={search} onChangeText={setSearch} placeholder="Search the circuit" placeholderTextColor="#626579" backgroundColor="#181A29" borderWidth={0} borderRadius="$3" height={44} color="#F8F7FF" paddingHorizontal="$3" />
+        <XStack justifyContent="space-around" alignItems="center">
+          {[
+            { label: 'Arena', icon: <HomeIcon size={19} /> },
+            { label: 'Fighters', icon: <UserRound size={19} /> },
+            { label: 'Rankings', icon: <Trophy size={19} /> },
+            { label: 'Profile', icon: <Sword size={19} /> },
+          ].map((item) => <Button key={item.label} chromeless onPress={() => { setActiveTab(item.label); tapFeedback(); }} color={activeTab === item.label ? '#FF4D8D' : '#626579'} icon={item.icon} fontSize="$2" fontWeight="700" minHeight={44}>{item.label}</Button>)}
+        </XStack>
+      </YStack>
     </YStack>
   );
 }

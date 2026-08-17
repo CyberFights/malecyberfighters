@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "blink-expo-starter",
-    "slug": "blink-expo-starter",
+    "name": "MaleCyberFighters",
+    "slug": "malecyberfighters",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "blinkexpo",
+    "scheme": "cyberfights",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
