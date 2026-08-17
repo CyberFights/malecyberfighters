@@ -1776,8 +1776,23 @@ input, select, textarea {
 .profile-photo-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
-  gap: 10px;
+  gap: 14px;
   width: 100%;
+}
+
+/* --- Holographic octagonal frames ---------------------------------- */
+.profile-photo-grid {
+  --holo-cut: 24%;
+  --holo-octagon: polygon(
+    var(--holo-cut) 0%,
+    calc(100% - var(--holo-cut)) 0%,
+    100% var(--holo-cut),
+    100% calc(100% - var(--holo-cut)),
+    calc(100% - var(--holo-cut)) 100%,
+    var(--holo-cut) 100%,
+    0% calc(100% - var(--holo-cut)),
+    0% var(--holo-cut)
+  );
 }
 
 .profile-photo-tile {
@@ -1785,24 +1800,153 @@ input, select, textarea {
   display: block;
   min-width: 0;
   aspect-ratio: 1 / 1;
-  overflow: hidden;
-  border: 1px solid rgba(127, 216, 255, 0.32);
-  border-radius: 10px;
-  background: rgba(2, 8, 20, 0.8);
-  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.3);
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  isolation: isolate;
+  filter: drop-shadow(0 5px 14px rgba(0, 0, 0, 0.42))
+          drop-shadow(0 0 8px rgba(127, 216, 255, 0.22));
+  transition: transform 0.25s ease, filter 0.25s ease;
 }
 
-.profile-photo-tile:hover,
-.profile-photo-tile:focus-visible {
-  border-color: var(--accent);
-  box-shadow: 0 0 18px rgba(127, 216, 255, 0.34);
+/* Outer holographic frame */
+.profile-photo-tile::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  z-index: 0;
+  clip-path: var(--holo-octagon, none);
+  background: conic-gradient(
+    from var(--holo-angle, 0deg),
+    #7fd8ff, #a78bfa, #ff6ad5, #ffd166, #4ade80, #22d3ee, #7fd8ff
+  );
+  background-size: 100% 100%;
+  animation: holoFrameSpin var(--holo-speed, 9s) linear infinite;
+  animation-delay: var(--holo-delay, 0s);
+  opacity: 0.92;
+}
+
+/* Inner bevel so the frame reads as a hard-edged octagon ring */
+.profile-photo-tile::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: 1;
+  pointer-events: none;
+  clip-path: var(--holo-octagon, none);
+  background: linear-gradient(
+    118deg,
+    transparent 34%,
+    rgba(255, 255, 255, 0.42) 47%,
+    rgba(255, 255, 255, 0.08) 53%,
+    transparent 66%
+  );
+  background-size: 260% 260%;
+  mix-blend-mode: screen;
+  animation: holoSheen var(--holo-sheen-speed, 6s) ease-in-out infinite;
+  animation-delay: var(--holo-delay, 0s);
 }
 
 .profile-photo-tile img {
+  position: relative;
+  z-index: 2;
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  clip-path: var(--holo-octagon, none);
+  background: rgba(2, 8, 20, 0.85);
+}
+
+.profile-photo-tile:hover,
+.profile-photo-tile:focus-visible {
+  transform: translateY(-2px) scale(1.02);
+  filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.5))
+          drop-shadow(0 0 16px rgba(127, 216, 255, 0.6));
+  outline: none;
+}
+
+.profile-photo-tile:hover::before,
+.profile-photo-tile:focus-visible::before {
+  opacity: 1;
+  animation-duration: 3.2s;
+}
+
+/* Every tile gets its own holographic signature */
+.profile-photo-tile:nth-child(6n + 1) {
+  --holo-cut: 22%;
+  --holo-speed: 9s;
+  --holo-sheen-speed: 6s;
+  --holo-delay: 0s;
+  --holo-hue: 0deg;
+}
+.profile-photo-tile:nth-child(6n + 2) {
+  --holo-cut: 26%;
+  --holo-speed: 12s;
+  --holo-sheen-speed: 7.5s;
+  --holo-delay: -1.4s;
+  --holo-hue: 55deg;
+}
+.profile-photo-tile:nth-child(6n + 3) {
+  --holo-cut: 19%;
+  --holo-speed: 7.5s;
+  --holo-sheen-speed: 5.2s;
+  --holo-delay: -2.8s;
+  --holo-hue: 120deg;
+}
+.profile-photo-tile:nth-child(6n + 4) {
+  --holo-cut: 28%;
+  --holo-speed: 14s;
+  --holo-sheen-speed: 8.4s;
+  --holo-delay: -4.1s;
+  --holo-hue: 190deg;
+}
+.profile-photo-tile:nth-child(6n + 5) {
+  --holo-cut: 24%;
+  --holo-speed: 10.5s;
+  --holo-sheen-speed: 6.8s;
+  --holo-delay: -5.6s;
+  --holo-hue: 250deg;
+}
+.profile-photo-tile:nth-child(6n + 6) {
+  --holo-cut: 21%;
+  --holo-speed: 8.2s;
+  --holo-sheen-speed: 5.9s;
+  --holo-delay: -3.3s;
+  --holo-hue: 305deg;
+}
+
+.profile-photo-tile::before {
+  filter: hue-rotate(var(--holo-hue, 0deg)) saturate(1.25);
+}
+
+@property --holo-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes holoFrameSpin {
+  from { --holo-angle: 0deg; }
+  to   { --holo-angle: 360deg; }
+}
+
+@keyframes holoSheen {
+  0%   { background-position: 0% 50%; opacity: 0.25; }
+  45%  { opacity: 0.75; }
+  100% { background-position: 200% 50%; opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-photo-tile::before,
+  .profile-photo-tile::after {
+    animation: none;
+  }
+  .profile-photo-tile {
+    transition: none;
+  }
 }
 
 .profile-photo-edit-tile {
@@ -1811,8 +1955,9 @@ input, select, textarea {
 
 .profile-photo-remove {
   position: absolute;
-  top: 5px;
-  right: 5px;
+  z-index: 3;
+  top: 9%;
+  right: 9%;
   width: 28px;
   height: 28px;
   margin: 0;
@@ -1851,7 +1996,7 @@ input, select, textarea {
 @media (max-width: 560px) {
   .profile-photo-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    gap: 12px;
   }
 
   .profile-photo-manager > button {
