@@ -1,1 +1,6 @@
 node_modules
+dist
+*.AppImage
+*.dmg
+*.exe
+*.blockmap
