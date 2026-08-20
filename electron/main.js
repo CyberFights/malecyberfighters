@@ -1,64 +1,18 @@
-// Male Cyber Fighters — Electron desktop wrapper.
-// This file turns the existing Node.js web app (index.js) into a native
-// desktop application. It boots the exact same Express + Socket.IO server
-// in-process, then opens a desktop window pointed at it. Nothing about the
-// web app's behaviour is changed — the same routes, Socket.IO events,
-// MongoDB connection and static files are used as-is.
+// Male Cyber Fighters — Electron desktop app (thin client).
+//
+// Opens the live website in a native desktop window, so the app shares the
+// exact same backend, accounts, chat and Discord bridge as the site. No
+// server or credentials are bundled, so nothing about the app's behaviour
+// changes — this is simply the website packaged as an installable app.
 const { app, BrowserWindow, shell } = require('electron');
 const path = require('path');
-const net = require('net');
+
+// The live site this app wraps. Change this if the domain ever moves.
+const APP_URL = 'https://malecyberfighters-production.up.railway.app/';
 
 let mainWindow = null;
 
-// Ask the OS for a free port so the bundled server never clashes with an
-// existing process (or another copy of the app that is already running).
-function getFreePort() {
-  return new Promise((resolve) => {
-    const probe = net.createServer();
-    probe.unref();
-    probe.on('error', () => resolve(0));
-    probe.listen(0, '127.0.0.1', () => {
-      const port = probe.address().port;
-      probe.close(() => resolve(port));
-    });
-  });
-}
-
-// Poll the port until the Express server accepts connections.
-function waitForServer(port) {
-  return new Promise((resolve, reject) => {
-    const deadline = Date.now() + 20000;
-    (function tryConnect() {
-      const sock = net.connect({ port, host: '127.0.0.1' });
-      sock.once('connect', () => {
-        sock.destroy();
-        resolve();
-      });
-      sock.once('error', () => {
-        sock.destroy();
-        if (Date.now() > deadline) {
-          reject(new Error('The bundled server did not start in time.'));
-          return;
-        }
-        setTimeout(tryConnect, 150);
-      });
-    })();
-  });
-}
-
-async function createWindow() {
-  const port = await getFreePort();
-
-  // Hand the chosen port to the server before it is required, because
-  // index.js reads process.env.PORT at module-load time.
-  process.env.PORT = String(port);
-  process.env.HOST = '127.0.0.1';
-
-  // Boot the production server (identical code to `npm start`).
-  require(path.join(__dirname, '..', 'index.js'));
-
-  await waitForServer(port);
-
+function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1320,
     height: 920,
@@ -75,15 +29,23 @@ async function createWindow() {
     }
   });
 
-  mainWindow.loadURL(`http://127.0.0.1:${port}`);
+  mainWindow.loadURL(APP_URL);
 
-  // Keep the app in its own window: external links (e.g. Discord) open in the
-  // user's default browser instead of navigating the app window away.
+  // Keep the app in its own window: popups and any navigation away from the
+  // app open in the user's default browser instead of the app window.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http://') || url.startsWith('https://')) {
       shell.openExternal(url);
     }
     return { action: 'deny' };
+  });
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith(APP_URL)) {
+      event.preventDefault();
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        shell.openExternal(url);
+      }
+    }
   });
 
   mainWindow.on('closed', () => {
@@ -103,10 +65,7 @@ if (!gotLock) {
     }
   });
 
-  app.whenReady().then(createWindow).catch((err) => {
-    console.error('Failed to start Male Cyber Fighters:', err);
-    app.quit();
-  });
+  app.whenReady().then(createWindow);
 
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
