@@ -2,12 +2,17 @@
   "name": "cyber-wrestling-chat",
   "version": "1.0.0",
   "description": "Cyber Wrestling Chatroom with MongoDB, Socket.IO, Admin Panel, and Analytics",
-  "main": "index.js",
+  "main": "electron/main.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "desktop": "electron .",
+    "dist": "electron-builder",
+    "dist:linux": "electron-builder --linux",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac"
   },
   "dependencies": {
-   "bcrypt": "^5.1.0",
+    "bcrypt": "^5.1.0",
     "dotenv": "^16.4.0",
     "express": "^4.19.0",
     "express-rate-limit": "^7.0.0",
@@ -16,6 +21,68 @@
     "multer": "^1.4.5-lts.2",
     "node-fetch": "^2.6.7",
     "socket.io": "^4.7.5",
-    "form-data": "^4.0.0"  
+    "form-data": "^4.0.0"
+  },
+  "devDependencies": {
+    "electron": "^43.4.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.malecyberfighters.app",
+    "productName": "Male Cyber Fighters",
+    "artifactName": "CyberFights-${os}.${ext}",
+    "asar": true,
+    "npmRebuild": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "index.js",
+      "electron/**/*",
+      "public/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/images/mcf.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "icon": "public/images/mcf.png",
+      "category": "public.app-category.social-networking"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/images/mcf.png",
+      "category": "Network",
+      "maintainer": "Male Cyber Fighters"
+    }
   }
 }
