@@ -1,0 +1,81 @@
+name: Build Desktop App
+
+# Packages the web app into native desktop installers with electron-builder.
+#   - Push a version tag (e.g. `v1.0.0`) to build all three platforms and
+#     publish the installers to a GitHub Release.
+#   - Or run the workflow manually from the Actions tab to build the installers
+#     and download them as build artifacts.
+#
+# The download button on the site points at:
+#   https://github.com/<owner>/<repo>/releases/latest/download/CyberFights-<os>.<ext>
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            script: dist:linux
+            artifact: CyberFights-linux.AppImage
+          - os: windows-latest
+            script: dist:win
+            artifact: CyberFights-win.exe
+          - os: macos-latest
+            script: dist:mac
+            artifact: CyberFights-mac.dmg
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build ${{ matrix.artifact }}
+        run: npm run ${{ matrix.script }}
+        env:
+          # Build unsigned; signing certificates can be added later if needed.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}
+          path: |
+            dist/${{ matrix.artifact }}
+            dist/${{ matrix.artifact }}.blockmap
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download installers
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          files: |
+            artifacts/**/CyberFights-win.exe
+            artifacts/**/CyberFights-mac.dmg
+            artifacts/**/CyberFights-linux.AppImage
