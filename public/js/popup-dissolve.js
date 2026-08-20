@@ -1,12 +1,17 @@
 /* ============================================================
-   POPUP DISSOLVE
-   Adds a dissolve (fade + blur) animation to every popup, modal,
-   overlay and side panel when it opens and when it closes.
+   POPUP GROW / SHRINK
+   Adds a grow-from-button animation when a popup opens and a
+   shrink-into-button animation when it closes.
 
    It works without touching any of the existing open/close code:
    a MutationObserver watches the popup containers for the
    style/class changes the app already makes, and layers the
    animation on top of them.
+
+   The most recent click / tap is treated as the origin button so
+   the popup expands out of that control and collapses back into
+   it. Coordinates are stored on the popup as --popup-origin-x/y
+   and consumed by the CSS transform-origin.
 
    Closing is normally instant (display:none), so the element is
    held visible for the length of the out-animation through the
@@ -24,8 +29,25 @@
   var IN_CLASS = 'popup-dissolve-in';
   var OUT_CLASS = 'popup-dissolve-out';
   var DISPLAY_VAR = '--popup-dissolve-display';
+  var ORIGIN_X_VAR = '--popup-origin-x';
+  var ORIGIN_Y_VAR = '--popup-origin-y';
   var IN_MS = 280;
   var OUT_MS = 240;
+  var TRIGGER_MS = 1200;
+  var TRIGGER_SELECTOR = [
+    'button',
+    '[role="button"]',
+    'a',
+    'input[type="button"]',
+    'input[type="submit"]',
+    '.dm-sidebar-item',
+    '.dm-row',
+    '.room-item',
+    '.roster-user',
+    '.forum-list-item',
+    '.user-row',
+    '.profile-photo-tile'
+  ].join(',');
 
   /* Containers that behave as popups. Anything matched here must also be
      position:fixed at runtime, which keeps inner helpers (lists, headers,
@@ -53,6 +75,9 @@
   if (reduceMotion) return;
 
   var states = new WeakMap();
+  var lastTrigger = null;
+  var lastPoint = null;
+  var lastTriggerAt = 0;
 
   function getState(el) {
     var state = states.get(el);
@@ -62,11 +87,67 @@
         display: '',
         internal: 0,
         inTimer: 0,
-        outTimer: 0
+        outTimer: 0,
+        trigger: null,
+        point: null
       };
       states.set(el, state);
     }
     return state;
+  }
+
+  function rememberTrigger(event) {
+    if (!event) return;
+    var target = event.target;
+    if (target && target.nodeType === 3) target = target.parentElement;
+    if (!target || target.nodeType !== 1) return;
+
+    var trigger = typeof target.closest === 'function'
+      ? target.closest(TRIGGER_SELECTOR)
+      : null;
+    lastTrigger = trigger || target;
+    lastPoint = {
+      x: event.clientX,
+      y: event.clientY
+    };
+    lastTriggerAt = Date.now();
+  }
+
+  function takeTrigger() {
+    if (!lastTrigger && !lastPoint) return { trigger: null, point: null };
+    if (Date.now() - lastTriggerAt > TRIGGER_MS) {
+      return { trigger: null, point: null };
+    }
+    return { trigger: lastTrigger, point: lastPoint };
+  }
+
+  function applyOrigin(el, trigger, point) {
+    var ox = '50%';
+    var oy = '50%';
+    var popupRect = el.getBoundingClientRect();
+    var used = false;
+
+    if (trigger && trigger.isConnected && typeof trigger.getBoundingClientRect === 'function') {
+      var btnRect = trigger.getBoundingClientRect();
+      if (btnRect.width || btnRect.height || btnRect.left || btnRect.top) {
+        ox = (btnRect.left + btnRect.width / 2 - popupRect.left) + 'px';
+        oy = (btnRect.top + btnRect.height / 2 - popupRect.top) + 'px';
+        used = true;
+      }
+    }
+
+    if (!used && point && typeof point.x === 'number' && typeof point.y === 'number') {
+      ox = (point.x - popupRect.left) + 'px';
+      oy = (point.y - popupRect.top) + 'px';
+    }
+
+    el.style.setProperty(ORIGIN_X_VAR, ox);
+    el.style.setProperty(ORIGIN_Y_VAR, oy);
+  }
+
+  function clearOrigin(el) {
+    el.style.removeProperty(ORIGIN_X_VAR);
+    el.style.removeProperty(ORIGIN_Y_VAR);
   }
 
   function isPopup(el) {
@@ -134,7 +215,14 @@
     stopOut(el, state);
     stopIn(el, state);
 
+    var remembered = takeTrigger();
+    if (remembered.trigger || remembered.point) {
+      state.trigger = remembered.trigger;
+      state.point = remembered.point;
+    }
+
     internalWrite(el, function () {
+      applyOrigin(el, state.trigger, state.point);
       el.classList.add(IN_CLASS);
     });
 
@@ -153,6 +241,10 @@
 
     internalWrite(el, function () {
       el.style.setProperty(DISPLAY_VAR, display || 'flex');
+      /* Restore layout before measuring so the origin is relative to the
+         popup's on-screen box, not a display:none 0×0 rect. */
+      el.getBoundingClientRect();
+      applyOrigin(el, state.trigger, state.point);
       el.classList.add(OUT_CLASS);
     });
 
@@ -161,6 +253,7 @@
       internalWrite(el, function () {
         el.classList.remove(OUT_CLASS);
         el.style.removeProperty(DISPLAY_VAR);
+        clearOrigin(el);
       });
     }, OUT_MS);
   }
@@ -181,7 +274,7 @@
       state.open = false;
       /* Some popups (the mobile age gate) already fade themselves out with
          their own opacity transition before being hidden. Re-animating them
-         from opacity 1 would make them flash back, so leave those alone. */
+         from a full-size frame would make them flash back, so leave those alone. */
       if (currentOpacity(el) > 0.05) {
         playOut(el, state.display);
       }
@@ -203,18 +296,24 @@
     });
   }
 
+  function scheduleFlush() {
+    if (scheduled) return;
+    scheduled = true;
+    /* Microtask (not rAF) so the start frame is applied before the browser
+       paints the newly shown / hidden popup. rAF runs after paint and is
+       what made the old dissolve flash a full-size frame first. */
+    if (typeof queueMicrotask === 'function') {
+      queueMicrotask(flush);
+    } else {
+      Promise.resolve().then(flush);
+    }
+  }
+
   function queue(el) {
     if (!el || el.nodeType !== 1) return;
     if (!pending) pending = new Set();
     pending.add(el);
-    if (!scheduled) {
-      scheduled = true;
-      if (typeof window.requestAnimationFrame === 'function') {
-        window.requestAnimationFrame(flush);
-      } else {
-        setTimeout(flush, 16);
-      }
-    }
+    scheduleFlush();
   }
 
   function queueTree(root) {
@@ -251,6 +350,9 @@
   }
 
   function init() {
+    document.addEventListener('pointerdown', rememberTrigger, true);
+    document.addEventListener('click', rememberTrigger, true);
+
     var popups = document.querySelectorAll(SELECTOR);
     for (var i = 0; i < popups.length; i++) {
       var el = popups[i];

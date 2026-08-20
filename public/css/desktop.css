@@ -2338,31 +2338,37 @@ h3{
 }
 
 /* ============================================================
-   POPUP DISSOLVE ANIMATIONS
-   Every popup, modal, overlay and side panel dissolves in when it
-   opens and dissolves out when it closes. Driven by
-   /js/popup-dissolve.js, which toggles the helper classes below.
+   POPUP GROW / SHRINK ANIMATIONS
+   Every popup, modal, overlay and side panel grows out of the
+   button that opened it and shrinks back into that button when
+   it closes. Driven by /js/popup-dissolve.js, which toggles the
+   helper classes below and sets --popup-origin-x/y.
    ============================================================ */
 @keyframes popupDissolveIn {
   from {
-    opacity: 0;
-    filter: blur(14px) brightness(1.35) saturate(1.2);
+    opacity: 0.25;
+    transform: scale(0.04);
   }
   to {
     opacity: 1;
-    filter: blur(0) brightness(1) saturate(1);
+    transform: scale(1);
   }
 }
 
 @keyframes popupDissolveOut {
   from {
     opacity: 1;
-    filter: blur(0) brightness(1) saturate(1);
+    transform: scale(1);
   }
   to {
     opacity: 0;
-    filter: blur(16px) brightness(1.3) saturate(1.15);
+    transform: scale(0.04);
   }
+}
+
+.popup-dissolve-in,
+.popup-dissolve-out {
+  transform-origin: var(--popup-origin-x, 50%) var(--popup-origin-y, 50%);
 }
 
 .popup-dissolve-in {
@@ -2370,7 +2376,7 @@ h3{
 }
 
 .popup-dissolve-out {
-  /* Hold the popup on screen for the length of the fade-out. The custom
+  /* Hold the popup on screen for the length of the shrink-out. The custom
      property carries the display value the popup used while it was open. */
   display: var(--popup-dissolve-display, flex) !important;
   visibility: visible !important;
