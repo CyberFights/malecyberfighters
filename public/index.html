@@ -1610,6 +1610,21 @@ Don't hesitate to contact us if you have any questions.
       </div>
     </div>
 
+    <!-- Discord Notifications Section -->
+    <div id="discordSection" style="display:none;border:1px solid rgba(88,101,242,0.45);padding:14px;border-radius:10px;background:rgba(88,101,242,0.10);margin-bottom:18px">
+      <h4 style="margin:0 0 6px 0;color:#a5b4fc">Discord Notifications</h4>
+      <p id="discordStatusText" style="font-size:12px;color:#94a3b8;margin:0 0 10px;line-height:1.4"></p>
+      <button id="discordLinkBtn" class="small-btn" type="button" style="width:100%;background:#5865F2;box-shadow:none;display:none">Link Discord Account</button>
+      <label id="discordToggleRow" style="display:none;align-items:center;gap:8px;font-size:13px;margin-top:8px;cursor:pointer">
+        <input id="discordOptInToggle" type="checkbox" style="width:auto;margin:0">
+        <span>DM me on Discord when I get a message while offline</span>
+      </label>
+      <div id="discordUnlinkRow" style="display:none;flex-direction:column;gap:8px;margin-top:12px">
+        <input id="discordUnlinkPassword" type="password" placeholder="Password to confirm unlink">
+        <button id="discordUnlinkBtn" class="small-btn ghost" type="button" style="width:100%">Unlink Discord</button>
+      </div>
+    </div>
+
     <!-- Delete Account Section -->
     <div style="border:1px solid rgba(239,68,68,0.35);padding:14px;border-radius:10px;background:rgba(239,68,68,0.08)">
       <h4 style="margin:0 0 6px 0;color:#fca5a5">Delete Account</h4>
@@ -1658,6 +1673,7 @@ Don't hesitate to contact us if you have any questions.
   <script src="/js/dm-toggle.js"></script>
   <script src="/js/profile.js"></script>
 <script src="/js/account.js"></script>
+<script src="/js/discord.js"></script>
 <script src="/js/landing.js"></script>
 
 <script src="/js/updates.js"></script>

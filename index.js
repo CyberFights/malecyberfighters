@@ -10,6 +10,7 @@ const fetch = require('node-fetch');
 const path = require('path');
 const fs = require('fs');
 const helmet = require('helmet');
+const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const cors = require("cors");
 
@@ -28,6 +29,26 @@ const MAX_EXTRA_PROFILE_PHOTOS = 10;
 
 const DISCORD_WEBHOOK_URL = process.env.Discord_webhook || null;
 const DISCORD_SUPPORT_URL = process.env.Discord_Support || null;
+
+// ---------- DISCORD DM BRIDGE CONFIG ----------
+// A webhook can only post to a channel. To deliver a message into a real user's
+// Discord DMs we need a bot token plus the user's Discord snowflake id, which we
+// obtain through OAuth2 ("identify" scope) when the user links their account.
+const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || null;
+const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || null;
+const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || null;
+// Public origin of this site, used to build the OAuth redirect URI.
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+const DISCORD_OAUTH_REDIRECT =
+  process.env.DISCORD_OAUTH_REDIRECT ||
+  (PUBLIC_BASE_URL ? `${PUBLIC_BASE_URL}/auth/discord/callback` : null);
+// Secret used to sign the OAuth `state` value (falls back to ADMIN_KEY).
+const DISCORD_STATE_SECRET =
+  process.env.DISCORD_STATE_SECRET || process.env.ADMIN_KEY || 'cyberfights-discord-state';
+const DISCORD_API = 'https://discord.com/api/v10';
+const discordLinkEnabled = () =>
+  Boolean(DISCORD_CLIENT_ID && DISCORD_CLIENT_SECRET && DISCORD_OAUTH_REDIRECT);
+const discordDmEnabled = () => Boolean(DISCORD_BOT_TOKEN);
 
 
 
@@ -144,6 +165,16 @@ const userSchema = new mongoose.Schema({
     }
   },
   blockedUsers: { type: [String], default: [] },
+  // ---- Discord DM bridge ----
+  // Snowflake id of the linked Discord account (set via OAuth2 "identify").
+  discordId: { type: String, default: null, index: true },
+  // Cached tag/handle purely for display in the settings UI.
+  discordTag: { type: String, default: null },
+  // Explicit opt-in. Nothing is ever forwarded unless this is true.
+  discordDmOptIn: { type: Boolean, default: false },
+  // Set when Discord refuses delivery (privacy settings / no shared guild) so
+  // the UI can tell the user why their notifications stopped.
+  discordDmError: { type: String, default: null },
   online:   { type: Boolean, default: false },
   socketId: { type: String, default: null },
   role:     { type: String, default: 'user' },
@@ -391,6 +422,135 @@ async function sendDiscordWebhookMessage(username, message, avatarUrl) {
   } catch (err) {
     console.error("Error sending webhook:", err);
   }
+}
+
+/* ============================================================
+   DISCORD DM BRIDGE
+   ============================================================
+   sendDiscordDM(usernameOrUser, text)
+     1. Looks up the site user and checks they linked Discord + opted in.
+     2. Opens (or reuses) a DM channel via POST /users/@me/channels.
+     3. Posts the message to that channel.
+
+   Discord will refuse (403) if the bot shares no guild with the user or the
+   user disabled DMs from server members — we record that on the user document
+   instead of retrying, and fall back silently to on-site notification.
+============================================================ */
+
+// Cache of discordId -> dm channel id, so we don't burn the (strict) rate limit
+// on /users/@me/channels for every single notification.
+const discordDmChannelCache = new Map();
+
+async function discordApi(pathname, options = {}) {
+  const res = await fetch(`${DISCORD_API}${pathname}`, {
+    ...options,
+    headers: {
+      Authorization: `Bot ${DISCORD_BOT_TOKEN}`,
+      'Content-Type': 'application/json',
+      ...(options.headers || {})
+    }
+  });
+  return res;
+}
+
+async function getDiscordDmChannel(discordId) {
+  const cached = discordDmChannelCache.get(discordId);
+  if (cached) return cached;
+
+  const res = await discordApi('/users/@me/channels', {
+    method: 'POST',
+    body: JSON.stringify({ recipient_id: discordId })
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    const err = new Error(`open_dm_failed_${res.status}: ${body.slice(0, 200)}`);
+    err.status = res.status;
+    throw err;
+  }
+
+  const channel = await res.json();
+  discordDmChannelCache.set(discordId, channel.id);
+  return channel.id;
+}
+
+async function sendDiscordDM(usernameOrUser, text) {
+  if (!discordDmEnabled() || !text) return { ok: false, reason: 'disabled' };
+
+  try {
+    const user = typeof usernameOrUser === 'string'
+      ? await User.findOne({ username: usernameOrUser }).lean()
+      : usernameOrUser;
+
+    if (!user) return { ok: false, reason: 'no_user' };
+    if (!user.discordId) return { ok: false, reason: 'not_linked' };
+    if (!user.discordDmOptIn) return { ok: false, reason: 'not_opted_in' };
+
+    const channelId = await getDiscordDmChannel(user.discordId);
+
+    const res = await discordApi(`/channels/${channelId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({
+        content: String(text).slice(0, 1900),
+        // Never let a relayed site message ping @everyone / roles on Discord.
+        allowed_mentions: { parse: [] }
+      })
+    });
+
+    if (res.status === 429) {
+      const info = await res.json().catch(() => ({}));
+      console.warn('Discord DM rate limited, retry_after=', info.retry_after);
+      return { ok: false, reason: 'rate_limited' };
+    }
+
+    if (!res.ok) {
+      // Channel may be stale — drop it from the cache so the next attempt reopens.
+      discordDmChannelCache.delete(user.discordId);
+      const body = await res.text().catch(() => '');
+      throw new Error(`send_failed_${res.status}: ${body.slice(0, 200)}`);
+    }
+
+    if (user.discordDmError) {
+      await User.updateOne({ username: user.username }, { $set: { discordDmError: null } });
+    }
+    return { ok: true };
+  } catch (err) {
+    const message = err?.message || String(err);
+    console.error('sendDiscordDM error:', message);
+
+    // 403 = cannot DM this user (no shared server, or DMs closed).
+    const undeliverable = err?.status === 403 || /_403:/.test(message);
+    try {
+      const username = typeof usernameOrUser === 'string'
+        ? usernameOrUser
+        : usernameOrUser?.username;
+      if (username) {
+        await User.updateOne(
+          { username },
+          {
+            $set: {
+              discordDmError: undeliverable
+                ? "Discord refused the DM. Make sure you share a server with our bot and allow DMs from server members."
+                : 'Discord delivery failed. We will try again on the next message.'
+            }
+          }
+        );
+      }
+    } catch (_) {}
+
+    return { ok: false, reason: undeliverable ? 'forbidden' : 'error' };
+  }
+}
+
+// Convenience wrapper for "you got a DM on the site" notifications.
+// We deliberately send a short preview rather than the full message body.
+async function notifyDiscordOfSiteDM(toUsername, fromUsername, { preview } = {}) {
+  const siteLink = PUBLIC_BASE_URL ? `\n${PUBLIC_BASE_URL}` : '';
+  const body = preview ? `\n> ${String(preview).replace(/\n+/g, ' ').slice(0, 180)}` : '';
+  return sendDiscordDM(
+    toUsername,
+    `📬 **${fromUsername}** sent you a message on Male Cyber Fighters.${body}${siteLink}`
+  );
 }
 
 function serializeForum(forum, replyCount = 0) {
@@ -990,6 +1150,224 @@ app.post("/api/check-availability", async (req, res) => {
   }
 });
 
+/* ============================================================
+   DISCORD ACCOUNT LINKING (OAuth2)
+   ============================================================ */
+
+// The state param carries the site username and is HMAC-signed so a third
+// party can't link an arbitrary Discord account to someone else's profile.
+function signDiscordState(username) {
+  // Username is base64url-encoded so dots in a username can't break parsing.
+  const encoded = Buffer.from(String(username), 'utf8').toString('base64url');
+  const payload = `${encoded}.${Date.now()}.${crypto.randomBytes(8).toString('hex')}`;
+  const sig = crypto.createHmac('sha256', DISCORD_STATE_SECRET).update(payload).digest('hex');
+  return Buffer.from(`${payload}.${sig}`).toString('base64url');
+}
+
+function verifyDiscordState(state) {
+  try {
+    const decoded = Buffer.from(String(state), 'base64url').toString('utf8');
+    const parts = decoded.split('.');
+    if (parts.length !== 4) return null;
+    const [encodedUser, issuedAt, nonce, sig] = parts;
+    const expected = crypto
+      .createHmac('sha256', DISCORD_STATE_SECRET)
+      .update(`${encodedUser}.${issuedAt}.${nonce}`)
+      .digest('hex');
+    if (sig.length !== expected.length) return null;
+    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
+    // 15 minute validity window
+    if (Date.now() - Number(issuedAt) > 15 * 60 * 1000) return null;
+    return Buffer.from(encodedUser, 'base64url').toString('utf8');
+  } catch (_) {
+    return null;
+  }
+}
+
+function discordLinkResultPage(title, message, ok) {
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
+<style>body{background:#0b0f17;color:#e6f1ff;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+.card{max-width:420px;padding:28px;border-radius:14px;background:#111827;border:1px solid ${ok ? 'rgba(127,216,255,.35)' : 'rgba(239,68,68,.4)'};text-align:center}
+h1{font-size:20px;margin:0 0 10px;color:${ok ? '#7fd8ff' : '#fca5a5'}}p{color:#94a3b8;line-height:1.5;margin:0 0 18px}
+a{color:#7fd8ff}</style></head>
+<body><div class="card"><h1>${title}</h1><p>${message}</p><p><a href="/">Return to Male Cyber Fighters</a></p></div></body></html>`;
+}
+
+// Status for the settings UI.
+app.get('/api/discord/status', async (req, res) => {
+  const username = req.query.username;
+  if (!username) return res.status(400).json({ ok: false, error: 'missing_username' });
+
+  try {
+    const user = await User.findOne({ username })
+      .select('discordId discordTag discordDmOptIn discordDmError')
+      .lean();
+    if (!user) return res.status(404).json({ ok: false, error: 'not_found' });
+
+    res.json({
+      ok: true,
+      configured: discordLinkEnabled(),
+      dmCapable: discordDmEnabled(),
+      linked: Boolean(user.discordId),
+      discordTag: user.discordTag || null,
+      optIn: Boolean(user.discordDmOptIn),
+      lastError: user.discordDmError || null
+    });
+  } catch (e) {
+    console.error('discord status error', e);
+    res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// Step 1: send the user to Discord's consent screen.
+app.get('/auth/discord', async (req, res) => {
+  if (!discordLinkEnabled()) {
+    return res
+      .status(503)
+      .send(discordLinkResultPage('Discord linking unavailable', 'This server has no Discord application configured yet.', false));
+  }
+
+  const username = req.query.username;
+  if (!username) return res.status(400).send(discordLinkResultPage('Missing user', 'No username was supplied.', false));
+
+  const user = await User.findOne({ username }).select('username').lean();
+  if (!user) return res.status(404).send(discordLinkResultPage('Unknown user', 'That account does not exist.', false));
+
+  const params = new URLSearchParams({
+    client_id: DISCORD_CLIENT_ID,
+    redirect_uri: DISCORD_OAUTH_REDIRECT,
+    response_type: 'code',
+    scope: 'identify',
+    prompt: 'consent',
+    state: signDiscordState(user.username)
+  });
+
+  res.redirect(`https://discord.com/oauth2/authorize?${params.toString()}`);
+});
+
+// Step 2: exchange the code, store the snowflake id.
+app.get('/auth/discord/callback', async (req, res) => {
+  if (!discordLinkEnabled()) {
+    return res.status(503).send(discordLinkResultPage('Discord linking unavailable', 'No Discord application configured.', false));
+  }
+
+  const { code, state, error: oauthError } = req.query;
+  if (oauthError) {
+    return res.send(discordLinkResultPage('Linking cancelled', 'You declined the Discord authorization request.', false));
+  }
+  if (!code || !state) {
+    return res.status(400).send(discordLinkResultPage('Invalid request', 'Missing authorization code or state.', false));
+  }
+
+  const username = verifyDiscordState(state);
+  if (!username) {
+    return res.status(400).send(discordLinkResultPage('Link expired', 'That linking request expired or was tampered with. Please try again from Account Settings.', false));
+  }
+
+  try {
+    const tokenRes = await fetch(`${DISCORD_API}/oauth2/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: DISCORD_CLIENT_ID,
+        client_secret: DISCORD_CLIENT_SECRET,
+        grant_type: 'authorization_code',
+        code: String(code),
+        redirect_uri: DISCORD_OAUTH_REDIRECT
+      }).toString()
+    });
+
+    if (!tokenRes.ok) {
+      console.error('discord token exchange failed', tokenRes.status, await tokenRes.text().catch(() => ''));
+      return res.status(502).send(discordLinkResultPage('Discord error', 'Could not complete the token exchange with Discord.', false));
+    }
+
+    const token = await tokenRes.json();
+
+    const meRes = await fetch(`${DISCORD_API}/users/@me`, {
+      headers: { Authorization: `Bearer ${token.access_token}` }
+    });
+    if (!meRes.ok) {
+      return res.status(502).send(discordLinkResultPage('Discord error', 'Could not read your Discord profile.', false));
+    }
+
+    const me = await meRes.json();
+    const tag = me.discriminator && me.discriminator !== '0'
+      ? `${me.username}#${me.discriminator}`
+      : `@${me.username}`;
+
+    // One Discord account may only be attached to one site account.
+    await User.updateMany(
+      { discordId: me.id, username: { $ne: username } },
+      { $set: { discordId: null, discordTag: null, discordDmOptIn: false } }
+    );
+
+    await User.updateOne(
+      { username },
+      { $set: { discordId: me.id, discordTag: tag, discordDmOptIn: true, discordDmError: null } }
+    );
+
+    discordDmChannelCache.delete(me.id);
+    await logIp(req, { action: 'discord_link', username });
+
+    // Confirmation DM doubles as a delivery test.
+    sendDiscordDM(username, `✅ Your Discord is now linked to the Male Cyber Fighters account **${username}**. You'll get a DM here when someone messages you on the site. Turn this off any time in Account Settings.`).catch(() => {});
+
+    res.send(discordLinkResultPage('Discord linked', `Linked as ${tag}. Direct message notifications are now on.`, true));
+  } catch (e) {
+    console.error('discord callback error', e);
+    res.status(500).send(discordLinkResultPage('Something went wrong', 'Please try linking again later.', false));
+  }
+});
+
+// Toggle forwarding on/off.
+app.post('/api/discord/opt-in', async (req, res) => {
+  const { username, optIn } = req.body || {};
+  if (!username) return res.status(400).json({ ok: false, error: 'missing_username' });
+
+  try {
+    const user = await User.findOne({ username });
+    if (!user) return res.status(404).json({ ok: false, error: 'not_found' });
+    if (!user.discordId) return res.status(400).json({ ok: false, error: 'not_linked' });
+
+    user.discordDmOptIn = Boolean(optIn);
+    user.discordDmError = null;
+    await user.save();
+
+    res.json({ ok: true, optIn: user.discordDmOptIn });
+  } catch (e) {
+    console.error('discord opt-in error', e);
+    res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// Unlink (requires password, same as other destructive account actions).
+app.post('/api/discord/unlink', async (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) return res.status(400).json({ ok: false, error: 'missing_fields' });
+
+  try {
+    const user = await User.findOne({ username });
+    if (!user) return res.status(404).json({ ok: false, error: 'not_found' });
+
+    const match = await bcrypt.compare(password, user.passwordHash);
+    if (!match) return res.status(401).json({ ok: false, error: 'invalid_credentials' });
+
+    if (user.discordId) discordDmChannelCache.delete(user.discordId);
+    user.discordId = null;
+    user.discordTag = null;
+    user.discordDmOptIn = false;
+    user.discordDmError = null;
+    await user.save();
+
+    await logIp(req, { action: 'discord_unlink', username });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('discord unlink error', e);
+    res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
 app.post("/api/send-dm", async (req, res) => {
   const { from, to, text } = req.body;
 
@@ -1005,6 +1383,10 @@ app.post("/api/send-dm", async (req, res) => {
 
   if (target?.socketId) {
     io.to(target.socketId).emit("privateMessage", dm);
+  } else if (target) {
+    // Recipient is offline — mirror the notification to their Discord DMs
+    // if they linked an account and opted in. Fire-and-forget.
+    notifyDiscordOfSiteDM(target.username, from, { preview: text }).catch(() => {});
   }
 
   res.json({ ok: true });
@@ -1836,6 +2218,8 @@ socket.on("editPublicMessage", async (data) => {
           imageUrl: pm.imageUrl,
           time: saved.time
         });
+      } else {
+        notifyDiscordOfSiteDM(receiver.username, pm.from, { preview: '[image]' }).catch(() => {});
       }
 
       if (sender.socketId) {
@@ -1867,6 +2251,9 @@ socket.on("editPublicMessage", async (data) => {
         text: translated,
         time: saved.time
       });
+    } else {
+      // Offline recipient → optional Discord DM notification.
+      notifyDiscordOfSiteDM(receiver.username, pm.from, { preview: translated }).catch(() => {});
     }
 
     if (sender.socketId) {

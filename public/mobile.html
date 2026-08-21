@@ -570,6 +570,20 @@
       <div id="changePasswordError" class="error"></div>
       <div id="changePasswordSuccess" style="display:none;color:#86efac;font-size:13px;margin-top:6px"></div>
     </div>
+    <div id="discordSection" style="display:none;border:1px solid rgba(88,101,242,0.45);padding:12px;border-radius:10px;background:rgba(88,101,242,0.10);margin-bottom:14px">
+      <h4 style="margin:0 0 6px;color:#a5b4fc">Discord Notifications</h4>
+      <p id="discordStatusText" class="small muted" style="margin:0 0 8px"></p>
+      <button id="discordLinkBtn" class="small-btn" type="button" style="width:100%;background:#5865F2;display:none">Link Discord Account</button>
+      <label id="discordToggleRow" style="display:none;align-items:center;gap:8px;font-size:13px;margin-top:8px">
+        <input id="discordOptInToggle" type="checkbox" style="width:auto;margin:0">
+        <span>DM me on Discord when I'm offline</span>
+      </label>
+      <div id="discordUnlinkRow" style="display:none;margin-top:10px">
+        <div class="field"><input id="discordUnlinkPassword" type="password" placeholder="Password to confirm unlink"></div>
+        <button id="discordUnlinkBtn" class="small-btn ghost" type="button" style="width:100%">Unlink Discord</button>
+      </div>
+    </div>
+
     <div style="border:1px solid rgba(239,68,68,0.35);padding:12px;border-radius:10px;background:rgba(239,68,68,0.08)">
       <h4 style="margin:0 0 6px;color:#fca5a5">Delete Account</h4>
       <p class="small muted" style="margin:0 0 8px">Permanent. Cannot be undone.</p>
@@ -822,6 +836,7 @@ Moderator decisions are final. </p>
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/mobile.js"></script>
 <script src="/js/account.js"></script>
+<script src="/js/discord.js"></script>
 <script src="/js/popup-dissolve.js"></script>
 
 
