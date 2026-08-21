@@ -412,6 +412,19 @@
       history.forEach(appendRoomMessage);
     });
 
+    socket.on("roomJoinDenied", ({ room, reason } = {}) => {
+      const popup = $("roomChatPopup");
+      if (popup && String(popup.dataset.room) === String(room)) {
+        popup.dataset.room = "";
+        hideId("roomChatPopup");
+        const members = $("roomMembersList");
+        if (members) members.innerHTML = "";
+      }
+      alert(reason === "room_not_found"
+        ? "This room is no longer available."
+        : "You are not invited to this private room.");
+    });
+
     socket.on("roomMessage", msg => {
       const popup = $("roomChatPopup");
       const current = popup ? popup.dataset.room : null;
