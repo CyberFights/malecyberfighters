@@ -1655,6 +1655,20 @@ app.post('/api/forums/:forumId/replies', async (req, res) => {
 // ---------- SOCKET.IO ----------
 const onlineByUsername = new Map();
 
+// Room access is enforced on the server. The room list is only a UI aid and
+// must never be treated as authorization, since clients can emit socket events
+// directly.
+function canAccessRoom(room, username) {
+  if (!room || !username) return false;
+  if (!room.private) return true;
+
+  const normalizedUsername = String(username).trim().toLowerCase();
+  return String(room.owner || '').trim().toLowerCase() === normalizedUsername
+    || (Array.isArray(room.invitedUsers) && room.invitedUsers.some(invited =>
+      String(invited).trim().toLowerCase() === normalizedUsername
+    ));
+}
+
 io.on("connection", async (socket) => {
   console.log("socket connected", socket.id);
 
@@ -1865,9 +1879,23 @@ socket.on("editPublicMessage", async (data) => {
     }
   });
 
-  socket.on("joinRoom", async ({ room }) => {
+  socket.on("joinRoom", async ({ room } = {}) => {
     const roomId = room == null ? "" : String(room);
     if (!roomId) return;
+    if (!mongoose.Types.ObjectId.isValid(roomId)) {
+      socket.emit("roomJoinDenied", { room: roomId, reason: "room_not_found" });
+      return;
+    }
+
+    const roomRecord = await Room.findById(roomId).lean();
+    if (!roomRecord) {
+      socket.emit("roomJoinDenied", { room: roomId, reason: "room_not_found" });
+      return;
+    }
+    if (!canAccessRoom(roomRecord, socket.username)) {
+      socket.emit("roomJoinDenied", { room: roomId, reason: "not_invited" });
+      return;
+    }
 
     // A socket can only be a member of the room it currently has open.
     // Leave the previous room before joining another one so its member list
@@ -1910,10 +1938,18 @@ socket.on("editPublicMessage", async (data) => {
     }
   });
 
-  socket.on("roomMessage", async (msg) => {
+  socket.on("roomMessage", async (msg = {}) => {
+    const roomId = msg.room == null ? "" : String(msg.room);
+    // Do not trust the room/from fields supplied by the browser. A sender
+    // must have successfully joined this exact room first.
+    if (!roomId || socket.currentRoom !== roomId || !socket.rooms.has(roomId)) return;
+
+    const roomRecord = await Room.findById(roomId).lean();
+    if (!canAccessRoom(roomRecord, socket.username)) return;
+
     const enriched = {
-      room: msg.room,
-      from: msg.from,
+      room: roomId,
+      from: socket.username,
       display: msg.display,
       text: msg.text || null,
       imageUrl: msg.imageUrl || null,
@@ -1928,11 +1964,11 @@ socket.on("editPublicMessage", async (data) => {
       console.error("Failed to save room message:", err);
     }
 
-    const members = await User.find({ socketId: { $ne: null } }).lean();
+    const members = await io.in(roomId).fetchSockets();
 
     if (msg.imageUrl) {
-      members.forEach(u => {
-        io.to(u.socketId).emit("roomMessage", {
+      members.forEach(member => {
+        io.to(member.id).emit("roomMessage", {
           ...enriched,
           _id: created?._id
         });
@@ -1940,10 +1976,11 @@ socket.on("editPublicMessage", async (data) => {
       return;
     }
 
-    members.forEach(async u => {
-      const translated = await translateText(enriched.text, u.language || "en");
+    members.forEach(async member => {
+      const recipient = await User.findOne({ socketId: member.id }).lean();
+      const translated = await translateText(enriched.text, recipient?.language || "en");
 
-      io.to(u.socketId).emit("roomMessage", {
+      io.to(member.id).emit("roomMessage", {
         ...enriched,
         _id: created?._id,
         text: translated
@@ -1955,11 +1992,12 @@ socket.on("editPublicMessage", async (data) => {
   // translated for each recipient, matching how room messages are delivered.
   socket.on("editRoomMessage", async (data) => {
     try {
-      const { id, from, text } = data || {};
-      if (!id || !from || typeof text !== "string" || !text.trim()) return;
+      const { id, text } = data || {};
+      if (!id || typeof text !== "string" || !text.trim()) return;
 
       const msg = await RoomMessage.findById(id);
-      if (!msg || msg.from !== from) return; // only the author may edit
+      if (!msg || msg.from !== socket.username || socket.currentRoom !== msg.room
+        || !socket.rooms.has(msg.room)) return; // only the author may edit
 
       msg.text = text.trim();
       msg.edited = true;
@@ -1994,12 +2032,18 @@ socket.on("editPublicMessage", async (data) => {
     }
   });
 
-  socket.on("typingRoom", ({ room, from }) => {
-    socket.to(room).emit("typingRoom", { from, room });
+  socket.on("typingRoom", ({ room, from } = {}) => {
+    const roomId = room == null ? "" : String(room);
+    if (roomId && socket.currentRoom === roomId && socket.rooms.has(roomId)) {
+      socket.to(roomId).emit("typingRoom", { from: socket.username, room: roomId });
+    }
   });
 
-  socket.on("stopTypingRoom", ({ room, from }) => {
-    socket.to(room).emit("stopTypingRoom", { from, room });
+  socket.on("stopTypingRoom", ({ room, from } = {}) => {
+    const roomId = room == null ? "" : String(room);
+    if (roomId && socket.currentRoom === roomId && socket.rooms.has(roomId)) {
+      socket.to(roomId).emit("stopTypingRoom", { from: socket.username, room: roomId });
+    }
   });
 
   socket.on("createRoom", async ({ name, private }) => {

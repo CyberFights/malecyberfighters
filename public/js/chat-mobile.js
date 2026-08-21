@@ -1100,6 +1100,18 @@ function renderRoomsSidebar() {
 }
 
 $('roomSort')?.addEventListener('change', renderRoomsSidebar);
+socket.on("roomJoinDenied", ({ room, reason } = {}) => {
+  const popup = $('roomChatPopup');
+  if (popup && String(popup.dataset.room) === String(room)) {
+    popup.dataset.room = '';
+    popup.style.display = 'none';
+    renderRoomMembers([]);
+  }
+  alert(reason === 'room_not_found'
+    ? 'This room is no longer available.'
+    : 'You are not invited to this private room.');
+});
+
 socket.on("roomInvited", ({ roomId, roomName }) => {
   alert(`You have been invited to join the private room: ${roomName}`);
 });
