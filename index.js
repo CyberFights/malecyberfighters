@@ -355,17 +355,42 @@ async function logIp(req, { action, username }) {
   }
 }
 
-async function translateText(text, targetLang) {
-  try {
-    const resp = await fetch(
-      `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`
-    );
+// A public/room message used to send the same Google request once per online
+// user. Reuse only identical requests that are currently in progress so each
+// message is translated once per language instead of once per recipient.
+const pendingTranslations = new Map();
 
-    const data = await resp.json();
-    return data[0][0][0]; // translated text
-  } catch (err) {
-    console.error("Translation error:", err);
-    return text; // fallback
+async function translateText(text, targetLang) {
+  const requestKey = `${targetLang}\u0000${text}`;
+  const pending = pendingTranslations.get(requestKey);
+  if (pending) return pending;
+
+  const request = (async () => {
+    try {
+      const resp = await fetch(
+        `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`,
+        { headers: { Accept: "application/json" } }
+      );
+
+      const contentType = resp.headers.get("content-type") || "";
+      if (!resp.ok || !contentType.includes("json")) {
+        throw new Error(`Google Translate returned HTTP ${resp.status} (${contentType || "unknown content type"})`);
+      }
+
+      const data = await resp.json();
+      return data[0][0][0]; // translated text
+    } catch (err) {
+      console.error("Translation error:", err);
+      return text; // fallback
+    }
+  })();
+
+  pendingTranslations.set(requestKey, request);
+
+  try {
+    return await request;
+  } finally {
+    pendingTranslations.delete(requestKey);
   }
 }
 
