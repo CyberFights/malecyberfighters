@@ -1038,12 +1038,17 @@ app.post("/api/send-dm", async (req, res) => {
 // ---------- API: PUBLIC CHAT HISTORY ----------
 app.get("/api/public-messages", async (req, res) => {
   try {
-    const messages = await PublicMessage
+    // Fetch the latest 200 records, then restore chronological display order.
+    // Sorting ascending before limiting returned the oldest 200 forever, so
+    // new messages did not change the response and browsers kept seeing 304.
+    const messages = (await PublicMessage
       .find({})
-      .sort({ time: 1 })
+      .sort({ time: -1 })
       .limit(200)
-      .lean();
+      .lean())
+      .reverse();
 
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
     res.json({ ok: true, messages });
   } catch (err) {
     console.error("load public messages error:", err);
