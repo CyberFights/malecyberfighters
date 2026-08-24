@@ -683,23 +683,32 @@ footer{
   font-size:13px;
   letter-spacing:0.5px;
 }
-a.download-btn{
+a.download-btn,
+button.download-btn{
   display:inline-block;
   background:#00e5ff;
   color:#041018;
+  font:inherit;
   font-weight:700;
   font-size:15px;
   padding:11px 22px;
+  border:0;
   border-radius:8px;
   text-decoration:none;
   cursor:pointer;
   box-shadow:0 0 14px rgba(0,229,255,0.7), 0 0 28px rgba(0,229,255,0.35);
   transition:transform .12s ease, box-shadow .12s ease;
 }
-a.download-btn:hover{
+a.download-btn:hover,
+button.download-btn:hover{
   transform:translateY(-1px);
   box-shadow:0 0 18px rgba(0,229,255,0.9), 0 0 34px rgba(0,229,255,0.5);
 }
+.mobile-download-footer{
+  border-color:rgba(127,216,255,0.28);
+  background:rgba(127,216,255,0.045);
+}
+.app-store-coming-soon{ color:var(--muted); }
 .download-platforms{
   display:flex;
   flex-wrap:wrap;
