@@ -5,7 +5,7 @@
  * the network. Static assets can be reused while the app is being opened on
  * a poor connection, without serving stale chat or account data.
  */
-const CACHE_NAME = 'cyber-fights-app-shell-v2';
+const CACHE_NAME = 'cyber-fights-app-shell-v3';
 const STATIC_ASSETS = [
   '/manifest.webmanifest',
   '/images/mcf.png',
@@ -15,6 +15,7 @@ const STATIC_ASSETS = [
   '/css/desktop.css',
   '/js/pwa-install.js',
   '/js/image-proxy.js',
+  '/js/viewport-fit.js',
   '/offline.html'
 ];
 
