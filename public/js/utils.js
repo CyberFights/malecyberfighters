@@ -1,3 +1,11 @@
+/* Route remote (ImgBB / Discord CDN) images through our same-origin /img
+ * proxy so Firefox's OpaqueResponseBlocking cannot drop them. Falls back to the
+ * raw URL if image-proxy.js has not loaded. */
+function utilsImgSrc(value) {
+  if (typeof window !== 'undefined' && typeof window.imgSrc === 'function') return window.imgSrc(value);
+  return value == null ? '' : String(value);
+}
+
 // Overwrite document.getElementById to handle duplicate IDs between mobile (#mainUI) and desktop (.container) layouts
 (function() {
   const originalGetElementById = document.getElementById;
@@ -164,7 +172,7 @@ function renderProfilePhotoGallery(container, photos, emptyText = 'No extra phot
     link.setAttribute('aria-label', `Open profile photo ${index + 1}`);
 
     const image = document.createElement('img');
-    image.src = url;
+    image.src = utilsImgSrc(url);
     image.alt = `Profile photo ${index + 1}`;
     image.loading = 'lazy';
     image.referrerPolicy = 'no-referrer';
@@ -173,6 +181,22 @@ function renderProfilePhotoGallery(container, photos, emptyText = 'No extra phot
     container.appendChild(link);
   });
 }
+
+/*
+ * Opening a DM should leave the user looking at the conversation, not at the
+ * profile card or roster they launched it from. Those overlays sit at
+ * z-index 9999 (above the DM window's 9500) and cover the whole screen on
+ * mobile, so leaving them open makes it look like nothing happened.
+ */
+function closeUserBrowsingPopups() {
+  ['modalViewProfile', 'modalRoster', 'dmSidebar', 'roomsSidebar'].forEach(id => {
+    document.querySelectorAll(`[id="${id}"]`).forEach(el => {
+      el.style.display = 'none';
+    });
+  });
+}
+
+window.closeUserBrowsingPopups = closeUserBrowsingPopups;
 
 window.normalizeProfilePhotos = normalizeProfilePhotos;
 window.renderProfilePhotoGallery = renderProfilePhotoGallery;
@@ -364,7 +388,7 @@ window.updateProfileCard = function(user) {
   const bio = user.info || 'No bio';
 
 const avatarHtml = user.imageUrl
-  ? `<img src="${escapeHtml(user.imageUrl)}" alt="avatar" class="profile-avatar-img">`
+  ? `<img src="${escapeHtml(utilsImgSrc(user.imageUrl))}" alt="avatar" class="profile-avatar-img">`
   : escapeHtml(initials);
 
 card.innerHTML = `

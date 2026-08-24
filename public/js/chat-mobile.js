@@ -1,3 +1,11 @@
+/* Route remote (ImgBB / Discord CDN) images through our same-origin /img
+ * proxy so Firefox's OpaqueResponseBlocking cannot drop them. Falls back to the
+ * raw URL if image-proxy.js has not loaded. */
+function chatImgSrc(value) {
+  if (typeof window !== 'undefined' && typeof window.imgSrc === 'function') return window.imgSrc(value);
+  return value == null ? '' : String(value);
+}
+
 /* ============================================================
    chat-mobile.js — Mobile version of chat.js
    Adapted from ./public/js/chat.js for ./public/mobile.html
@@ -106,7 +114,7 @@ function renderMessageAvatar(username, display, imageUrl, size = 36){
     .slice(0, 2);
 
   if (imageUrl){
-    return `<img src="${imageUrl}" class="avatar-img" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover">`;
+    return `<img src="${chatImgSrc(imageUrl)}" class="avatar-img" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover">`;
   }
 
   return `<div class="avatar-fallback" style="width:${size}px;height:${size}px;border-radius:50%">${initials}</div>`;
@@ -197,7 +205,7 @@ function renderRosterPopup() {
 
     const display = u.display || u.username || '?';
     const avatar = u.imageUrl
-      ? `<img src="${u.imageUrl}" class="roster-avatar" style="width:44px;height:44px;border-radius:8px;object-fit:cover">`
+      ? `<img src="${chatImgSrc(u.imageUrl)}" class="roster-avatar" style="width:44px;height:44px;border-radius:8px;object-fit:cover">`
       : `<div class="avatar-fallback roster-avatar" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center">${display[0]}</div>`;
 
     div.innerHTML = `
@@ -310,6 +318,13 @@ function openUserProfile(username) {
 
   $('modalViewProfile').style.display = "flex";
   document.getElementById("vpDMButton").onclick = () => {
+    // Close the profile card (and the roster behind it, if that is where this
+    // profile was opened from) before showing the conversation.
+    if (typeof window.closeUserBrowsingPopups === 'function') window.closeUserBrowsingPopups();
+    else {
+      if ($('modalViewProfile')) $('modalViewProfile').style.display = 'none';
+      if ($('modalRoster')) $('modalRoster').style.display = 'none';
+    }
     openPrivateWindow(username);
   };
 }
@@ -804,7 +819,7 @@ function appendPublicMessage(msg){
   if (msg._id) div.dataset.id = msg._id;
 
   const imageHtml = msg.imageUrl
-    ? `<img src="${escapeHtml(msg.imageUrl)}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${escapeHtml(msg.imageUrl)}">`
+    ? `<img src="${escapeHtml(chatImgSrc(msg.imageUrl))}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${escapeHtml(msg.imageUrl)}">`
     : '';
 
   const replyHtml = msg.replyTo
@@ -911,7 +926,7 @@ function appendRoomMessage(msg){
 
   const textHtml = msg.text ? `<div class="message-text">${escapeHtml(msg.text)}</div>` : '';
   const imageHtml = msg.imageUrl
-    ? `<img src="${msg.imageUrl}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${msg.imageUrl}">`
+    ? `<img src="${chatImgSrc(msg.imageUrl)}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${msg.imageUrl}">`
     : '';
 
   const replyHtml = msg.replyTo
@@ -1278,7 +1293,7 @@ function renderRoomMembers(members) {
     div.className = "room-member";
 
     const avatar = m.imageUrl
-      ? `<img src="${m.imageUrl}" style="width:32px;height:32px;border-radius:50%">`
+      ? `<img src="${chatImgSrc(m.imageUrl)}" style="width:32px;height:32px;border-radius:50%">`
       : `<div class="avatar-fallback" style="width:32px;height:32px">${m.display[0]}</div>`;
 
     div.innerHTML = `

@@ -24,6 +24,7 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/cyberfight
 if (!process.env.MONGO_URI) console.warn('Warning: MONGO_URI not set — defaulting to mongodb://127.0.0.1:27017/cyberfights (may fail if Mongo is not running)');
 const ADMIN_KEY = process.env.ADMIN_KEY;
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const MAX_PROXIED_IMAGE_SIZE = 12 * 1024 * 1024;
 const MAX_EXTRA_PROFILE_PHOTOS = 10;
 
 const DISCORD_WEBHOOK_URL = process.env.Discord_webhook || null;
@@ -90,6 +91,152 @@ app.get('/', (req, res, next) => {
 
     res.send(page);
   });
+});
+
+// ---------- IMAGE PROXY ----------
+// Remote image hosts (ImgBB / Discord CDN) sit behind Cloudflare and sometimes
+// answer a hotlinked <img> request with an HTML challenge/error page or a
+// redirect instead of image bytes. Firefox then refuses the response with
+// "A resource is blocked by OpaqueResponseBlocking" (ORB blocks cross-origin
+// no-cors responses whose body/Content-Type is not actually an image), and the
+// Cloudflare "__cf_bm" cookie is rejected for an invalid domain along the way.
+//
+// Serving those images through our own origin fixes both: the browser sees a
+// same-origin response with a guaranteed image/* Content-Type, so ORB never
+// applies and no third-party cookie is involved.
+const IMAGE_PROXY_HOSTS = new Set([
+  'ibb.co',
+  'i.ibb.co',
+  'image.ibb.co',
+  'cdn.discordapp.com',
+  'media.discordapp.net'
+]);
+
+const ALLOWED_IMAGE_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/gif',
+  'image/webp',
+  'image/avif',
+  'image/bmp',
+  'image/svg+xml'
+]);
+
+// 1x1 transparent PNG, returned (with an image content type) when the upstream
+// image cannot be fetched so the browser never receives an opaque/HTML body.
+const TRANSPARENT_PIXEL = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+  'base64'
+);
+
+function isProxyableImageHost(hostname) {
+  const host = String(hostname || '').toLowerCase();
+  return IMAGE_PROXY_HOSTS.has(host) || host.endsWith('.ibb.co');
+}
+
+function parseProxyTarget(rawUrl) {
+  try {
+    const url = new URL(String(rawUrl || '').trim());
+    if (url.protocol !== 'https:') return null;
+    if (!isProxyableImageHost(url.hostname)) return null;
+    return url;
+  } catch (_) {
+    return null;
+  }
+}
+
+function sendPlaceholderImage(res, status) {
+  if (res.headersSent) return;
+  res.status(status);
+  res.set({
+    'Content-Type': 'image/png',
+    'Content-Length': String(TRANSPARENT_PIXEL.length),
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'Cross-Origin-Resource-Policy': 'same-origin'
+  });
+  res.end(TRANSPARENT_PIXEL);
+}
+
+const imageProxyLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+app.get('/img', imageProxyLimiter, async (req, res) => {
+  const target = parseProxyTarget(req.query.u || req.query.url);
+  if (!target) return sendPlaceholderImage(res, 400);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const upstream = await fetch(target.href, {
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: {
+        // Some CDNs reject requests without a browser-ish UA / Accept header.
+        'Accept': 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8,*/*;q=0.5',
+        'User-Agent': 'Mozilla/5.0 (compatible; MaleCyberFighters/1.0; +https://malecyberfighters.com)'
+      }
+    });
+
+    const contentType = String(upstream.headers.get('content-type') || '')
+      .split(';')[0]
+      .trim()
+      .toLowerCase();
+
+    if (!upstream.ok || !ALLOWED_IMAGE_TYPES.has(contentType)) {
+      // Upstream returned an HTML error / Cloudflare challenge — swallow it and
+      // hand back a real image so nothing gets ORB-blocked in the client.
+      console.warn('image proxy rejected upstream response', {
+        url: target.href,
+        status: upstream.status,
+        contentType: contentType || 'unknown'
+      });
+      if (upstream.body && typeof upstream.body.resume === 'function') upstream.body.resume();
+      return sendPlaceholderImage(res, 502);
+    }
+
+    const contentLength = Number(upstream.headers.get('content-length') || 0);
+    if (contentLength && contentLength > MAX_PROXIED_IMAGE_SIZE) {
+      if (upstream.body && typeof upstream.body.resume === 'function') upstream.body.resume();
+      return sendPlaceholderImage(res, 502);
+    }
+
+    res.set({
+      'Content-Type': contentType,
+      'Cache-Control': 'public, max-age=86400, immutable',
+      'X-Content-Type-Options': 'nosniff',
+      'Cross-Origin-Resource-Policy': 'same-origin',
+      'Referrer-Policy': 'no-referrer'
+    });
+    if (contentLength) res.set('Content-Length', String(contentLength));
+
+    let streamed = 0;
+    upstream.body.on('data', chunk => {
+      streamed += chunk.length;
+      if (streamed > MAX_PROXIED_IMAGE_SIZE) {
+        upstream.body.destroy();
+        res.destroy();
+      }
+    });
+    upstream.body.on('error', err => {
+      console.error('image proxy stream error', err.message || err);
+      if (!res.headersSent) sendPlaceholderImage(res, 502);
+      else res.destroy();
+    });
+
+    upstream.body.pipe(res);
+  } catch (err) {
+    console.error('image proxy error', err.message || err);
+    sendPlaceholderImage(res, 502);
+  } finally {
+    clearTimeout(timeout);
+  }
 });
 
 app.use(express.static(path.join(__dirname, 'public')));

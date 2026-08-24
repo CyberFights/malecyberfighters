@@ -1,3 +1,11 @@
+/* Route remote (ImgBB / Discord CDN) images through our same-origin /img
+ * proxy so Firefox's OpaqueResponseBlocking cannot drop them. Falls back to the
+ * raw URL if image-proxy.js has not loaded. */
+function pmImgSrc(value) {
+  if (typeof window !== 'undefined' && typeof window.imgSrc === 'function') return window.imgSrc(value);
+  return value == null ? '' : String(value);
+}
+
 /* ============================================================
    SERVER-SYNCED DM SYSTEM (MongoDB + Translation + Images)
 ============================================================ */
@@ -54,6 +62,10 @@ function openPrivateWindow(targetUsername) {
     alert("You cannot message yourself");
     return;
   }
+
+  // Get the profile card / roster / DM list out of the way — they overlay the
+  // DM window on mobile, so the conversation would open behind them.
+  if (typeof window.closeUserBrowsingPopups === "function") window.closeUserBrowsingPopups();
 
   const existing = document.getElementById("pmWindow_" + targetUsername);
   if (existing) {
@@ -260,7 +272,8 @@ function renderPMHistory(targetUsername, messages) {
 
     if (m.imageUrl) {
       const img = document.createElement("img");
-      img.src = m.imageUrl;
+      img.src = pmImgSrc(m.imageUrl);
+      img.referrerPolicy = "no-referrer";
       img.className = "chat-image";
       img.style.cssText = "max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer";
       img.addEventListener("click", () => window.open(m.imageUrl, "_blank"));
