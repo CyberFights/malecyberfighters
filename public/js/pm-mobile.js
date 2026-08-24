@@ -1,3 +1,11 @@
+/* Route remote (ImgBB / Discord CDN) images through our same-origin /img
+ * proxy so Firefox's OpaqueResponseBlocking cannot drop them. Falls back to the
+ * raw URL if image-proxy.js has not loaded. */
+function pmImgSrc(value) {
+  if (typeof window !== 'undefined' && typeof window.imgSrc === 'function') return window.imgSrc(value);
+  return value == null ? '' : String(value);
+}
+
 /* ============================================================
    pm-mobile.js — Mobile version of pm.js
    Adapted from ./public/js/pm.js for ./public/mobile.html
@@ -195,7 +203,7 @@ function renderDMMessages(targetUsername, messages) {
       </div>
     `;
   } else if (m.imageUrl) {
-      contentHtml = `<img src="${m.imageUrl}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${m.imageUrl}">`;
+      contentHtml = `<img src="${pmImgSrc(m.imageUrl)}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${m.imageUrl}">`;
     } else {
       contentHtml = `<div>${escapeHtml(m.text || "")}</div>`;
     }
@@ -392,7 +400,7 @@ function appendSingleDMMessage(pm, me) {
       </div>
     `;
   } else if (pm.imageUrl) {
-    contentHtml = `<img src="${pm.imageUrl}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${pm.imageUrl}">`;
+    contentHtml = `<img src="${pmImgSrc(pm.imageUrl)}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${pm.imageUrl}">`;
   } else {
     contentHtml = `<div>${escapeHtml(pm.text || "")}</div>`;
   }

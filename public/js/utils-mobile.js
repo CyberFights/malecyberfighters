@@ -1,3 +1,11 @@
+/* Route remote (ImgBB / Discord CDN) images through our same-origin /img
+ * proxy so Firefox's OpaqueResponseBlocking cannot drop them. Falls back to the
+ * raw URL if image-proxy.js has not loaded. */
+function utilsImgSrc(value) {
+  if (typeof window !== 'undefined' && typeof window.imgSrc === 'function') return window.imgSrc(value);
+  return value == null ? '' : String(value);
+}
+
 /* ============================================================
    utils-mobile.js — Mobile version of utils.js
    Adapted from ./public/js/utils.js for ./public/mobile.html
@@ -112,7 +120,7 @@ window.updateProfileCard = function(user) {
 
   if (meAvatar) {
     if (user.imageUrl) {
-      meAvatar.innerHTML = `<img src="${escapeHtml(user.imageUrl)}" alt="avatar" style="width:48px;height:48px;border-radius:50%;object-fit:cover">`;
+      meAvatar.innerHTML = `<img src="${escapeHtml(utilsImgSrc(user.imageUrl))}" alt="avatar" style="width:48px;height:48px;border-radius:50%;object-fit:cover">`;
     } else {
       meAvatar.innerHTML = `<div class="avatar-fallback" style="width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;color:#bae6fd;background:#1e3a5f">${escapeHtml(initials)}</div>`;
     }

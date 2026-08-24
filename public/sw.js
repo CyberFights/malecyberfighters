@@ -5,7 +5,7 @@
  * the network. Static assets can be reused while the app is being opened on
  * a poor connection, without serving stale chat or account data.
  */
-const CACHE_NAME = 'cyber-fights-app-shell-v1';
+const CACHE_NAME = 'cyber-fights-app-shell-v2';
 const STATIC_ASSETS = [
   '/manifest.webmanifest',
   '/images/mcf.png',
@@ -14,6 +14,7 @@ const STATIC_ASSETS = [
   '/css/mobile.css',
   '/css/desktop.css',
   '/js/pwa-install.js',
+  '/js/image-proxy.js',
   '/offline.html'
 ];
 
@@ -47,6 +48,10 @@ self.addEventListener('fetch', event => {
   // Do not cache the live application document. The server chooses the
   // desktop/mobile stylesheet from the request and the page contains live
   // updates, auth UI and realtime chat.
+  // Proxied remote images (/img?u=...) are already cached by the HTTP layer and
+  // would otherwise grow the app-shell cache without bound.
+  if (url.pathname === '/img') return;
+
   if (request.mode === 'navigate' || url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(request).catch(() => {

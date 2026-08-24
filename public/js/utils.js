@@ -1,3 +1,11 @@
+/* Route remote (ImgBB / Discord CDN) images through our same-origin /img
+ * proxy so Firefox's OpaqueResponseBlocking cannot drop them. Falls back to the
+ * raw URL if image-proxy.js has not loaded. */
+function utilsImgSrc(value) {
+  if (typeof window !== 'undefined' && typeof window.imgSrc === 'function') return window.imgSrc(value);
+  return value == null ? '' : String(value);
+}
+
 // Overwrite document.getElementById to handle duplicate IDs between mobile (#mainUI) and desktop (.container) layouts
 (function() {
   const originalGetElementById = document.getElementById;
@@ -164,7 +172,7 @@ function renderProfilePhotoGallery(container, photos, emptyText = 'No extra phot
     link.setAttribute('aria-label', `Open profile photo ${index + 1}`);
 
     const image = document.createElement('img');
-    image.src = url;
+    image.src = utilsImgSrc(url);
     image.alt = `Profile photo ${index + 1}`;
     image.loading = 'lazy';
     image.referrerPolicy = 'no-referrer';
@@ -364,7 +372,7 @@ window.updateProfileCard = function(user) {
   const bio = user.info || 'No bio';
 
 const avatarHtml = user.imageUrl
-  ? `<img src="${escapeHtml(user.imageUrl)}" alt="avatar" class="profile-avatar-img">`
+  ? `<img src="${escapeHtml(utilsImgSrc(user.imageUrl))}" alt="avatar" class="profile-avatar-img">`
   : escapeHtml(initials);
 
 card.innerHTML = `

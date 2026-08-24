@@ -1,3 +1,11 @@
+/* Route remote (ImgBB / Discord CDN) images through our same-origin /img
+ * proxy so Firefox's OpaqueResponseBlocking cannot drop them. Falls back to the
+ * raw URL if image-proxy.js has not loaded. */
+function profileImgSrc(value) {
+  if (typeof window !== 'undefined' && typeof window.imgSrc === 'function') return window.imgSrc(value);
+  return value == null ? '' : String(value);
+}
+
 /* -----------------------------------------------------------
    PROFILE EDIT LOGIC
 ----------------------------------------------------------- */
@@ -81,7 +89,7 @@ function renderExtraPhotoEditor() {
     tile.className = "profile-photo-tile profile-photo-edit-tile";
 
     const image = document.createElement("img");
-    image.src = url;
+    image.src = profileImgSrc(url);
     image.alt = `Extra profile photo ${index + 1}`;
     image.loading = "lazy";
     image.referrerPolicy = "no-referrer";

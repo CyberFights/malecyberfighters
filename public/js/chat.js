@@ -1,3 +1,11 @@
+/* Route remote (ImgBB / Discord CDN) images through our same-origin /img
+ * proxy so Firefox's OpaqueResponseBlocking cannot drop them. Falls back to the
+ * raw URL if image-proxy.js has not loaded. */
+function chatImgSrc(value) {
+  if (typeof window !== 'undefined' && typeof window.imgSrc === 'function') return window.imgSrc(value);
+  return value == null ? '' : String(value);
+}
+
 /* ============================================================
    GLOBAL SAFE SELECTOR (works with utils.js)
 ============================================================ */
@@ -103,7 +111,7 @@ function renderMessageAvatar(username, display, imageUrl, size = 36){
     .slice(0, 2);
 
   if (imageUrl){
-    return `<img src="${imageUrl}" class="avatar-img" style="width:${size}px;height:${size}px">`;
+    return `<img src="${chatImgSrc(imageUrl)}" class="avatar-img" style="width:${size}px;height:${size}px">`;
   }
 
   return `<div class="avatar-fallback" style="width:${size}px;height:${size}px">${initials}</div>`;
@@ -211,7 +219,7 @@ function renderRosterPopup() {
 
     const display = u.display || u.username || '?';
     const avatar = u.imageUrl
-      ? `<img src="${u.imageUrl}" class="roster-avatar" style="width:44px;height:44px;border-radius:8px;object-fit:cover">`
+      ? `<img src="${chatImgSrc(u.imageUrl)}" class="roster-avatar" style="width:44px;height:44px;border-radius:8px;object-fit:cover">`
       : `<div class="avatar-fallback roster-avatar" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center">${display[0]}</div>`;
 
     div.innerHTML = `
@@ -264,7 +272,7 @@ function openUserProfile(username) {
   if ($('vpLang')) $('vpLang').textContent = user.language || "Unknown";
   if ($('vpAge')) $('vpAge').textContent = user.age || "Unknown";
   if ($('vpColorBox')) $('vpColorBox').style.background = user.color || "#7fd8ff";
-  if ($('vpAvatar')) $('vpAvatar').src = user.imageUrl || "https://via.placeholder.com/120?text=No+Image";
+  if ($('vpAvatar')) $('vpAvatar').src = chatImgSrc(user.imageUrl) || "/images/mcf.png";
   if (window.renderProfilePhotoGallery) {
     window.renderProfilePhotoGallery($('vpExtraPhotos'), user.extraPhotos);
   }
@@ -938,7 +946,7 @@ function appendPublicMessage(msg, playSound = true){
   if (msg._id) div.dataset.id = msg._id;
 
   const imageHtml = msg.imageUrl
-    ? `<img src="${escapeHtml(msg.imageUrl)}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${escapeHtml(msg.imageUrl)}">`
+    ? `<img src="${escapeHtml(chatImgSrc(msg.imageUrl))}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${escapeHtml(msg.imageUrl)}">`
     : '';
 
   const replyHtml = msg.replyTo
@@ -1049,7 +1057,7 @@ function appendRoomMessage(msg){
 
   const textHtml = msg.text ? `<div class="message-text">${escapeHtml(msg.text)}</div>` : '';
   const imageHtml = msg.imageUrl
-    ? `<img src="${msg.imageUrl}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${msg.imageUrl}">`
+    ? `<img src="${chatImgSrc(msg.imageUrl)}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${msg.imageUrl}">`
     : '';
 
   const replyHtml = msg.replyTo
@@ -1437,7 +1445,7 @@ function renderRoomMembers(members) {
     div.className = "room-member";
 
     const avatar = m.imageUrl
-      ? `<img src="${m.imageUrl}" style="width:32px;height:32px;border-radius:50%">`
+      ? `<img src="${chatImgSrc(m.imageUrl)}" style="width:32px;height:32px;border-radius:50%">`
       : `<div class="avatar-fallback" style="width:32px;height:32px">${m.display[0]}</div>`;
 
     div.innerHTML = `

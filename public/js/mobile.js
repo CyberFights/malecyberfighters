@@ -1,3 +1,11 @@
+/* Route remote (ImgBB / Discord CDN) images through our same-origin /img
+ * proxy so Firefox's OpaqueResponseBlocking cannot drop them. Falls back to the
+ * raw URL if image-proxy.js has not loaded. */
+function mobileImgSrc(value) {
+  if (typeof window !== 'undefined' && typeof window.imgSrc === 'function') return window.imgSrc(value);
+  return value == null ? '' : String(value);
+}
+
 /* =========================================================================
    mobile.js — CLEAN single-file client for /public/mobile.html
 
@@ -76,7 +84,7 @@
   function avatarHtml(user, size = 36) {
     const name = user && (user.display || user.username || user.from);
     if (user && user.imageUrl) {
-      return `<img src="${escapeHtml(user.imageUrl)}" alt="${escapeHtml(name)}"
+      return `<img src="${escapeHtml(mobileImgSrc(user.imageUrl))}" alt="${escapeHtml(name)}"
               style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover">`;
     }
     return `<div class="avatar-fallback" style="width:${size}px;height:${size}px;border-radius:50%">${escapeHtml(initials(name))}</div>`;
@@ -120,7 +128,7 @@
       link.setAttribute("aria-label", `Open profile photo ${index + 1}`);
 
       const image = document.createElement("img");
-      image.src = url;
+      image.src = mobileImgSrc(url);
       image.alt = `Profile photo ${index + 1}`;
       image.loading = "lazy";
       image.referrerPolicy = "no-referrer";
@@ -684,7 +692,7 @@
       : { imageUrl: author.imageUrl, display };
 
     const imageHtml = msg.imageUrl
-      ? `<img src="${escapeHtml(msg.imageUrl)}" class="chat-image" alt="attachment" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer">`
+      ? `<img src="${escapeHtml(mobileImgSrc(msg.imageUrl))}" class="chat-image" alt="attachment" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer">`
       : "";
 
     const row = document.createElement("div");
@@ -1194,7 +1202,7 @@
       tile.className = "profile-photo-tile profile-photo-edit-tile";
 
       const image = document.createElement("img");
-      image.src = url;
+      image.src = mobileImgSrc(url);
       image.alt = `Extra profile photo ${index + 1}`;
       image.loading = "lazy";
       image.referrerPolicy = "no-referrer";
@@ -1526,7 +1534,7 @@
           </div>
         `;
       } else if (msg.imageUrl) {
-      content = `<img src="${escapeHtml(msg.imageUrl)}" class="chat-image" alt="attachment">`;
+      content = `<img src="${escapeHtml(mobileImgSrc(msg.imageUrl))}" class="chat-image" alt="attachment">`;
     } else {
       content = `<div>${escapeHtml(msg.text || "")}</div>`;
     }
@@ -1799,7 +1807,7 @@
     const display = msg.display || author.display || msg.from || "";
 
     const content = msg.imageUrl
-      ? `<img src="${escapeHtml(msg.imageUrl)}" class="chat-image" alt="attachment">`
+      ? `<img src="${escapeHtml(mobileImgSrc(msg.imageUrl))}" class="chat-image" alt="attachment">`
       : `<div>${escapeHtml(msg.text || "")}</div>`;
 
     const div = document.createElement("div");
@@ -2922,7 +2930,7 @@ function renderDMMessages(targetUsername, messages) {
         </div>
       `;
     } else if (m.imageUrl) {
-      contentHtml = `<img src="${m.imageUrl}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${m.imageUrl}">`;
+      contentHtml = `<img src="${mobileImgSrc(m.imageUrl)}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${m.imageUrl}">`;
     } else {
       contentHtml = `<div>${escapeHtml(m.text || "")}</div>`;
     }
@@ -3059,7 +3067,7 @@ function appendSingleDMMessage(pm, me) {
       </div>
     `;
   } else if (pm.imageUrl) {
-    contentHtml = `<img src="${pm.imageUrl}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${pm.imageUrl}">`;
+    contentHtml = `<img src="${mobileImgSrc(pm.imageUrl)}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${pm.imageUrl}">`;
   } else {
     contentHtml = `<div>${escapeHtml(pm.text || "")}</div>`;
   }
