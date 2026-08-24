@@ -1,0 +1,149 @@
+name: Build Mobile Apps
+
+# Capacitor wraps the same responsive web client used by the desktop app.
+# Run manually for testing artifacts, or push a mobile-v* tag to publish the
+# Android APK and iOS simulator build to a GitHub Release.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'mobile-v*'
+
+permissions:
+  contents: write
+
+env:
+  MOBILE_DIR: mobile
+
+jobs:
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install Capacitor dependencies
+        working-directory: ${{ env.MOBILE_DIR }}
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate Android project
+        working-directory: ${{ env.MOBILE_DIR }}
+        run: npx cap add android
+
+      - name: Sync web app
+        working-directory: ${{ env.MOBILE_DIR }}
+        run: npx cap sync android
+
+      - name: Build debug APK
+        working-directory: ${{ env.MOBILE_DIR }}/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Rename APK
+        run: cp mobile/android/app/build/outputs/apk/debug/app-debug.apk mobile/CyberFights-android.apk
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: android
+          path: mobile/CyberFights-android.apk
+          if-no-files-found: error
+
+  ios:
+    name: iOS simulator app
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install Capacitor dependencies
+        working-directory: ${{ env.MOBILE_DIR }}
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate iOS project
+        working-directory: ${{ env.MOBILE_DIR }}
+        run: npx cap add ios
+
+      - name: Sync web app
+        working-directory: ${{ env.MOBILE_DIR }}
+        run: npx cap sync ios
+
+      - name: Build unsigned simulator app
+        working-directory: ${{ env.MOBILE_DIR }}
+        run: |
+          if [ -d ios/App/App.xcworkspace ]; then
+            xcodebuild \
+              -workspace ios/App/App.xcworkspace \
+              -scheme App \
+              -sdk iphonesimulator \
+              -configuration Debug \
+              -derivedDataPath build/ios \
+              CODE_SIGNING_ALLOWED=NO \
+              build
+          else
+            xcodebuild \
+              -project ios/App/App.xcodeproj \
+              -scheme App \
+              -sdk iphonesimulator \
+              -configuration Debug \
+              -derivedDataPath build/ios \
+              CODE_SIGNING_ALLOWED=NO \
+              build
+          fi
+          ditto -c -k --sequesterRsrc --keepParent \
+            build/ios/Build/Products/Debug-iphonesimulator/App.app \
+            CyberFights-ios-simulator.zip
+
+      - name: Upload iOS simulator build
+        uses: actions/upload-artifact@v6
+        with:
+          name: ios-simulator
+          path: mobile/CyberFights-ios-simulator.zip
+          if-no-files-found: error
+
+  release:
+    name: Publish mobile test release
+    if: startsWith(github.ref, 'refs/tags/mobile-v')
+    needs: [android, ios]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Android artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: android
+          path: artifacts/android
+
+      - name: Download iOS artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: ios-simulator
+          path: artifacts/ios
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          draft: false
+          prerelease: true
+          files: |
+            artifacts/android/CyberFights-android.apk
+            artifacts/ios/CyberFights-ios-simulator.zip
