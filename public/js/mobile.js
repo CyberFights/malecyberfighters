@@ -1478,6 +1478,7 @@ function mobileImgSrc(value) {
     hideId("modalRoster");
     hideId("modalViewProfile");
     hideId("dmSidebar");
+    hideId("roomsSidebar");
     showId("dmPopup");
 
     const body = $("dmMessages");
@@ -2854,11 +2855,12 @@ function openPrivateWindow(targetUsername) {
     renderDMMessages(targetUsername, history);
   });
 
-  // Close any open modals
-  const modalRoster = document.getElementById("modalRoster");
-  const modalViewProfile = document.getElementById("modalViewProfile");
-  if (modalRoster) modalRoster.style.display = "none";
-  if (modalViewProfile) modalViewProfile.style.display = "none";
+  // Close the popups the DM may have been launched from so the conversation is
+  // not hidden behind the profile card, roster or DM list.
+  ["modalRoster", "modalViewProfile", "dmSidebar", "roomsSidebar"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
 }
 
 // Expose globally so chat-mobile.js / roster / profile can open DMs

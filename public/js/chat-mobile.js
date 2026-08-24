@@ -318,6 +318,13 @@ function openUserProfile(username) {
 
   $('modalViewProfile').style.display = "flex";
   document.getElementById("vpDMButton").onclick = () => {
+    // Close the profile card (and the roster behind it, if that is where this
+    // profile was opened from) before showing the conversation.
+    if (typeof window.closeUserBrowsingPopups === 'function') window.closeUserBrowsingPopups();
+    else {
+      if ($('modalViewProfile')) $('modalViewProfile').style.display = 'none';
+      if ($('modalRoster')) $('modalRoster').style.display = 'none';
+    }
     openPrivateWindow(username);
   };
 }

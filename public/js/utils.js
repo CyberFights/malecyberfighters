@@ -182,6 +182,22 @@ function renderProfilePhotoGallery(container, photos, emptyText = 'No extra phot
   });
 }
 
+/*
+ * Opening a DM should leave the user looking at the conversation, not at the
+ * profile card or roster they launched it from. Those overlays sit at
+ * z-index 9999 (above the DM window's 9500) and cover the whole screen on
+ * mobile, so leaving them open makes it look like nothing happened.
+ */
+function closeUserBrowsingPopups() {
+  ['modalViewProfile', 'modalRoster', 'dmSidebar', 'roomsSidebar'].forEach(id => {
+    document.querySelectorAll(`[id="${id}"]`).forEach(el => {
+      el.style.display = 'none';
+    });
+  });
+}
+
+window.closeUserBrowsingPopups = closeUserBrowsingPopups;
+
 window.normalizeProfilePhotos = normalizeProfilePhotos;
 window.renderProfilePhotoGallery = renderProfilePhotoGallery;
 

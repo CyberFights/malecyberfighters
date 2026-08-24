@@ -63,6 +63,10 @@ function openPrivateWindow(targetUsername) {
     return;
   }
 
+  // Get the profile card / roster / DM list out of the way — they overlay the
+  // DM window on mobile, so the conversation would open behind them.
+  if (typeof window.closeUserBrowsingPopups === "function") window.closeUserBrowsingPopups();
+
   const existing = document.getElementById("pmWindow_" + targetUsername);
   if (existing) {
     existing.style.display = "flex";
