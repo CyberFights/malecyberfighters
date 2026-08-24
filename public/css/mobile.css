@@ -268,6 +268,55 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
 }
 #legalLinks button { margin-top: 0; }
 
+/* Installable mobile app / PWA call-to-action */
+.app-download-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: center;
+  margin: 18px 20px 0;
+  padding: 16px;
+  border: 1px solid rgba(56, 189, 248, .34);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(14, 165, 233, .16), rgba(15, 23, 42, .78));
+  box-shadow: 0 0 22px rgba(14, 165, 233, .12);
+}
+.app-download-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #00121f;
+  background: linear-gradient(135deg, #7fd8ff, #b0c4ff);
+  box-shadow: 0 0 14px rgba(127, 216, 255, .5);
+  font-size: 27px;
+  font-weight: 900;
+}
+.app-download-copy { min-width: 0; }
+.app-download-copy h2 {
+  margin: 0 0 4px;
+  color: #e9f6ff;
+  font-size: 16px;
+}
+.app-download-copy p { margin-top: 5px; line-height: 1.4; }
+.app-download-card > #btnInstallApp {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.app-download-card .native-app-status {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  line-height: 1.4;
+}
+.app-download-card .native-app-status a {
+  color: #7dd3fc;
+  font-weight: 700;
+}
+
 /* ============================================================
    SIDE PANELS (DMs / Rooms) - CENTERED POPUP
    ============================================================ */

@@ -5,6 +5,11 @@
 <title>Male Cyber Fighters Mobile</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#020617">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cyber Fights">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/images/mcf.png">
 
 <link rel="stylesheet" href="/css/mobile.css">
 </head>
@@ -87,6 +92,20 @@
    
     <button id="btnLogout" class="ghost small-btn" type="button">Log out</button>
   </div>
+
+  <section class="app-download-card" aria-labelledby="mobileAppHeading">
+    <div class="app-download-icon" aria-hidden="true">⌁</div>
+    <div class="app-download-copy">
+      <h2 id="mobileAppHeading">Take the arena with you</h2>
+      <p class="small muted">Install Male Cyber Fighters on your phone for a fast, app-like way to reach the same live arena, rooms and DMs.</p>
+      <p id="appInstallHint" class="small muted">Install it now from your browser, or add it to your iPhone or iPad home screen.</p>
+    </div>
+    <button id="btnInstallApp" class="small-btn" type="button">Install mobile app</button>
+    <div class="native-app-status small muted">
+      <span>Android APK and iOS native builds are prepared in the mobile release pipeline.</span>
+      <a href="https://github.com/CyberFights/malecyberfighters/releases" target="_blank" rel="noopener">View mobile releases</a>
+    </div>
+  </section>
 
 </div>
 
@@ -821,6 +840,7 @@ Moderator decisions are final. </p>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/mobile.js"></script>
+<script src="/js/pwa-install.js"></script>
 <script src="/js/account.js"></script>
 <script src="/js/popup-dissolve.js"></script>
 

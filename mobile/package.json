@@ -1,0 +1,22 @@
+{
+  "name": "male-cyber-fighters-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Capacitor iOS and Android shells for Male Cyber Fighters",
+  "scripts": {
+    "cap:add:android": "cap add android",
+    "cap:add:ios": "cap add ios",
+    "cap:sync": "cap sync",
+    "cap:open:android": "cap open android",
+    "cap:open:ios": "cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "^7.4.3"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/cli": "^7.4.3",
+    "@capacitor/ios": "^7.4.3",
+    "typescript": "^5.9.3"
+  }
+}

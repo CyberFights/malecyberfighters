@@ -4,3 +4,9 @@ dist
 *.dmg
 *.exe
 *.blockmap
+*.apk
+*.ipa
+*.zip
+mobile/android/
+mobile/ios/
+mobile/build/
