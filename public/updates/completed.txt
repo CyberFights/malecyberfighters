@@ -1,3 +1,5 @@
+- added audio calls to dms, group calls to custom rooms
+- increased dm window size and made dms movable
 - added extra image uploading, each profile can now have up to 10 extra images
 - added edit and replying to messages
 - added image displaying from discord to public chat
