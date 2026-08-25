@@ -22,3 +22,5 @@
 - fixed mobile UI
 - added message editing (edit your own public + room messages)
 - added message replying (quote/reply to any public + room message)
+- added call sounds (ringing while a call is waiting to be answered, hang up tone when a call ends)
+- call popup now shows "Connected" once the call is answered, has a volume slider, and floats in the corner so dms, public chat and custom rooms stay usable during a call
