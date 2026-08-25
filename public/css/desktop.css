@@ -614,8 +614,8 @@ button.ghost{
   position:fixed;
   right:460px;
   bottom:28px;
-  width:384px;
-  height:432px;
+  width:584px;
+  height:632px;
   background:linear-gradient(180deg,#050a16,#0a1324);
   border-radius:10px;
   border:1px solid rgba(160,200,255,0.12);
