@@ -628,8 +628,8 @@ button.ghost{
 /* Desktop-only 20% size increase safeguard — mobile.css overrides this on small screens */
 @media (min-width: 769px){
   .pm-window{
-    width:384px;
-    height:432px;
+    width:484px;
+    height:532px;
   }
 }
 
