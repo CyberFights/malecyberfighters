@@ -1981,6 +1981,32 @@ socket.on("editPublicMessage", async (data) => {
 });
 
 
+  // WebRTC signaling: relay offers, answers, and ICE candidates only to the intended user.
+  socket.on("audio-call-signal", async ({ to, kind, offer, answer, candidate } = {}) => {
+    if (!to || !kind || !socket.username) return;
+    const target = await User.findOne({ username: to }).lean();
+    if (target?.socketId) io.to(target.socketId).emit("audio-call-signal", {
+      from: socket.username, kind, offer, answer, candidate
+    });
+  });
+
+  socket.on("room-audio-invite", async ({ room } = {}) => {
+    if (!room || !socket.username || !socket.rooms.has(room)) return;
+    socket.to(room).emit("room-audio-invite", { room, from: socket.username });
+  });
+
+  socket.on("room-audio-join", async ({ room, to } = {}) => {
+    if (!room || !to || !socket.username || !socket.rooms.has(room)) return;
+    const target = await User.findOne({ username: to }).lean();
+    if (target?.socketId) io.to(target.socketId).emit("room-audio-join", { room, from: socket.username });
+  });
+
+  socket.on("audio-call-end", async ({ to } = {}) => {
+    if (!to || !socket.username) return;
+    const target = await User.findOne({ username: to }).lean();
+    if (target?.socketId) io.to(target.socketId).emit("audio-call-end", { from: socket.username });
+  });
+
   socket.on("privateMessage", async pm => {
     const sender = await User.findOne({ username: pm.from }).lean();
     const receiver = await User.findOne({ username: pm.to }).lean();

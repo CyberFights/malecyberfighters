@@ -90,6 +90,7 @@ function openPrivateWindow(targetUsername) {
         </div>
       </div>
       <div style="display:flex;gap:6px;align-items:center">
+  <button class="small-btn pm-call" title="Audio call">☎ Call</button>
   <button class="small-btn pm-story">Story</button>
   <button class="small-btn pm-clear">Clear</button>
   <button class="small-btn pm-close">X</button>
@@ -163,6 +164,10 @@ function openPrivateWindow(targetUsername) {
     .addEventListener("keydown", e => {
       if (e.key === "Enter") sendPM(targetUsername);
     });
+pmWindow.querySelector(".pm-call").addEventListener("click", () => {
+  if (typeof window.startAudioCall === "function") window.startAudioCall(targetUsername);
+});
+
 pmWindow.querySelector(".pm-story").addEventListener("click", () => {
   openStoryPopup(targetUsername);
 });
