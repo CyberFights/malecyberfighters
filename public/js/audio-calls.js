@@ -1,6 +1,10 @@
 /* WebRTC audio calls for direct messages. Socket.IO carries signaling only. */
 (() => {
   const calls = new Map();
+  // ICE candidates can arrive while the callee is still looking at the
+  // incoming-call prompt. Keep them until the call is accepted; dropping them
+  // leaves the two peers with no usable network path on many browsers.
+  const pendingIce = new Map();
   const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
   const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   function session() { return typeof getSession === 'function' ? getSession() : null; }
@@ -23,9 +27,12 @@
     ringing = name;
     try {
       const p = toneEl(name).play();
-      if (p && typeof p.catch === 'function') p.catch(() => { if (ringing === name) ringing = null; });
+      // Keep the ringing marker if autoplay is blocked. A later user gesture
+      // can then restart the same tone.
+      if (p && typeof p.catch === 'function') p.catch(() => {});
     } catch (e) {
-      ringing = null; // Ignore audio errors (e.g., browser autoplay policy).
+      // Ignore audio errors (e.g., browser autoplay policy); pointerdown above
+      // will retry while the incoming call is still pending.
     }
   }
   function stopRing() {
@@ -33,6 +40,15 @@
     const name = ringing; ringing = null;
     try { const a = toneEls.get(name); if (a) { a.pause(); a.currentTime = 0; } } catch (e) {}
   }
+  // A first page interaction unlocks audio on browsers that block autoplay.
+  // This also lets a later incoming call ring normally.
+  document.addEventListener('pointerdown', () => {
+    if (!ringing) return;
+    const a = toneEls.get(ringing);
+    if (!a) return;
+    const p = a.play();
+    if (p && typeof p.catch === 'function') p.catch(() => {});
+  }, { passive: true });
   function playEndTone() {
     stopRing();
     try {
@@ -61,15 +77,28 @@
   }
   function setStatus(text) { const e = document.getElementById('audioCallStatus'); if (e) e.textContent = text; }
   function closeUI() { stopRing(); const e = document.getElementById('audioCallOverlay'); if (e) e.style.display = 'none'; }
-  function finish(peer) { const c = calls.get(peer); if (!c) return; c.pc.close(); if (c.stream) c.stream.getTracks().forEach(t => t.stop()); if (c.audio) c.audio.remove(); calls.delete(peer); socket.emit('audio-call-end', { to: peer }); playEndTone(); closeUI(); }
+  function finish(peer, notifyPeer = true) {
+    const c = calls.get(peer);
+    pendingIce.delete(peer);
+    if (!c) { closeUI(); return; }
+    calls.delete(peer);
+    try { c.pc.close(); } catch (_) {}
+    if (c.stream) c.stream.getTracks().forEach(t => t.stop());
+    if (c.audio) c.audio.remove();
+    if (notifyPeer) socket.emit('audio-call-end', { to: peer });
+    playEndTone(); closeUI();
+  }
   async function start(peer, incoming = false, offer = null) {
     if (calls.has(peer)) return;
     const me = session(); if (!me) return;
     const pc = new RTCPeerConnection(rtcConfig), c = { pc, stream: null, audio: null }; calls.set(peer, c);
     pc.onicecandidate = e => e.candidate && socket.emit('audio-call-signal', { to: peer, kind: 'ice', candidate: e.candidate });
-    pc.ontrack = e => { stopRing(); setStatus('Connected'); c.audio = c.audio || Object.assign(document.createElement('audio'), { autoplay: true }); c.audio.volume = callVolume; c.audio.srcObject = e.streams[0]; };
-    pc.onconnectionstatechange = () => { if (['failed','disconnected','closed'].includes(pc.connectionState)) finish(peer); };
-    c.stream = await navigator.mediaDevices.getUserMedia({ audio: true }); c.stream.getTracks().forEach(t => pc.addTrack(t, c.stream));
+    pc.ontrack = e => { stopRing(); setStatus('Connected'); c.audio = c.audio || Object.assign(document.createElement('audio'), { autoplay: true }); c.audio.volume = callVolume; c.audio.srcObject = e.streams[0]; c.audio.play?.().catch(() => {}); };
+    // A temporary disconnected state can recover while ICE is checking.
+    pc.onconnectionstatechange = () => { if (['failed','closed'].includes(pc.connectionState)) finish(peer); };
+    try {
+      c.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      c.stream.getTracks().forEach(t => pc.addTrack(t, c.stream));
     const vol = Math.round(callVolume * 100);
     notify(incoming ? 'Incoming audio call' : 'Calling ' + peer, incoming ? peer + ' is calling you' : 'Connecting…', `<div class="audio-call-volume"><label for="audioVolume">Volume</label><input id="audioVolume" type="range" min="0" max="100" step="1" value="${vol}"><span id="audioVolumeLabel">${vol}%</span></div><button id="audioHangup" class="small-btn">Hang up</button><button id="audioMute" class="small-btn">Mute</button>`);
     if (incoming) { stopRing(); setStatus('Connected'); } else startRing('ringback'); // ring until the other side picks up
@@ -77,9 +106,26 @@
     document.getElementById('audioVolume').oninput = e => setCallVolume(e.target.value / 100);
     document.getElementById('audioMute').onclick = e => { const t = c.stream.getAudioTracks()[0]; t.enabled = !t.enabled; e.target.textContent = t.enabled ? 'Mute' : 'Unmute'; };
     if (!incoming) { const o = await pc.createOffer(); await pc.setLocalDescription(o); socket.emit('audio-call-signal', { to: peer, kind: 'offer', offer: o }); }
-    else { await pc.setRemoteDescription(offer); const a = await pc.createAnswer(); await pc.setLocalDescription(a); socket.emit('audio-call-signal', { to: peer, kind: 'answer', answer: a }); }
+    else {
+      await pc.setRemoteDescription(offer);
+      // Apply candidates gathered before the callee accepted the prompt.
+      for (const candidate of pendingIce.get(peer) || []) await pc.addIceCandidate(candidate);
+      pendingIce.delete(peer);
+      const a = await pc.createAnswer();
+      await pc.setLocalDescription(a);
+      socket.emit('audio-call-signal', { to: peer, kind: 'answer', answer: a });
+    }
+    } catch (err) {
+      console.error('audio call setup failed', err);
+      const message = err?.name === 'NotAllowedError' ? 'Microphone permission is required.' : 'Unable to start the audio call.';
+      finish(peer, false);
+      alert(message);
+    }
   }
-  window.startAudioCall = peer => { if (!navigator.mediaDevices?.getUserMedia) return alert('Audio calling is not supported here.'); start(peer); };
+  window.startAudioCall = peer => {
+    if (!navigator.mediaDevices?.getUserMedia) return alert('Audio calling requires a secure connection (HTTPS).');
+    start(String(peer || '').trim());
+  };
   document.addEventListener('click', e => {
     if (e.target.id !== 'roomCallBtn') return;
     const room = document.getElementById('roomChatPopup')?.dataset.room;
@@ -102,8 +148,20 @@
       startRing('ring'); // ring until the call is accepted, rejected or cancelled
       ui.querySelector('#audioAccept').onclick = () => start(from, true, p.offer);
       ui.querySelector('#audioReject').onclick = () => { socket.emit('audio-call-end', { to: from }); closeUI(); };
-    } else if (p.kind === 'answer' && calls.has(from)) { stopRing(); setStatus('Connected'); await calls.get(from).pc.setRemoteDescription(p.answer); }
-    else if (p.kind === 'ice' && calls.has(from)) try { await calls.get(from).pc.addIceCandidate(p.candidate); } catch (_) {}
+    } else if (p.kind === 'answer' && calls.has(from)) {
+      stopRing(); setStatus('Connected'); await calls.get(from).pc.setRemoteDescription(p.answer);
+    } else if (p.kind === 'ice' && p.candidate) {
+      if (calls.has(from)) {
+        try { await calls.get(from).pc.addIceCandidate(p.candidate); } catch (_) {}
+      } else {
+        const queued = pendingIce.get(from) || [];
+        queued.push(p.candidate);
+        pendingIce.set(from, queued);
+      }
+    }
   });
-  socket.on('audio-call-end', ({ from }) => { if (calls.has(from)) finish(from); else closeUI(); });
+  socket.on('audio-call-end', ({ from }) => {
+    pendingIce.delete(from);
+    if (calls.has(from)) finish(from, false); else closeUI();
+  });
 })();
