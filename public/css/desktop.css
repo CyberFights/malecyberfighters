@@ -614,8 +614,8 @@ button.ghost{
   position:fixed;
   right:460px;
   bottom:28px;
-  width:320px;
-  height:360px;
+  width:384px;
+  height:432px;
   background:linear-gradient(180deg,#050a16,#0a1324);
   border-radius:10px;
   border:1px solid rgba(160,200,255,0.12);
@@ -623,6 +623,30 @@ button.ghost{
   flex-direction:column;
   overflow:hidden;
   box-shadow:0 20px 60px rgba(120,180,255,0.25);
+}
+
+/* Desktop-only 20% size increase safeguard — mobile.css overrides this on small screens */
+@media (min-width: 769px){
+  .pm-window{
+    width:384px;
+    height:432px;
+  }
+}
+
+/* Movable DM popups — header acts as drag handle on desktop */
+@media (min-width: 769px){
+  .pm-window .pm-header{
+    cursor:grab;
+    user-select:none;
+    touch-action:none;
+  }
+  .pm-window .pm-header:active{
+    cursor:grabbing;
+  }
+  .pm-window.pm-dragging{
+    opacity:0.96;
+    will-change:left, top;
+  }
 }
 
 .pm-header{
