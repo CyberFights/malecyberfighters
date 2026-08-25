@@ -1,1 +1,22 @@
-#audioCallOverlay{position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;background:#0008}.audio-call-card{min-width:260px;padding:22px;border:1px solid #39e6ff;border-radius:12px;background:#101827;color:#eef7ff;box-shadow:0 0 30px #00d9ff55;text-align:center}.audio-call-card strong{display:block;color:#67e8f9;font-size:18px;margin-bottom:8px}.audio-call-card div{margin-bottom:16px}.audio-call-card button{margin:4px}
+/* The call card is docked in the top-right corner instead of covering the app:
+   the overlay is click-through (pointer-events:none) and only the card itself
+   captures input, so DM windows, the public chat and custom room popups stay
+   fully usable while a call is running. There is no dimming backdrop either,
+   since one would hide the conversation being typed in. */
+#audioCallOverlay{position:fixed;top:16px;right:16px;z-index:10000;display:none;pointer-events:none}
+.audio-call-card{pointer-events:auto;min-width:260px;max-width:min(320px,calc(100vw - 32px));padding:18px 20px;border:1px solid #39e6ff;border-radius:12px;background:#101827;color:#eef7ff;box-shadow:0 0 30px #00d9ff55;text-align:center}
+.audio-call-card strong{display:block;color:#67e8f9;font-size:18px;margin-bottom:8px}
+.audio-call-card div{margin-bottom:16px}
+.audio-call-card button{margin:4px}
+/* Volume row: needs the extra .audio-call-card prefix to win over the
+   `.audio-call-card div` margin rule above. */
+.audio-call-card .audio-call-volume{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.audio-call-card .audio-call-volume label{font-size:12px;color:#9fd8ea;white-space:nowrap}
+.audio-call-card .audio-call-volume input[type=range]{flex:1;min-width:80px;accent-color:#39e6ff;cursor:pointer}
+.audio-call-card .audio-call-volume span{font-size:12px;color:#67e8f9;min-width:38px;text-align:right}
+/* Keep the card clear of the mobile header and the browser chrome offset that
+   viewport-fit.js publishes as --app-top. */
+@media (max-width:768px){
+  #audioCallOverlay{top:calc(10px + var(--app-top,0px));right:10px}
+  .audio-call-card{min-width:0;max-width:min(280px,calc(100vw - 20px));padding:14px 16px}
+}
