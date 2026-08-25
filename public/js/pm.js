@@ -7,6 +7,85 @@ function pmImgSrc(value) {
 }
 
 /* ============================================================
+   MOVABLE DM POPUPS (desktop only) + Z-INDEX stacking
+============================================================ */
+let pmZIndexCounter = 1050;
+
+function bringPmToFront(win) {
+  if (!win) return;
+  pmZIndexCounter += 1;
+  win.style.zIndex = String(pmZIndexCounter);
+}
+
+function makePmWindowDraggable(pmWindow) {
+  if (!pmWindow) return;
+  const header = pmWindow.querySelector('.pm-header');
+  if (!header) return;
+
+  let isDragging = false;
+  let startX = 0, startY = 0;
+  let initialLeft = 0, initialTop = 0;
+
+  // Bring to front when clicking anywhere in the window
+  pmWindow.addEventListener('mousedown', () => bringPmToFront(pmWindow));
+
+  header.addEventListener('mousedown', (e) => {
+    // Desktop only
+    if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) return;
+    if (e.target.closest('button')) return;
+
+    isDragging = true;
+    bringPmToFront(pmWindow);
+
+    const rect = pmWindow.getBoundingClientRect();
+
+    // Convert from right/bottom anchored to left/top so dragging works
+    if (!pmWindow.style.left || pmWindow.style.left === 'auto' || pmWindow.style.left === '') {
+      pmWindow.style.left = rect.left + 'px';
+      pmWindow.style.top = rect.top + 'px';
+      pmWindow.style.right = 'auto';
+      pmWindow.style.bottom = 'auto';
+    }
+
+    initialLeft = rect.left;
+    initialTop = rect.top;
+    startX = e.clientX;
+    startY = e.clientY;
+
+    pmWindow.classList.add('pm-dragging');
+    pmWindow.style.transition = 'none';
+    e.preventDefault();
+  });
+
+  const onMouseMove = (e) => {
+    if (!isDragging) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    let newLeft = initialLeft + dx;
+    let newTop = initialTop + dy;
+
+    const maxLeft = window.innerWidth - pmWindow.offsetWidth;
+    const maxTop = window.innerHeight - pmWindow.offsetHeight;
+
+    newLeft = Math.max(0, Math.min(newLeft, Math.max(0, maxLeft)));
+    newTop = Math.max(0, Math.min(newTop, Math.max(0, maxTop)));
+
+    pmWindow.style.left = newLeft + 'px';
+    pmWindow.style.top = newTop + 'px';
+  };
+
+  const onMouseUp = () => {
+    if (!isDragging) return;
+    isDragging = false;
+    pmWindow.classList.remove('pm-dragging');
+    pmWindow.style.transition = '';
+  };
+
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+}
+
+/* ============================================================
    SERVER-SYNCED DM SYSTEM (MongoDB + Translation + Images)
 ============================================================ */
 
@@ -70,6 +149,7 @@ function openPrivateWindow(targetUsername) {
   const existing = document.getElementById("pmWindow_" + targetUsername);
   if (existing) {
     existing.style.display = "flex";
+    bringPmToFront(existing);
     clearUnread(targetUsername);
     if (window.updateDMListSidebar) updateDMListSidebar();
     updateDMBadge();
@@ -79,6 +159,13 @@ function openPrivateWindow(targetUsername) {
   const pmWindow = document.createElement("div");
   pmWindow.className = "pm-window";
   pmWindow.id = "pmWindow_" + targetUsername;
+
+  // Cascade offset when multiple DM popups are open (desktop only)
+  const openCount = document.querySelectorAll('.pm-window').length;
+  if (openCount > 0 && window.innerWidth > 768) {
+    const offset = (openCount % 6) * 28;
+    pmWindow.dataset.cascadeOffset = String(offset);
+  }
 
   pmWindow.innerHTML = `
     <div class="pm-header">
@@ -108,6 +195,29 @@ function openPrivateWindow(targetUsername) {
   `;
 
   document.body.appendChild(pmWindow);
+
+  // Make movable (desktop only) and bring to front
+  bringPmToFront(pmWindow);
+  makePmWindowDraggable(pmWindow);
+
+  // Apply cascade offset visually after first layout (desktop only)
+  if (pmWindow.dataset.cascadeOffset && window.innerWidth > 768) {
+    const offset = parseInt(pmWindow.dataset.cascadeOffset, 10) || 0;
+    // Convert right/bottom to left/top for offset handling
+    requestAnimationFrame(() => {
+      const rect = pmWindow.getBoundingClientRect();
+      // Only apply if still anchored to right/bottom (not yet dragged)
+      if (pmWindow.style.right !== 'auto') {
+        const newLeft = Math.max(0, rect.left - offset);
+        const newTop = Math.max(0, rect.top - offset);
+        pmWindow.style.left = newLeft + 'px';
+        pmWindow.style.top = newTop + 'px';
+        pmWindow.style.right = 'auto';
+        pmWindow.style.bottom = 'auto';
+        pmWindow.style.transform = '';
+      }
+    });
+  }
 
   const typing = document.createElement("div");
   typing.id = "pmTyping_" + targetUsername;
