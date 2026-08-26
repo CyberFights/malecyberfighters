@@ -279,6 +279,27 @@
       <button id="loginCancel" class="ghost">Cancel</button>
       <button id="loginSubmit">Login</button>
     </div>
+    <div style="margin-top:8px">
+      <a id="forgotLink" href="#" style="color:#6cf;font-size:13px;text-decoration:none">Forgot password?</a>
+    </div>
+  </div>
+</div>
+
+<!-- FORGOT PASSWORD MODAL -->
+<div id="modalForgot" style="display:none;position:fixed;inset:0;background:black;align-items:center;justify-content:center">
+  <div>
+    <h3>Forgot password</h3>
+    <p style="font-size:13px;color:#aaa;margin:6px 0 12px">Enter the email on your account and we'll send you a reset link.</p>
+    <input id="forgotEmail" type="email" placeholder="Email">
+    <div id="forgotError" style="display:none"></div>
+    <div id="forgotSuccess" style="display:none"></div>
+    <div style="display:flex;gap:8px">
+      <button id="forgotCancel" class="ghost">Cancel</button>
+      <button id="forgotSubmit">Send reset link</button>
+    </div>
+    <div style="margin-top:8px">
+      <button id="forgotResend" class="ghost" style="display:none">Resend email</button>
+    </div>
   </div>
 </div>
 

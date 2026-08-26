@@ -9,9 +9,11 @@ const multer = require('multer');
 const fetch = require('node-fetch');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cors = require("cors");
+const { sendMail, mailerConfigured, MAIL_FROM, escapeHtml } = require('./mailer');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -29,6 +31,13 @@ const MAX_EXTRA_PROFILE_PHOTOS = 10;
 
 const DISCORD_WEBHOOK_URL = process.env.Discord_webhook || null;
 const DISCORD_SUPPORT_URL = process.env.Discord_Support || null;
+const EMAIL_ADMIN_ALERTS = String(process.env.EMAIL_ADMIN_ALERTS || 'false').toLowerCase() === 'true';
+
+// Public base URL used when building the password-reset link in emails.
+// Defaults to the request origin when not set (see getBaseUrl()).
+const APP_BASE_URL = process.env.APP_BASE_URL || null;
+// How long a password-reset link stays valid.
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 
 
@@ -439,6 +448,18 @@ const Room = mongoose.model('Room', RoomSchema);
 const Forum = mongoose.model('Forum', forumSchema);
 const ForumReply = mongoose.model('ForumReply', forumReplySchema);
 
+// One-time password-reset tokens. Only the SHA-256 hash of the token is stored
+// (never the token itself) so a leaked DB dump can't be used to reset accounts.
+const passwordResetSchema = new mongoose.Schema({
+  email:    { type: String, required: true, index: true },
+  username: { type: String, required: true, index: true },
+  tokenHash: { type: String, required: true, index: true, unique: true },
+  expiresAt: { type: Date, required: true, index: true },
+  used:      { type: Boolean, default: false }
+}, { timestamps: true });
+
+const PasswordReset = mongoose.model('PasswordReset', passwordResetSchema);
+
 // ---------- HELPERS ----------
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -575,6 +596,61 @@ async function sendDiscordWebhookMessage(username, message, avatarUrl) {
   } catch (err) {
     console.error("Error sending webhook:", err);
   }
+}
+
+// Send a notification email to the admin mailbox (administrator@male-cyber-fighters.com).
+// Only fires when SMTP is configured and EMAIL_ADMIN_ALERTS is enabled, so it is
+// a no-op in normal operation. Never throws — failure only logs.
+async function sendAdminEmail(subject, { text, html } = {}) {
+  if (!mailerConfigured || !EMAIL_ADMIN_ALERTS) return;
+  try {
+    const result = await sendMail({
+      to: MAIL_FROM,
+      subject,
+      text,
+      html
+    });
+    if (result.ok) {
+      console.log(`[mailer] admin alert sent: ${subject} (${result.messageId})`);
+    } else if (!result.skipped) {
+      console.error(`[mailer] admin alert failed: ${subject}`, result.error);
+    }
+  } catch (err) {
+    console.error('[mailer] admin alert error:', err.message || err);
+  }
+}
+
+// Build the absolute base URL for links in outgoing emails. Prefers the
+// explicitly configured APP_BASE_URL, otherwise derives it from the request
+// (respecting reverse-proxy X-Forwarded-Proto/For when trust-proxy is on).
+function getBaseUrl(req) {
+  if (APP_BASE_URL) return APP_BASE_URL.replace(/\/+$/, '');
+  const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
+  const host = req.get('host') || `localhost:${PORT}`;
+  return `${proto}://${host}`;
+}
+
+function sha256(value) {
+  return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+// Escape a string so it can be safely embedded inside a RegExp.
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Generate a random reset token, store its hash, and return the raw token so
+// the caller can embed it in the reset link. Only the hash is persisted.
+async function createPasswordResetToken(user) {
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  await PasswordReset.create({
+    email: user.email,
+    username: user.username,
+    tokenHash: sha256(rawToken),
+    expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+    used: false
+  });
+  return rawToken;
 }
 
 function serializeForum(forum, replyCount = 0) {
@@ -1529,6 +1605,26 @@ app.post('/api/register', async (req, res) => {
     await user.save();
     await logIp(req, { action: 'register', username });
 
+    // Optional welcome email (only sends when SMTP is configured)
+    if (mailerConfigured) {
+      try {
+        await sendMail({
+          to: user.email,
+          subject: `Welcome to Male Cyber Fighters, ${user.username}!`,
+          text: `Hi ${user.username},\n\nWelcome to Male Cyber Fighters! Your account is ready.\n\nYour username: ${user.username}\n\nIf you received this email in error, you can safely ignore it.\n\n— The Male Cyber Fighters Team`,
+          html: `<p>Hi <strong>${escapeHtml(user.username)}</strong>,</p><p>Welcome to <strong>Male Cyber Fighters</strong>! Your account is ready.</p><p>Your username: ${escapeHtml(user.username)}</p><p>If you received this email in error, you can safely ignore it.</p><p>— The Male Cyber Fighters Team</p>`
+        });
+      } catch (e) {
+        console.error('[mailer] welcome email error:', e.message || e);
+      }
+    }
+
+    // Optional admin alert for new registrations
+    await sendAdminEmail(`New registration: ${user.username}`, {
+      text: `A new user registered on Male Cyber Fighters.\n\nUsername: ${user.username}\nEmail: ${user.email}`,
+      html: `<p>A new user registered on <strong>Male Cyber Fighters</strong>.</p><p>Username: ${escapeHtml(user.username)}<br>Email: ${escapeHtml(user.email)}</p>`
+    });
+
     return res.json({
       ok: true,
       user: {
@@ -1591,6 +1687,114 @@ app.post('/api/login', async (req, res) => {
   } catch (e) {
     console.error(e);
     await logIp(req, { action: 'login_error', username });
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// ---------- API: FORGOT / RESET PASSWORD ----------
+// POST /api/forgot-password
+//   body: { email }
+//   Looks up an account by email. If found (and SMTP is configured), generates a
+//   one-time token and emails a reset link to that address. To avoid leaking
+//   which emails have accounts, the response is always "ok" regardless of
+//   whether the email existed — only send an email when there is a match.
+app.post('/api/forgot-password', async (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase();
+  if (!email) {
+    return res.status(400).json({ ok: false, error: 'missing_email' });
+  }
+
+  try {
+    // Emails may be stored in mixed case (registration doesn't normalize), so
+    // match case-insensitively while still anchoring to the full address.
+    const user = await User.findOne({ email: new RegExp('^' + escapeRegex(email) + '$', 'i') }).lean();
+
+    // Only bother sending when we both found a user and can send email.
+    if (user && mailerConfigured) {
+      // Clean up any previously unused, still-valid tokens for this account
+      // so only the newest reset link works.
+      await PasswordReset.deleteMany({ email: user.email, used: false });
+
+      const rawToken = await createPasswordResetToken(user);
+      const baseUrl = getBaseUrl(req);
+      const resetUrl = `${baseUrl}/reset-password.html?token=${encodeURIComponent(rawToken)}`;
+      const displayEmail = user.email;
+
+      try {
+        await sendMail({
+          to: displayEmail,
+          subject: 'Reset your Male Cyber Fighters password',
+          text: `Hi ${user.username},\n\nWe received a request to reset your Male Cyber Fighters password.\n\nClick the link below to choose a new password (valid for 1 hour):\n${resetUrl}\n\nIf you didn't request this, you can safely ignore this email — your password will not change.\n\n— The Male Cyber Fighters Team`,
+          html: `<p>Hi <strong>${escapeHtml(user.username)}</strong>,</p><p>We received a request to reset your Male Cyber Fighters password.</p><p>Click the button below to choose a new password (valid for 1 hour):</p><p><a href="${escapeHtml(resetUrl)}" style="display:inline-block;padding:10px 20px;background:#111;color:#fff;text-decoration:none;border-radius:6px;">Reset password</a></p><p>Or copy and paste this link into your browser:<br><a href="${escapeHtml(resetUrl)}">${escapeHtml(resetUrl)}</a></p><p>If you didn't request this, you can safely ignore this email — your password will not change.</p><p>— The Male Cyber Fighters Team</p>`
+        });
+      } catch (err) {
+        console.error('[mailer] forgot-password email error:', err.message || err);
+      }
+    }
+
+    // Always respond the same way so we don't reveal which emails are registered.
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('forgot-password error', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// POST /api/reset-password
+//   body: { token, newPassword }
+//   Validates the one-time token from the reset link. If it is valid and not
+//   expired, sets a new password (via the same bcrypt.hash used everywhere else).
+app.post('/api/reset-password', async (req, res) => {
+  const token = String(req.body.token || '').trim();
+  const newPassword = String(req.body.newPassword || '');
+
+  if (!token) {
+    return res.status(400).json({ ok: false, error: 'missing_token' });
+  }
+  if (!newPassword) {
+    return res.status(400).json({ ok: false, error: 'missing_password' });
+  }
+  if (newPassword.length < 6) {
+    return res.status(400).json({ ok: false, error: 'weak_password' });
+  }
+
+  try {
+    const tokenHash = sha256(token);
+    const record = await PasswordReset.findOne({ tokenHash, used: false });
+
+    if (!record || record.expiresAt < new Date()) {
+      return res.status(400).json({ ok: false, error: 'invalid_or_expired_token' });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    const result = await User.updateOne(
+      { email: record.email },
+      { $set: { passwordHash: hash } }
+    );
+
+    if (!result.matchedCount) {
+      return res.status(404).json({ ok: false, error: 'not_found' });
+    }
+
+    // Mark the token used so it cannot be replayed, and lock out any other
+    // outstanding reset tokens for this account.
+    await PasswordReset.updateMany(
+      { email: record.email, used: false },
+      { $set: { used: true } }
+    );
+
+    // If the user is currently logged in elsewhere, force a logout so the old
+    // session is invalidated after the password change.
+    const user = await User.findOne({ email: record.email }).lean();
+    if (user?.socketId) {
+      io.to(user.socketId).emit('forceLogout', { reason: 'password_changed' });
+    }
+
+    await logIp(req, { action: 'reset_password', username: record.username });
+
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error('reset-password error', e);
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });
