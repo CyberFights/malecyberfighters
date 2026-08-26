@@ -2209,6 +2209,12 @@ function mobileImgSrc(value) {
     on($("btnDMs"), "click", () => { showId("dmSidebar"); updateDmSidebar(); });
     on($("closeDmSidebar"), "click", () => hideId("dmSidebar"));
     on($("dmSearch"), "input", debounce(updateDmSidebar, 200));
+    on($("dmCall"), "click", () => {
+      const partner = state.dmPartner || $("dmPopup")?.dataset.partner;
+      if (partner && typeof window.startAudioCall === "function") {
+        window.startAudioCall(partner);
+      }
+    });
     on($("dmClose"), "click", closeDm);
     on($("dmSend"), "click", sendDm);
     on($("dmClear"), "click", clearDm);
@@ -3192,6 +3198,14 @@ document.getElementById("dmClear")?.addEventListener("click", async () => {
   const body = document.getElementById("dmMessages");
   if (body) body.innerHTML = "";
   if (window.updateDMListSidebar) updateDMListSidebar();
+});
+
+// Call DM
+document.getElementById("dmCall")?.addEventListener("click", () => {
+  const partner = currentDmPartner || document.getElementById("dmPopup")?.dataset.partner;
+  if (partner && typeof window.startAudioCall === "function") {
+    window.startAudioCall(partner);
+  }
 });
 
 // Story popup

@@ -521,6 +521,14 @@ document.getElementById("dmClear")?.addEventListener("click", async () => {
   if (window.updateDMListSidebar) updateDMListSidebar();
 });
 
+// Call DM
+document.getElementById("dmCall")?.addEventListener("click", () => {
+  const partner = currentDmPartner || document.getElementById("dmPopup")?.dataset.partner;
+  if (partner && typeof window.startAudioCall === "function") {
+    window.startAudioCall(partner);
+  }
+});
+
 // Story popup
 document.getElementById("dmStory")?.addEventListener("click", () => {
   if (currentDmPartner) openStoryPopup(currentDmPartner);
