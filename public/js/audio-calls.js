@@ -6,6 +6,24 @@
   const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   function session() { return typeof getSession === 'function' ? getSession() : null; }
 
+  /* The socket is NOT available when this script loads on mobile.html — the
+     mobile client creates its socket later (inside mobile.js). Resolve it
+     lazily instead of referencing a bare `socket` global, which threw
+     "socket is not defined" at load time and killed every incoming-call
+     handler before it could be registered. */
+  function currentSocket() {
+    if (typeof window !== 'undefined' && window.socket) return window.socket;
+    if (typeof socket !== 'undefined' && socket) return socket; // desktop global from socket.js
+    return null;
+  }
+
+  function emitTo(event, payload) {
+    const s = currentSocket();
+    if (s && typeof s.emit === 'function') {
+      try { s.emit(event, payload); } catch (_) {}
+    }
+  }
+
   /* Web Audio API context for reliable volume gain and audio routing across all devices */
   let audioCtx = null;
   function getAudioContext() {
@@ -219,7 +237,7 @@
       if (c.audio) {
         try { c.audio.remove(); } catch (_) {}
       }
-      if (notifyPeer) socket.emit('audio-call-end', { to: peer });
+      if (notifyPeer) emitTo('audio-call-end', { to: peer });
     }
 
     if (calls.size === 0) {
@@ -259,7 +277,7 @@
 
     pc.onicecandidate = e => {
       if (e.candidate) {
-        socket.emit('audio-call-signal', { to: peer, kind: 'ice', candidate: e.candidate });
+        emitTo('audio-call-signal', { to: peer, kind: 'ice', candidate: e.candidate });
       }
     };
 
@@ -353,7 +371,7 @@
       if (!incoming) {
         const o = await pc.createOffer();
         await pc.setLocalDescription(o);
-        socket.emit('audio-call-signal', { to: peer, kind: 'offer', offer: o });
+        emitTo('audio-call-signal', { to: peer, kind: 'offer', offer: o });
       } else {
         await pc.setRemoteDescription(offer);
         for (const candidate of pendingIce.get(peer) || []) {
@@ -362,7 +380,7 @@
         pendingIce.delete(peer);
         const a = await pc.createAnswer();
         await pc.setLocalDescription(a);
-        socket.emit('audio-call-signal', { to: peer, kind: 'answer', answer: a });
+        emitTo('audio-call-signal', { to: peer, kind: 'answer', answer: a });
       }
     } catch (err) {
       console.error('Audio call setup error:', err);
@@ -387,7 +405,7 @@
     if (roomBtn) {
       const room = document.getElementById('roomChatPopup')?.dataset.room;
       if (!room) return alert('Please enter a room first.');
-      socket.emit('room-audio-invite', { room });
+      emitTo('room-audio-invite', { room });
       notify(
         'Conference call',
         'Inviting everyone in this room…',
@@ -408,81 +426,102 @@
     }
   });
 
-  socket.on('room-audio-invite', ({ room, from }) => {
-    const currentRoom = document.getElementById('roomChatPopup')?.dataset.room;
-    if (currentRoom && String(currentRoom) !== String(room)) return;
+  /* Incoming-call handlers. These must be registered on the real socket, so
+     they are bound lazily: desktop pages already have one when this script
+     runs, while mobile.html creates its socket afterwards. */
+  function bindAudioSocket() {
+    const s = currentSocket();
+    if (!s || s.__mcfAudioBound) return;
+    s.__mcfAudioBound = true;
 
-    startRing('ring');
-    const ui = notify(
-      'Room conference call',
-      `@${from} started a call`,
-      `
-      <div class="audio-call-actions">
-        <button id="audioAccept" class="small-btn" type="button">Join</button>
-        <button id="audioReject" class="small-btn" type="button">Decline</button>
-      </div>
-      `
-    );
-    ui.querySelector('#audioAccept').onclick = () => {
-      stopRing();
-      socket.emit('room-audio-join', { room, to: from });
-      start(from);
-    };
-    ui.querySelector('#audioReject').onclick = closeUI;
-  });
+    s.on('room-audio-invite', ({ room, from }) => {
+      const currentRoom = document.getElementById('roomChatPopup')?.dataset.room;
+      if (currentRoom && String(currentRoom) !== String(room)) return;
 
-  socket.on('room-audio-join', ({ from }) => {
-    window.startAudioCall(from);
-  });
-
-  socket.on('audio-call-signal', async p => {
-    const from = p.from;
-    if (p.kind === 'offer') {
-      if (calls.has(from)) return;
+      startRing('ring');
       const ui = notify(
-        'Incoming audio call',
-        `@${from} is calling you`,
+        'Room conference call',
+        `@${from} started a call`,
         `
         <div class="audio-call-actions">
-          <button id="audioAccept" class="small-btn" type="button">Accept</button>
-          <button id="audioReject" class="small-btn" type="button">Reject</button>
+          <button id="audioAccept" class="small-btn" type="button">Join</button>
+          <button id="audioReject" class="small-btn" type="button">Decline</button>
         </div>
         `
       );
-      startRing('ring');
       ui.querySelector('#audioAccept').onclick = () => {
         stopRing();
-        start(from, true, p.offer);
+        emitTo('room-audio-join', { room, to: from });
+        start(from);
       };
-      ui.querySelector('#audioReject').onclick = () => {
-        socket.emit('audio-call-end', { to: from });
-        closeUI();
-      };
-    } else if (p.kind === 'answer' && calls.has(from)) {
-      stopRing();
-      setStatus('Connected');
-      try {
-        await calls.get(from).pc.setRemoteDescription(p.answer);
-      } catch (_) {}
-    } else if (p.kind === 'ice' && p.candidate) {
-      if (calls.has(from)) {
-        try {
-          await calls.get(from).pc.addIceCandidate(p.candidate);
-        } catch (_) {}
-      } else {
-        const queued = pendingIce.get(from) || [];
-        queued.push(p.candidate);
-        pendingIce.set(from, queued);
-      }
-    }
-  });
+      ui.querySelector('#audioReject').onclick = closeUI;
+    });
 
-  socket.on('audio-call-end', ({ from }) => {
-    pendingIce.delete(from);
-    if (calls.has(from)) {
-      finish(from, false);
-    } else {
-      closeUI();
-    }
-  });
+    s.on('room-audio-join', ({ from }) => {
+      window.startAudioCall(from);
+    });
+
+    s.on('audio-call-signal', async p => {
+      const from = p.from;
+      if (p.kind === 'offer') {
+        if (calls.has(from)) return;
+        const ui = notify(
+          'Incoming audio call',
+          `@${from} is calling you`,
+          `
+          <div class="audio-call-actions">
+            <button id="audioAccept" class="small-btn" type="button">Accept</button>
+            <button id="audioReject" class="small-btn" type="button">Reject</button>
+          </div>
+          `
+        );
+        startRing('ring');
+        ui.querySelector('#audioAccept').onclick = () => {
+          stopRing();
+          start(from, true, p.offer);
+        };
+        ui.querySelector('#audioReject').onclick = () => {
+          emitTo('audio-call-end', { to: from });
+          closeUI();
+        };
+      } else if (p.kind === 'answer' && calls.has(from)) {
+        stopRing();
+        setStatus('Connected');
+        try {
+          await calls.get(from).pc.setRemoteDescription(p.answer);
+        } catch (_) {}
+      } else if (p.kind === 'ice' && p.candidate) {
+        if (calls.has(from)) {
+          try {
+            await calls.get(from).pc.addIceCandidate(p.candidate);
+          } catch (_) {}
+        } else {
+          const queued = pendingIce.get(from) || [];
+          queued.push(p.candidate);
+          pendingIce.set(from, queued);
+        }
+      }
+    });
+
+    s.on('audio-call-end', ({ from }) => {
+      pendingIce.delete(from);
+      if (calls.has(from)) {
+        finish(from, false);
+      } else {
+        closeUI();
+      }
+    });
+  }
+
+  // Bind right away when the socket exists (desktop); otherwise retry until
+  // the mobile client creates its socket. Stops polling once bound.
+  bindAudioSocket();
+  if (!currentSocket()) {
+    const bindTimer = setInterval(() => {
+      if (currentSocket()) {
+        bindAudioSocket();
+        clearInterval(bindTimer);
+      }
+    }, 300);
+  }
 })();
