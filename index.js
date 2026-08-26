@@ -1995,11 +1995,18 @@ socket.on("editPublicMessage", async (data) => {
 
   // WebRTC signaling: relay offers, answers, and ICE candidates only to the intended user.
   socket.on("audio-call-signal", async ({ to, kind, offer, answer, candidate } = {}) => {
-    if (!to || !kind || !socket.username) return;
+    if (!to || !kind || !socket.username) {
+      console.log(`[audio-call] signal dropped: to=${to} kind=${kind} caller=${socket.username || "(not logged in)"}`);
+      return;
+    }
     const target = await User.findOne({ username: to }).lean();
-    if (target?.socketId) io.to(target.socketId).emit("audio-call-signal", {
-      from: socket.username, kind, offer, answer, candidate
-    });
+    if (target?.socketId) {
+      io.to(target.socketId).emit("audio-call-signal", {
+        from: socket.username, kind, offer, answer, candidate
+      });
+    } else {
+      console.log(`[audio-call] ${socket.username} -> ${to}: ${kind} dropped, callee offline or no socketId`);
+    }
   });
 
   socket.on("room-audio-invite", async ({ room } = {}) => {
