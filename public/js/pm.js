@@ -169,28 +169,31 @@ function openPrivateWindow(targetUsername) {
 
   pmWindow.innerHTML = `
     <div class="pm-header">
-      <div style="display:flex;gap:8px;align-items:center">
-        <div class="avatar" style="width:36px;height:36px">${targetUsername[0].toUpperCase()}</div>
-        <div>
-          <div style="font-weight:700">${targetUsername}</div>
-          <div class="small">@${targetUsername}</div>
+      <div class="pm-header-main">
+        <div class="pm-header-user">
+          <div class="avatar" style="width:36px;height:36px">${targetUsername[0].toUpperCase()}</div>
+          <div class="pm-header-id">
+            <div class="pm-header-name">${targetUsername}</div>
+            <div class="small">@${targetUsername}</div>
+          </div>
         </div>
+        <button class="small-btn pm-close" type="button" aria-label="Close">X</button>
       </div>
-      <div style="display:flex;gap:6px;align-items:center">
-  <button class="small-btn pm-call" title="Audio call">☎ Call</button>
-  <button class="small-btn pm-story">Story</button>
-  <button class="small-btn pm-clear">Clear</button>
-  <button class="small-btn pm-close">X</button>
-</div>
+      <div class="pm-header-actions">
+        <button class="small-btn pm-call" type="button" title="Audio call" aria-label="Audio call">☎ Call</button>
+        <button class="small-btn pm-story" type="button">Story</button>
+        <button class="small-btn pm-clear" type="button">Clear</button>
+      </div>
     </div>
 
     <div class="pm-body" id="pmBody_${targetUsername}"></div>
 
     <div class="pm-input">
+      <button class="small-btn pm-call" type="button" title="Audio call" aria-label="Audio call">☎</button>
       <input id="pmInput_${targetUsername}" type="text" placeholder="Message ${targetUsername}">
       <input type="file" id="pmImage_${targetUsername}" accept="image/*" style="display:none">
-      <button class="small-btn" id="pmImageBtn_${targetUsername}">📷</button>
-      <button class="small-btn" id="pmSend_${targetUsername}">Send</button>
+      <button class="small-btn" id="pmImageBtn_${targetUsername}" type="button">📷</button>
+      <button class="small-btn" id="pmSend_${targetUsername}" type="button">Send</button>
     </div>
   `;
 
@@ -274,9 +277,11 @@ function openPrivateWindow(targetUsername) {
     .addEventListener("keydown", e => {
       if (e.key === "Enter") sendPM(targetUsername);
     });
-pmWindow.querySelector(".pm-call").addEventListener("click", () => {
-  if (typeof window.startAudioCall === "function") window.startAudioCall(targetUsername);
-});
+  pmWindow.querySelectorAll(".pm-call").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (typeof window.startAudioCall === "function") window.startAudioCall(targetUsername);
+    });
+  });
 
 pmWindow.querySelector(".pm-story").addEventListener("click", () => {
   openStoryPopup(targetUsername);

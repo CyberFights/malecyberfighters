@@ -80,7 +80,7 @@ app.get('/', (req, res, next) => {
 
     const page = html.replace(
       /<link\s+rel=["']stylesheet["']\s+href=["'][^"']*\/css\/[^"']+["']\s*>/i,
-      `<link rel="stylesheet" href="/css/${cssFile}">`
+      `<link rel="stylesheet" href="/css/${cssFile}?v=4">`
     );
 
     res.set({
@@ -239,7 +239,19 @@ app.get('/img', imageProxyLimiter, async (req, res) => {
   }
 });
 
-app.use(express.static(path.join(__dirname, 'public')));
+const publicDir = path.join(__dirname, 'public');
+const noCacheStatic = {
+  setHeaders(res) {
+    res.set('Cache-Control', 'no-cache');
+  }
+};
+app.use('/js', express.static(path.join(publicDir, 'js'), noCacheStatic));
+app.use('/css', express.static(path.join(publicDir, 'css'), noCacheStatic));
+app.get('/sw.js', (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(path.join(publicDir, 'sw.js'));
+});
+app.use(express.static(publicDir));
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
