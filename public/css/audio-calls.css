@@ -1,4 +1,40 @@
 /* ============================================================
+   CALL TRIGGERS
+   Always-on stylesheet (not swapped by the homepage CSS picker).
+   Keep Call / Conference visible even when a long username would
+   otherwise squeeze the header actions off-screen.
+   ============================================================ */
+.pm-call,
+.dm-call,
+.room-call,
+#dmCall,
+#roomCallBtn {
+  display: inline-flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: #16a34a !important;
+  border: 1px solid #4ade80 !important;
+  color: #fff !important;
+  font-weight: 700;
+  width: auto !important;
+  min-height: 36px;
+  min-width: 44px;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+.pm-input .pm-call,
+.chat-input .dm-call,
+.chat-input .room-call {
+  min-width: 44px;
+  padding: 8px 10px;
+}
+
+/* ============================================================
    AUDIO CALL OVERLAY & FLOATING CARD
    ============================================================ */
 

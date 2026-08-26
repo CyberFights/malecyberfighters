@@ -383,7 +383,7 @@
 
   /* Listeners for room conference and DM call buttons */
   document.addEventListener('click', e => {
-    const roomBtn = e.target.closest('#roomCallBtn');
+    const roomBtn = e.target.closest('#roomCallBtn, .room-call');
     if (roomBtn) {
       const room = document.getElementById('roomChatPopup')?.dataset.room;
       if (!room) return alert('Please enter a room first.');
@@ -397,7 +397,7 @@
       return;
     }
 
-    const dmBtn = e.target.closest('#dmCall');
+    const dmBtn = e.target.closest('#dmCall, .dm-call');
     if (dmBtn) {
       const dmPopup = document.getElementById('dmPopup');
       const partner = dmPopup?.dataset.partner;

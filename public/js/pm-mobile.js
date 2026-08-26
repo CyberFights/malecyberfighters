@@ -522,11 +522,13 @@ document.getElementById("dmClear")?.addEventListener("click", async () => {
 });
 
 // Call DM
-document.getElementById("dmCall")?.addEventListener("click", () => {
-  const partner = currentDmPartner || document.getElementById("dmPopup")?.dataset.partner;
-  if (partner && typeof window.startAudioCall === "function") {
-    window.startAudioCall(partner);
-  }
+document.querySelectorAll("#dmCall, .dm-call").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const partner = currentDmPartner || document.getElementById("dmPopup")?.dataset.partner;
+    if (partner && typeof window.startAudioCall === "function") {
+      window.startAudioCall(partner);
+    }
+  });
 });
 
 // Story popup

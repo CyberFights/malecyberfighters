@@ -1,21 +1,16 @@
 /*
  * Male Cyber Fighters progressive web app service worker.
  *
- * The arena is realtime, so navigations and API/socket requests always use
- * the network. Static assets can be reused while the app is being opened on
- * a poor connection, without serving stale chat or account data.
+ * The arena is realtime, so navigations, API/socket requests, and the
+ * live JS/CSS that build chat UI always use the network. Only icons and
+ * the offline page are reused from cache.
  */
-const CACHE_NAME = 'cyber-fights-app-shell-v3';
+const CACHE_NAME = 'cyber-fights-app-shell-v4';
 const STATIC_ASSETS = [
   '/manifest.webmanifest',
   '/images/mcf.png',
   '/images/mcf-192.png',
   '/images/mcf-512.png',
-  '/css/mobile.css',
-  '/css/desktop.css',
-  '/js/pwa-install.js',
-  '/js/image-proxy.js',
-  '/js/viewport-fit.js',
   '/offline.html'
 ];
 
@@ -39,6 +34,12 @@ self.addEventListener('activate', event => {
   );
 });
 
+function isLiveAsset(pathname) {
+  return pathname.startsWith('/js/')
+    || pathname.startsWith('/css/')
+    || pathname === '/sw.js';
+}
+
 self.addEventListener('fetch', event => {
   const request = event.request;
   if (request.method !== 'GET') return;
@@ -53,7 +54,11 @@ self.addEventListener('fetch', event => {
   // would otherwise grow the app-shell cache without bound.
   if (url.pathname === '/img') return;
 
-  if (request.mode === 'navigate' || url.pathname.startsWith('/api/')) {
+  if (
+    request.mode === 'navigate'
+    || url.pathname.startsWith('/api/')
+    || isLiveAsset(url.pathname)
+  ) {
     event.respondWith(
       fetch(request).catch(() => {
         if (request.mode === 'navigate') return caches.match('/offline.html');

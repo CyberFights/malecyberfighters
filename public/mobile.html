@@ -11,8 +11,8 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/images/mcf.png">
 
-<link rel="stylesheet" href="/css/mobile.css">
-<link rel="stylesheet" href="/css/audio-calls.css">
+<link rel="stylesheet" href="/css/mobile.css?v=4">
+<link rel="stylesheet" href="/css/audio-calls.css?v=4">
 </head>
 
 <body>
@@ -345,7 +345,7 @@
   <div class="chat-header">
     <div id="dmTitle" class="chat-title ellipsis">DM</div>
     <div class="chat-header-actions">
-      <button id="dmCall" class="small-btn secondary" type="button" title="Audio call">☎ Call</button>
+      <button id="dmCall" class="small-btn secondary dm-call" type="button" title="Audio call">☎ Call</button>
       <button id="dmStory" class="small-btn secondary" type="button">Story</button>
       <button id="dmClear" class="small-btn secondary" type="button">Clear</button>
       <button id="dmClose" class="small-btn secondary" type="button" aria-label="Close">✕</button>
@@ -359,6 +359,7 @@
   <div id="dmTyping" class="small muted" style="display:none;padding:0 12px 6px"></div>
 
   <div class="chat-input">
+    <button class="small-btn secondary dm-call" type="button" title="Audio call" aria-label="Audio call">☎</button>
     <input id="dmInput" type="text" placeholder="Write a message">
     <input id="dmImageInput" type="file" accept="image/*" style="display:none">
     <button id="dmImageBtn" class="small-btn secondary" type="button" aria-label="Send image">📷</button>
@@ -396,7 +397,7 @@
   <div class="chat-header">
     <span id="roomChatTitle" class="chat-title ellipsis">Room</span>
     <div class="chat-header-actions">
-      <button id="roomCallBtn" class="small-btn secondary" type="button" title="Start conference call">☎ Conference</button>
+      <button id="roomCallBtn" class="small-btn secondary room-call" type="button" title="Start conference call">☎ Conference</button>
       <button id="closeRoomChat" class="small-btn secondary" type="button" aria-label="Close">✕</button>
     </div>
   </div>
@@ -413,6 +414,7 @@
 
   <div class="chat-input">
     <div id="roomReplyBar" class="reply-bar" style="display:none"></div>
+    <button class="small-btn secondary room-call" type="button" title="Start conference call" aria-label="Start conference call">☎</button>
     <input id="roomMessageInput" type="text" placeholder="Message room">
     <input id="roomImageInput" type="file" accept="image/*" style="display:none">
     <button id="roomImageBtn" class="small-btn secondary" type="button" aria-label="Send image">📷</button>
@@ -844,7 +846,7 @@ Moderator decisions are final. </p>
 <script src="/js/viewport-fit.js"></script>
 <script src="/js/image-proxy.js"></script>
 <script src="/socket.io/socket.io.js"></script>
-<script src="/js/audio-calls.js"></script>
+<script src="/js/audio-calls.js?v=4"></script>
 <script src="/js/mobile.js"></script>
 <script src="/js/pwa-install.js"></script>
 <script src="/js/account.js"></script>
