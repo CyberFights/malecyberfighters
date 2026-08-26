@@ -12,6 +12,7 @@
 <link rel="apple-touch-icon" href="/images/mcf.png">
 
 <link rel="stylesheet" href="/css/mobile.css">
+<link rel="stylesheet" href="/css/audio-calls.css">
 </head>
 
 <body>
@@ -344,6 +345,7 @@
   <div class="chat-header">
     <div id="dmTitle" class="chat-title ellipsis">DM</div>
     <div class="chat-header-actions">
+      <button id="dmCall" class="small-btn secondary" type="button" title="Audio call">☎ Call</button>
       <button id="dmStory" class="small-btn secondary" type="button">Story</button>
       <button id="dmClear" class="small-btn secondary" type="button">Clear</button>
       <button id="dmClose" class="small-btn secondary" type="button" aria-label="Close">✕</button>
@@ -394,6 +396,7 @@
   <div class="chat-header">
     <span id="roomChatTitle" class="chat-title ellipsis">Room</span>
     <div class="chat-header-actions">
+      <button id="roomCallBtn" class="small-btn secondary" type="button" title="Start conference call">☎ Conference</button>
       <button id="closeRoomChat" class="small-btn secondary" type="button" aria-label="Close">✕</button>
     </div>
   </div>
@@ -841,6 +844,7 @@ Moderator decisions are final. </p>
 <script src="/js/viewport-fit.js"></script>
 <script src="/js/image-proxy.js"></script>
 <script src="/socket.io/socket.io.js"></script>
+<script src="/js/audio-calls.js"></script>
 <script src="/js/mobile.js"></script>
 <script src="/js/pwa-install.js"></script>
 <script src="/js/account.js"></script>

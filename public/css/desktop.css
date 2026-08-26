@@ -465,6 +465,12 @@ button.ghost{
   cursor:grab;
 }
 
+.chat-header-actions{
+  display:flex;
+  gap:6px;
+  align-items:center;
+}
+
 .chat-popup.shifted{
   transform:translate(-260px);
 }
@@ -614,8 +620,8 @@ button.ghost{
   position:fixed;
   right:460px;
   bottom:28px;
-  width:584px;
-  height:632px;
+  width:325px;
+  height:310px;
   background:linear-gradient(180deg,#050a16,#0a1324);
   border-radius:10px;
   border:1px solid rgba(160,200,255,0.12);
@@ -625,11 +631,11 @@ button.ghost{
   box-shadow:0 20px 60px rgba(120,180,255,0.25);
 }
 
-/* Desktop-only 20% size increase safeguard — mobile.css overrides this on small screens */
+/* Desktop-only size safeguard (1/2 size of public chat room 650px x 620px) — mobile.css overrides this on small screens */
 @media (min-width: 769px){
   .pm-window{
-    width:484px;
-    height:532px;
+    width:325px;
+    height:310px;
   }
 }
 
