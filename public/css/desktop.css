@@ -2493,6 +2493,353 @@ h3{
 }
 
 /* ============================================================
+   DESKTOP PROFILES
+   Layout/visuals from the profile mock, remapped onto existing
+   #userProfileCard / #modalViewProfile IDs and classes.
+   ============================================================ */
+@media (min-width: 769px) {
+  #userProfileCard.logged-in,
+  #modalViewProfile > div {
+    max-width: 1200px;
+    margin: 40px auto;
+    padding: 24px 32px;
+    background: rgba(15, 23, 42, 0.9);
+    border-radius: 18px;
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.9);
+    backdrop-filter: blur(18px);
+    align-items: stretch;
+    text-align: left;
+  }
+
+  #userProfileCard.logged-in {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+  }
+
+  #modalViewProfile > div {
+    width: min(1200px, 94vw);
+    max-height: 90vh;
+  }
+
+  /* Header row */
+  #modalViewProfile > div > div:first-child {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+
+  #userProfileCard.logged-in .profile-avatar,
+  #modalViewProfile #vpAvatar.holo-avatar,
+  #modalViewProfile #vpAvatar {
+    width: 72px;
+    height: 72px;
+    position: relative;
+    clip-path: polygon(
+      25% 5%,
+      75% 5%,
+      100% 50%,
+      75% 95%,
+      25% 95%,
+      0% 50%
+    );
+    background: linear-gradient(135deg, #1d4ed8, #22d3ee);
+    border: 2px solid rgba(148, 163, 184, 0.7);
+    box-shadow: 0 0 18px rgba(59, 130, 246, 0.7);
+    border-radius: 0;
+    overflow: hidden;
+  }
+
+  #userProfileCard.logged-in .profile-avatar-img,
+  #modalViewProfile #vpAvatar {
+    object-fit: cover;
+    width: 72px;
+    height: 72px;
+    border-radius: 0;
+  }
+
+  #userProfileCard.logged-in .profile-name,
+  #modalViewProfile #vpName {
+    display: flex;
+    flex-direction: column;
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    background-image: linear-gradient(90deg,#ff2d95,#ffb800,#00ff88,#00e5ff,#a55cff,#ff2d95) !important;
+    background-size: 200% 100% !important;
+    background-position: 0% 50% !important;
+    background-repeat: repeat-x !important;
+    -webkit-background-clip: text !important;
+    background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    color: transparent !important;
+    animation: mcfNeonFlow 8s linear infinite;
+    filter: drop-shadow(0 0 4px rgba(255,45,149,.9)) drop-shadow(0 0 10px rgba(0,229,255,.75)) drop-shadow(0 0 22px rgba(165,92,255,.6));
+  }
+
+  #userProfileCard.logged-in .profile-status,
+  #modalViewProfile #vpUsername,
+  #modalViewProfile .small.muted {
+    font-size: 0.9rem;
+    color: #9ca3af;
+  }
+
+  #modalViewProfile #vpDMButton,
+  #modalViewProfile #vpBlockButton {
+    padding: 8px 18px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    width: auto;
+  }
+
+  #modalViewProfile #vpDMButton {
+    background: linear-gradient(135deg, #1d4ed8, #22c55e);
+    color: #e5e7eb;
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.7);
+  }
+
+  #modalViewProfile #vpDMButton:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+  }
+
+  #modalViewProfile #vpBlockButton {
+    background: linear-gradient(135deg, #b91c1c, #f97316);
+    color: #fee2e2;
+    box-shadow: 0 0 12px rgba(248, 113, 113, 0.7);
+  }
+
+  #modalViewProfile #vpBlockButton:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+  }
+
+  /* Info cards: bio / stats / color */
+  #userProfileCard.logged-in .profile-details,
+  #userProfileCard.logged-in .profile-stats,
+  #modalViewProfile #vpBio,
+  #modalViewProfile #vpWins,
+  #modalViewProfile #vpLosses,
+  #modalViewProfile #vpColorBox,
+  #modalViewProfile #vpLang,
+  #modalViewProfile #vpAge {
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: radial-gradient(circle at top left, #0b1120 0, #020617 60%);
+    border: 1px solid rgba(31, 41, 55, 0.9);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.8);
+  }
+
+  #userProfileCard.logged-in .profile-bio,
+  #modalViewProfile #vpBio {
+    font-size: 0.95rem;
+    color: #e5e7eb;
+    max-width: none;
+  }
+
+  #userProfileCard.logged-in .profile-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 12px;
+    font-size: 0.9rem;
+  }
+
+  #userProfileCard.logged-in .profile-stat-label {
+    color: #9ca3af;
+  }
+
+  #userProfileCard.logged-in .profile-stat-value {
+    color: #e5e7eb;
+  }
+
+  #modalViewProfile #vpColorBox {
+    width: 48px;
+    height: 24px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #1d4ed8, #22d3ee);
+    border: 1px solid rgba(148, 163, 184, 0.7);
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.7);
+  }
+
+  /* Hex gallery */
+  #userProfileCard.logged-in .self-profile-photos,
+  #modalViewProfile .profile-gallery-section {
+    margin-bottom: 26px;
+    margin-top: 0;
+  }
+
+  #userProfileCard.logged-in .self-profile-photos h3,
+  #modalViewProfile .profile-gallery-section h3 {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #6b7280;
+    margin-bottom: 10px;
+    background: none !important;
+    -webkit-text-fill-color: #6b7280 !important;
+    color: #6b7280 !important;
+    filter: none;
+    animation: none;
+  }
+
+  #userProfileCard.logged-in .profile-photo-grid,
+  #modalViewProfile #vpExtraPhotos.profile-photo-grid {
+    display: flex;
+    gap: 14px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    grid-template-columns: none;
+  }
+
+  #userProfileCard.logged-in .profile-photo-tile,
+  #modalViewProfile .profile-photo-tile {
+    width: 72px;
+    height: 72px;
+    min-width: 72px;
+    aspect-ratio: auto;
+    clip-path: polygon(
+      25% 5%,
+      75% 5%,
+      100% 50%,
+      75% 95%,
+      25% 95%,
+      0% 50%
+    );
+    background: radial-gradient(circle at 30% 20%, #020617 0, #0b1120 60%);
+    border: 1px solid rgba(55, 65, 81, 0.9);
+  }
+
+  #userProfileCard.logged-in .profile-photo-grid::-webkit-scrollbar,
+  #modalViewProfile #vpExtraPhotos::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  #userProfileCard.logged-in .profile-photo-grid::-webkit-scrollbar-track,
+  #modalViewProfile #vpExtraPhotos::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  #userProfileCard.logged-in .profile-photo-grid::-webkit-scrollbar-thumb,
+  #modalViewProfile #vpExtraPhotos::-webkit-scrollbar-thumb {
+    background: rgba(55, 65, 81, 0.9);
+    border-radius: 999px;
+  }
+
+  /* Stories + Relationships panels */
+  #modalViewProfile > div > div:has(#profileStories) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    margin-bottom: 24px;
+    margin-top: 0;
+  }
+
+  #modalViewProfile #profileStories,
+  #modalViewProfile #profileRelationships,
+  #userProfileCard.logged-in #selfProfileStories,
+  #userProfileCard.logged-in #selfProfilePendingStories {
+    padding: 16px 18px;
+    border-radius: 14px;
+    background: radial-gradient(circle at top left, #020617 0, #0b1120 60%);
+    border: 1px solid rgba(31, 41, 55, 0.9);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.8);
+  }
+
+  #modalViewProfile #profileStories .story-item,
+  #modalViewProfile #profileRelationships .relationship-item,
+  #userProfileCard.logged-in .story-item {
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(31, 41, 55, 0.9);
+    margin-bottom: 6px;
+  }
+
+  /* Timeline */
+  #modalViewProfile #profileTimeline {
+    padding: 16px 18px;
+    border-radius: 14px;
+    background: radial-gradient(circle at top, #020617 0, #0b1120 60%);
+    border: 1px solid rgba(31, 41, 55, 0.9);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.8);
+    margin-bottom: 20px;
+  }
+
+  #modalViewProfile #profileTimeline .timeline-item {
+    position: relative;
+    padding-left: 16px;
+  }
+
+  /* Footer / add relationship */
+  #modalViewProfile #vpRelationshipSection {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    border-top: none;
+    padding-top: 0;
+  }
+
+  #modalViewProfile #vpRelationshipSelect {
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(55, 65, 81, 0.9);
+    background: rgba(15, 23, 42, 0.9);
+    color: #e5e7eb;
+    font-size: 0.9rem;
+    cursor: pointer;
+    width: auto;
+    flex: 1;
+  }
+
+  #modalViewProfile #vpRelationshipSend {
+    padding: 8px 18px;
+    border-radius: 999px;
+    border: 1px solid rgba(59, 130, 246, 0.9);
+    background: linear-gradient(135deg, #1d4ed8, #22d3ee);
+    color: #e5e7eb;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: 0 0 14px rgba(59, 130, 246, 0.9);
+    transition: all 0.18s ease;
+    width: auto;
+  }
+
+  #modalViewProfile #vpRelationshipSend:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+  }
+
+  #userProfileCard.logged-in #btnEditProfile,
+  #userProfileCard.logged-in #btnAccountSettings {
+    padding: 8px 18px;
+    border-radius: 999px;
+    border: 1px solid rgba(59, 130, 246, 0.9);
+    background: linear-gradient(135deg, #1d4ed8, #22d3ee);
+    color: #e5e7eb;
+    font-size: 0.9rem;
+    font-weight: 500;
+    box-shadow: 0 0 14px rgba(59, 130, 246, 0.9);
+  }
+
+  #userProfileCard.logged-in #logoutBtn {
+    padding: 8px 18px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #b91c1c, #f97316);
+    color: #fee2e2;
+    border: 1px solid transparent;
+  }
+}
+
+/* ============================================================
    POPUP GROW / SHRINK ANIMATIONS
    Every popup, modal, overlay and side panel grows out of the
    button that opened it and shrinks back into that button when
