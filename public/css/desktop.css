@@ -349,7 +349,6 @@ button.ghost{
   flex-shrink:0;
 }
 
-
 .roster-list{
   display:flex;flex-direction:column;gap:8px;
   max-height:420px;overflow:auto;padding-right:6px;
@@ -2498,10 +2497,10 @@ h3{
    #userProfileCard / #modalViewProfile IDs and classes.
    ============================================================ */
 @media (min-width: 769px) {
-  #userProfileCard.logged-in,
-  #modalViewProfile > div {
-    max-width: 1200px;
-    margin: 40px auto;
+  #userProfileCard.logged-in {
+    max-width: none;
+    width: 100%;
+    margin: 0;
     padding: 24px 32px;
     background: rgba(15, 23, 42, 0.9);
     border-radius: 18px;
@@ -2512,23 +2511,60 @@ h3{
     text-align: left;
   }
 
-  #userProfileCard.logged-in {
-    width: 100%;
-    max-width: none;
-    margin: 0;
-  }
-
+  /* Roster view-profile popup — mock layout on original IDs */
   #modalViewProfile > div {
-    width: min(1200px, 94vw);
+    display: block !important;
+    width: min(1200px, 94vw) !important;
+    max-width: 1200px !important;
     max-height: 90vh;
+    margin: 40px auto;
+    padding: 24px 32px;
+    background: rgba(15, 23, 42, 0.9) !important;
+    border-radius: 18px;
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.9);
+    backdrop-filter: blur(18px);
+    overflow: auto;
+    text-align: left;
   }
 
-  /* Header row */
+  /* Header row: name left, close right */
   #modalViewProfile > div > div:first-child {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 24px;
+  }
+
+  /* Identity row: hex avatar | handle+buttons */
+  #modalViewProfile > div > div:nth-child(2) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 24px;
+  }
+
+  #modalViewProfile > div > div:nth-child(2) > div:last-child {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.8fr);
+    grid-auto-flow: dense;
+    gap: 18px;
+    align-items: start;
+  }
+
+  #modalViewProfile > div > div:nth-child(2) > div:last-child > .small.muted {
+    grid-column: 1 / -1;
+    font-size: 0.9rem;
+    color: #9ca3af;
+  }
+
+  #modalViewProfile #vpDMButton,
+  #modalViewProfile #vpBlockButton {
+    grid-column: auto;
+    justify-self: end;
   }
 
   #userProfileCard.logged-in .profile-avatar,
@@ -2595,7 +2631,8 @@ h3{
     font-weight: 500;
     cursor: pointer;
     transition: all 0.18s ease;
-    width: auto;
+    width: auto !important;
+    margin-top: 0 !important;
   }
 
   #modalViewProfile #vpDMButton {
@@ -2620,15 +2657,10 @@ h3{
     transform: translateY(-1px);
   }
 
-  /* Info cards: bio / stats / color */
+  /* Info cards: bio / stats / color — original nested wrappers */
   #userProfileCard.logged-in .profile-details,
   #userProfileCard.logged-in .profile-stats,
-  #modalViewProfile #vpBio,
-  #modalViewProfile #vpWins,
-  #modalViewProfile #vpLosses,
-  #modalViewProfile #vpColorBox,
-  #modalViewProfile #vpLang,
-  #modalViewProfile #vpAge {
+  #modalViewProfile > div > div:nth-child(2) > div:last-child > div:not(.small) {
     padding: 14px 16px;
     border-radius: 14px;
     background: radial-gradient(circle at top left, #0b1120 0, #020617 60%);
@@ -2679,13 +2711,7 @@ h3{
     font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.12em;
-    color: #6b7280;
     margin-bottom: 10px;
-    background: none !important;
-    -webkit-text-fill-color: #6b7280 !important;
-    color: #6b7280 !important;
-    filter: none;
-    animation: none;
   }
 
   #userProfileCard.logged-in .profile-photo-grid,
@@ -2699,20 +2725,11 @@ h3{
 
   #userProfileCard.logged-in .profile-photo-tile,
   #modalViewProfile .profile-photo-tile {
-    width: 72px;
-    height: 72px;
-    min-width: 72px;
-    aspect-ratio: auto;
-    clip-path: polygon(
-      25% 5%,
-      75% 5%,
-      100% 50%,
-      75% 95%,
-      25% 95%,
-      0% 50%
-    );
-    background: radial-gradient(circle at 30% 20%, #020617 0, #0b1120 60%);
-    border: 1px solid rgba(55, 65, 81, 0.9);
+    width: 88px;
+    height: 88px;
+    min-width: 88px;
+    flex: 0 0 88px;
+    aspect-ratio: 1 / 1;
   }
 
   #userProfileCard.logged-in .profile-photo-grid::-webkit-scrollbar,
@@ -2795,7 +2812,7 @@ h3{
     color: #e5e7eb;
     font-size: 0.9rem;
     cursor: pointer;
-    width: auto;
+    width: auto !important;
     flex: 1;
   }
 
@@ -2810,7 +2827,8 @@ h3{
     cursor: pointer;
     box-shadow: 0 0 14px rgba(59, 130, 246, 0.9);
     transition: all 0.18s ease;
-    width: auto;
+    width: auto !important;
+    margin-top: 0 !important;
   }
 
   #modalViewProfile #vpRelationshipSend:hover {
