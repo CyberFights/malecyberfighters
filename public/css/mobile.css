@@ -2471,3 +2471,52 @@ h3{
   min-height: calc(var(--vp-avatar) - 44px);
   align-items: flex-start;
 }
+
+/* Roster profile: stronger 3D light-blue neon treatment. */
+#modalViewProfile #vpName {
+  font-size: 1.9rem;
+  text-shadow:
+    0 2px 2px rgba(0, 15, 30, 0.95),
+    0 0 7px #bae6fd,
+    0 0 15px rgba(56, 189, 248, 0.95),
+    0 0 25px rgba(14, 165, 233, 0.68);
+}
+
+#modalViewProfile #vpAvatar {
+  border: 2px solid rgba(186, 230, 253, 0.95) !important;
+  box-shadow:
+    inset 0 0 14px rgba(224, 242, 254, 0.42),
+    inset 0 -10px 18px rgba(3, 105, 161, 0.28),
+    0 3px 0 rgba(7, 89, 133, 0.9),
+    0 0 10px #bae6fd,
+    0 0 22px rgba(56, 189, 248, 0.9),
+    0 14px 30px rgba(2, 6, 23, 0.82) !important;
+}
+
+#modalViewProfile > div,
+#modalViewProfile .modal-box,
+#modalViewProfile .profile-block,
+#modalViewProfile .profile-stats > div,
+#modalViewProfile .profile-block.field-row > div,
+#modalViewProfile .profile-gallery-section,
+#modalViewProfile #profileStories,
+#modalViewProfile #profileRelationships,
+#modalViewProfile #profileTimeline,
+#modalViewProfile #vpRelationshipSection {
+  border-color: rgba(125, 211, 252, 0.78) !important;
+  box-shadow:
+    inset 1px 1px 0 rgba(224, 242, 254, 0.3),
+    inset 0 -7px 15px rgba(3, 105, 161, 0.16),
+    0 3px 0 rgba(7, 89, 133, 0.72),
+    0 0 8px rgba(186, 230, 253, 0.72),
+    0 0 18px rgba(56, 189, 248, 0.45),
+    0 10px 24px rgba(2, 6, 23, 0.7) !important;
+}
+
+#modalViewProfile .profile-gallery-section,
+#modalViewProfile #vpRelationshipSection {
+  padding: 12px !important;
+  border: 1px solid rgba(125, 211, 252, 0.78) !important;
+  border-radius: 12px;
+  background: rgba(2, 20, 38, 0.72);
+}
