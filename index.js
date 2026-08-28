@@ -29,6 +29,19 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const MAX_PROXIED_IMAGE_SIZE = 12 * 1024 * 1024;
 const MAX_EXTRA_PROFILE_PHOTOS = 10;
 
+// Short video clips + GIFs sent in DMs / custom rooms and attached to
+// stories. These are stored on the local disk (ImgBB is images-only) and
+// served back from the /clips static route.
+const MAX_GIF_SIZE = 25 * 1024 * 1024;        // 25 MB
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024;      // 50 MB
+const MAX_UPLOADS_TOTAL_SIZE = 2 * 1024 * 1024 * 1024; // 2 GB hard cap for all clips
+const ALLOWED_CLIP_MIME = {
+  'image/gif': '.gif',
+  'video/mp4': '.mp4',
+  'video/webm': '.webm'
+};
+const UPLOADS_DIR = path.join(__dirname, 'uploads', 'clips');
+
 const DISCORD_WEBHOOK_URL = process.env.Discord_webhook || null;
 const DISCORD_SUPPORT_URL = process.env.Discord_Support || null;
 const EMAIL_ADMIN_ALERTS = String(process.env.EMAIL_ADMIN_ALERTS || 'false').toLowerCase() === 'true';
@@ -254,6 +267,12 @@ const noCacheStatic = {
     res.set('Cache-Control', 'no-cache');
   }
 };
+// User-uploaded clips (GIFs / short videos). Filenames are random hex, so a
+// 7-day immutable cache is safe. express.static supports Range requests,
+// which <video> players use for seeking.
+fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+app.use('/clips', express.static(UPLOADS_DIR, { maxAge: '7d', immutable: true }));
+
 app.use('/js', express.static(path.join(publicDir, 'js'), noCacheStatic));
 app.use('/css', express.static(path.join(publicDir, 'css'), noCacheStatic));
 app.get('/sw.js', (req, res) => {
@@ -336,6 +355,9 @@ const roomMessageSchema = new mongoose.Schema({
   display: String,
   text: String,
   imageUrl: String,
+  // short video / GIF attached to the message (served from /clips)
+  clipUrl: String,
+  clipType: String, // "video" | "gif"
   edited: { type: Boolean, default: false },
   replyTo: { type: Object, default: null },
   time: { type: Date, default: Date.now }
@@ -394,6 +416,10 @@ const dmSchema = new mongoose.Schema({
   // image message
   imageUrl: { type: String },
 
+  // short video / GIF message (served from our /clips route)
+  clipUrl: { type: String },
+  clipType: { type: String }, // "video" | "gif"
+
   relationshipId: { type: String },
   storyId: { type: String },
   // system / approval / normal
@@ -401,6 +427,7 @@ const dmSchema = new mongoose.Schema({
   // values:
   // "normal"        → regular DM
   // "image"         → image DM
+  // "clip"          → GIF / short video DM
   // "storyApproval" → approval request DM
   // "system"        → system notifications
 
@@ -413,6 +440,9 @@ const storySchema = new mongoose.Schema({
   partner: { type: String, required: true },
   title: { type: String, default: "" },
   story: { type: String, required: true },
+  // optional GIF / short video played when the story is viewed
+  clipUrl: { type: String },
+  clipType: { type: String }, // "video" | "gif"
 
   approvalOwner: { type: Boolean, default: true },
   approvalPartner: { type: Boolean, default: false },
@@ -465,6 +495,46 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_IMAGE_SIZE }
 });
+
+// Clips (GIFs / short videos) are written to disk — ImgBB only accepts still
+// images, and video bytes are too large to keep in memory.
+const clipStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
+  filename: (req, file, cb) => {
+    const ext = ALLOWED_CLIP_MIME[file.mimetype] || '';
+    cb(null, `${crypto.randomBytes(16).toString('hex')}${ext}`);
+  }
+});
+const clipUpload = multer({
+  storage: clipStorage,
+  limits: { fileSize: Math.max(MAX_GIF_SIZE, MAX_VIDEO_SIZE) },
+  fileFilter: (req, file, cb) => {
+    if (ALLOWED_CLIP_MIME[file.mimetype]) return cb(null, true);
+    cb(new Error('Only GIF, MP4 and WebM clips are allowed'));
+  }
+});
+
+// Clip URLs always point at our own /clips static route with a generated
+// hex filename. Anything else is rejected so message payloads can never be
+// used to inject arbitrary remote URLs into stored documents.
+function isLocalClipUrl(value) {
+  return typeof value === 'string'
+    && /^\/clips\/[a-f0-9]{32}\.(gif|mp4|webm)$/.test(value);
+}
+
+// Total bytes currently used by the clip directory (single level).
+async function uploadsDirSize() {
+  let total = 0;
+  try {
+    for (const entry of await fs.promises.readdir(UPLOADS_DIR)) {
+      try {
+        const stat = await fs.promises.stat(path.join(UPLOADS_DIR, entry));
+        if (stat.isFile()) total += stat.size;
+      } catch (_) { /* file removed meanwhile — ignore */ }
+    }
+  } catch (_) { /* directory not present yet — treat as empty */ }
+  return total;
+}
 
 function isImgBBUrl(value) {
   try {
@@ -758,12 +828,16 @@ async function updateRoomMembers(roomId) {
 
 app.post("/api/story/save", async (req, res) => {
   const { owner, partner, story, title } = req.body;
+  // Optional clip attached to the story — must point at our own /clips route.
+  const clipUrl = isLocalClipUrl(req.body.clipUrl) ? req.body.clipUrl : null;
 
   const saved = await Story.create({
     owner,
     partner,
     title: title || "",
     story,
+    clipUrl,
+    clipType: clipUrl ? (req.body.clipType === "gif" ? "gif" : "video") : null,
     approvalOwner: true,
     approvalPartner: false,
     approved: false
@@ -1313,6 +1387,54 @@ app.post('/api/upload-image', upload.single('image'), async (req, res) => {
       error: e.code || 'upload_error',
       ...(e.details ? { details: e.details } : {})
     });
+  }
+});
+
+// ---------- API: CLIP UPLOAD (GIF / SHORT VIDEO) ----------
+// Used by DMs, custom rooms and story attachments. GIFs, MP4 and WebM files
+// are stored locally and served from /clips/<name>; the returned URL is what
+// gets persisted on DM / RoomMessage / Story documents.
+app.post('/api/upload-clip', (req, res, next) => {
+  // Run multer with an explicit callback so size/type errors come back as
+  // JSON (there is no global error middleware).
+  clipUpload.single('clip')(req, res, err => {
+    if (!err) return next();
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ ok: false, error: 'file_too_large', maxFileSize: MAX_VIDEO_SIZE });
+      }
+      return res.status(400).json({ ok: false, error: err.code === 'LIMIT_UNEXPECTED_FILE' ? 'no_file' : err.code });
+    }
+    return res.status(400).json({ ok: false, error: 'invalid_file_type', message: err.message });
+  });
+}, async (req, res) => {
+  if (!req.file) return res.status(400).json({ ok: false, error: 'no_file' });
+
+  try {
+    const isGif = req.file.mimetype === 'image/gif';
+    const limit = isGif ? MAX_GIF_SIZE : MAX_VIDEO_SIZE;
+
+    if (req.file.size > limit) {
+      await fs.promises.unlink(req.file.path).catch(() => {});
+      return res.status(413).json({ ok: false, error: 'file_too_large', maxFileSize: limit });
+    }
+
+    // Hard cap on total clip storage so chat media can't fill the disk.
+    if ((await uploadsDirSize()) - req.file.size > MAX_UPLOADS_TOTAL_SIZE) {
+      await fs.promises.unlink(req.file.path).catch(() => {});
+      return res.status(507).json({ ok: false, error: 'storage_full' });
+    }
+
+    return res.json({
+      ok: true,
+      clipUrl: `/clips/${req.file.filename}`,
+      clipType: isGif ? 'gif' : 'video',
+      size: req.file.size
+    });
+  } catch (e) {
+    console.error('clip upload error', e);
+    await fs.promises.unlink(req.file.path).catch(() => {});
+    return res.status(500).json({ ok: false, error: 'upload_error' });
   }
 });
 
@@ -2276,6 +2398,34 @@ socket.on("editPublicMessage", async (data) => {
       return;
     }
 
+    // CLIP MESSAGE (GIF / short video, served from our /clips route)
+    if (pm.clipUrl) {
+      if (!isLocalClipUrl(pm.clipUrl)) return; // reject foreign URLs
+
+      const saved = await DM.create({
+        from: pm.from,
+        to: pm.to,
+        clipUrl: pm.clipUrl,
+        clipType: pm.clipType === "gif" ? "gif" : "video",
+        type: "clip",
+        text: null,
+        originalText: null
+      });
+
+      const clipPayload = {
+        from: pm.from,
+        to: pm.to,
+        clipUrl: saved.clipUrl,
+        clipType: saved.clipType,
+        time: saved.time
+      };
+
+      if (receiver.socketId) io.to(receiver.socketId).emit("privateMessage", clipPayload);
+      if (sender.socketId) io.to(sender.socketId).emit("privateMessage", clipPayload);
+
+      return;
+    }
+
     // TEXT MESSAGE
     const translated = await translateText(pm.text, receiver.language || "en");
 
@@ -2373,12 +2523,18 @@ socket.on("editPublicMessage", async (data) => {
     const roomRecord = await Room.findById(roomId).lean();
     if (!canAccessRoom(roomRecord, socket.username)) return;
 
+    // Clips may only be attached when the browser uploaded them through
+    // /api/upload-clip, which always returns same-origin /clips URLs.
+    const clipUrl = isLocalClipUrl(msg.clipUrl) ? msg.clipUrl : null;
+
     const enriched = {
       room: roomId,
       from: socket.username,
       display: msg.display,
       text: msg.text || null,
       imageUrl: msg.imageUrl || null,
+      clipUrl,
+      clipType: clipUrl ? (msg.clipType === "gif" ? "gif" : "video") : null,
       replyTo: msg.replyTo || null,
       time: new Date()
     };
@@ -2392,7 +2548,8 @@ socket.on("editPublicMessage", async (data) => {
 
     const members = await io.in(roomId).fetchSockets();
 
-    if (msg.imageUrl) {
+    // Image and clip messages carry no translatable text — deliver as-is.
+    if (msg.imageUrl || clipUrl) {
       members.forEach(member => {
         io.to(member.id).emit("roomMessage", {
           ...enriched,

@@ -935,7 +935,9 @@
     <input id="roomMessageInput" type="text" placeholder="Message room">
     <button id="roomSendBtn" class="send-btn">Send</button>
     <input type="file" id="roomImageInput" accept="image/*" style="display:none">
-<button id="roomImageBtn">📷</button>
+<button id="roomImageBtn" title="Send image" aria-label="Send image">📷</button>
+    <input type="file" id="roomClipInput" accept="image/gif,video/mp4,video/webm" style="display:none">
+    <button id="roomClipBtn" title="Send GIF or short video" aria-label="Send GIF or short video">🎬</button>
 
   </div>
 </div>
@@ -1706,6 +1708,17 @@ Don't hesitate to contact us if you have any questions.
     <button id="storyLoadBtn" class="small-btn">Load Messages</button>
 
     <textarea id="storyEditor" placeholder="Your story will appear here..." style="height:300px;margin-top:20px;"></textarea>
+
+    <div style="margin-top:16px">
+      <div style="font-weight:700;margin-bottom:8px">🎬 Attach a clip <span class="small muted">(optional — plays when the story is viewed)</span></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="file" id="storyClipInput" accept="image/gif,video/mp4,video/webm" style="display:none">
+        <button id="storyClipBtn" class="small-btn ghost" type="button">Choose GIF / short video</button>
+        <button id="storyClipClearBtn" class="small-btn ghost" type="button" style="display:none">Remove</button>
+        <span id="storyClipStatus" class="small muted"></span>
+      </div>
+      <div id="storyClipPreview" style="margin-top:10px"></div>
+    </div>
 
     <button id="storySaveBtn" class="small-btn">Save Story</button>
     <button id="storyCloseBtn" class="small-btn ghost">Close</button>

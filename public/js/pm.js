@@ -129,6 +129,39 @@ async function uploadDMImage(targetUsername, file) {
   });
 }
 
+// Upload a GIF / short video and send it as a DM clip message.
+async function uploadDMClip(targetUsername, file) {
+  if (!isClipFile(file)) {
+    alert("Only GIF, MP4 and WebM clips are supported");
+    return;
+  }
+
+  const s = getSession();
+  if (!s) return;
+
+  const btn = document.getElementById("pmClipBtn_" + targetUsername);
+  if (btn) { btn.disabled = true; btn.textContent = "…"; }
+  try {
+    const data = await uploadClipToServer(file);
+
+    if (!data.ok) {
+      alert(data.error === "file_too_large"
+        ? "Clip is too large (max 25 MB for GIFs, 50 MB for videos)"
+        : "Clip upload failed");
+      return;
+    }
+
+    socket.emit("privateMessage", {
+      from: s.username,
+      to: targetUsername,
+      clipUrl: data.clipUrl,
+      clipType: data.clipType
+    });
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "🎬"; }
+  }
+}
+
 /* ---------- Open DM Window ---------- */
 
 function openPrivateWindow(targetUsername) {
@@ -192,7 +225,9 @@ function openPrivateWindow(targetUsername) {
       <button class="small-btn pm-call" type="button" title="Audio call" aria-label="Audio call">☎</button>
       <input id="pmInput_${targetUsername}" type="text" placeholder="Message ${targetUsername}">
       <input type="file" id="pmImage_${targetUsername}" accept="image/*" style="display:none">
-      <button class="small-btn" id="pmImageBtn_${targetUsername}" type="button">📷</button>
+      <button class="small-btn" id="pmImageBtn_${targetUsername}" type="button" title="Send image">📷</button>
+      <input type="file" id="pmClip_${targetUsername}" accept="image/gif,video/mp4,video/webm" style="display:none">
+      <button class="small-btn" id="pmClipBtn_${targetUsername}" type="button" title="Send GIF or short video">🎬</button>
       <button class="small-btn" id="pmSend_${targetUsername}" type="button">Send</button>
     </div>
   `;
@@ -299,7 +334,24 @@ pmWindow.querySelector(".pm-story").addEventListener("click", () => {
     .getElementById("pmImage_" + targetUsername)
     .addEventListener("change", e => {
       const file = e.target.files[0];
+      e.target.value = "";
       if (file) uploadDMImage(targetUsername, file);
+    });
+
+  /* ---------- DM Clip Upload (GIF / short video) ---------- */
+
+  document
+    .getElementById("pmClipBtn_" + targetUsername)
+    .addEventListener("click", () => {
+      document.getElementById("pmClip_" + targetUsername).click();
+    });
+
+  document
+    .getElementById("pmClip_" + targetUsername)
+    .addEventListener("change", e => {
+      const file = e.target.files[0];
+      e.target.value = "";
+      if (file) uploadDMClip(targetUsername, file);
     });
 
   loadDMHistory(s.username, targetUsername).then(history => {
@@ -400,6 +452,15 @@ function renderPMHistory(targetUsername, messages) {
       div.appendChild(img);
     }
 
+    // GIF / short video clips (served from our /clips route)
+    if (m.clipUrl) {
+      const clipEl = createClipElement(m.clipUrl, m.clipType);
+      if (m.clipType === "gif") {
+        clipEl.addEventListener("click", () => window.open(m.clipUrl, "_blank"));
+      }
+      div.appendChild(clipEl);
+    }
+
     body.appendChild(div);
   });
 
@@ -457,6 +518,60 @@ function openStoryPopup(targetUsername) {
   const titleInput = document.getElementById("storyTitle");
   if (titleInput) titleInput.value = "";
 
+  /* ---------- Optional clip attached to the story ---------- */
+  let storyClip = null; // { url, type, name }
+
+  const storyClipInput = document.getElementById("storyClipInput");
+  const storyClipBtn = document.getElementById("storyClipBtn");
+  const storyClipClearBtn = document.getElementById("storyClipClearBtn");
+  const storyClipStatus = document.getElementById("storyClipStatus");
+  const storyClipPreview = document.getElementById("storyClipPreview");
+
+  const resetStoryClip = () => {
+    storyClip = null;
+    if (storyClipPreview) storyClipPreview.innerHTML = "";
+    if (storyClipStatus) storyClipStatus.textContent = "";
+    if (storyClipClearBtn) storyClipClearBtn.style.display = "none";
+    if (storyClipInput) storyClipInput.value = "";
+  };
+  resetStoryClip();
+
+  if (storyClipBtn) storyClipBtn.onclick = () => storyClipInput?.click();
+
+  if (storyClipInput) storyClipInput.onchange = async e => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+
+    if (!isClipFile(file)) {
+      if (storyClipStatus) storyClipStatus.textContent = "Unsupported file — use a GIF, MP4 or WebM";
+      return;
+    }
+
+    if (storyClipStatus) storyClipStatus.textContent = "Uploading clip…";
+    if (storyClipBtn) storyClipBtn.disabled = true;
+
+    const data = await uploadClipToServer(file);
+    if (storyClipBtn) storyClipBtn.disabled = false;
+
+    if (!data.ok) {
+      if (storyClipStatus) storyClipStatus.textContent = data.error === "file_too_large"
+        ? "Clip is too large (max 25 MB for GIFs, 50 MB for videos)"
+        : "Clip upload failed";
+      return;
+    }
+
+    storyClip = { url: data.clipUrl, type: data.clipType, name: file.name };
+    if (storyClipStatus) storyClipStatus.textContent = `✓ ${file.name}`;
+    if (storyClipClearBtn) storyClipClearBtn.style.display = "inline-block";
+    if (storyClipPreview) {
+      storyClipPreview.innerHTML = "";
+      storyClipPreview.appendChild(createClipElement(data.clipUrl, data.clipType));
+    }
+  };
+
+  if (storyClipClearBtn) storyClipClearBtn.onclick = resetStoryClip;
+
   document.getElementById("storyLoadBtn").onclick = async () => {
     const date = document.getElementById("storyDate").value;
     if (!date) return alert("Choose a date first");
@@ -475,7 +590,7 @@ function openStoryPopup(targetUsername) {
     if (!data.ok) return alert("Failed to load messages");
 
     const text = data.messages
-      .map(m => `[${new Date(m.time).toLocaleString()}] ${m.from}: ${m.text || "(image)"}`)
+      .map(m => `[${new Date(m.time).toLocaleString()}] ${m.from}: ${m.text || (m.clipUrl ? "(clip)" : "(image)")}`)
       .join("\n");
 
     document.getElementById("storyEditor").value = text;
@@ -495,7 +610,9 @@ function openStoryPopup(targetUsername) {
         owner: getSession().username,
         partner: targetUsername,
         title,
-        story: storyText
+        story: storyText,
+        clipUrl: storyClip ? storyClip.url : null,
+        clipType: storyClip ? storyClip.type : null
       })
     });
 
@@ -504,10 +621,12 @@ function openStoryPopup(targetUsername) {
 
     alert("Story saved!");
     popup.style.display = "none";
+    resetStoryClip();
   };
 
   document.getElementById("storyCloseBtn").onclick = () => {
     popup.style.display = "none";
+    resetStoryClip();
   };
 }
 

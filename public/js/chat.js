@@ -440,7 +440,7 @@ function renderArchivesPopup() {
       <div class="small muted">${escapeHtml(new Date(s.createdAt).toLocaleDateString())}</div>
     `;
 
-    div.addEventListener('click', () => openStoryViewer(title, s.story));
+    div.addEventListener('click', () => openStoryViewer(title, s.story, s.clipUrl, s.clipType));
     list.appendChild(div);
   });
 
@@ -514,7 +514,7 @@ async function loadStories(username) {
       <div><strong>${escapeHtml(title)}</strong></div>
       <div class="small">${escapeHtml(other)} — ${new Date(s.createdAt).toLocaleDateString()}</div>
     `;
-    div.onclick = () => openStoryViewer(title, s.story);
+    div.onclick = () => openStoryViewer(title, s.story, s.clipUrl, s.clipType);
     box.appendChild(div);
   });
 }
@@ -1066,6 +1066,12 @@ function appendRoomMessage(msg){
   const imageHtml = msg.imageUrl
     ? `<img src="${chatImgSrc(msg.imageUrl)}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${msg.imageUrl}">`
     : '';
+  // GIF / short video clips attached to the message (served from /clips)
+  const clipHtml = msg.clipUrl
+    ? (msg.clipType === 'gif'
+        ? `<img src="${escapeHtml(msg.clipUrl)}" class="chat-clip" alt="GIF clip" data-url="${escapeHtml(msg.clipUrl)}">`
+        : `<video src="${escapeHtml(msg.clipUrl)}" class="chat-clip" controls playsinline preload="metadata"></video>`)
+    : '';
 
   const replyHtml = msg.replyTo
     ? `<div class="reply-preview">↩ <b>@${escapeHtml(msg.replyTo.display || msg.replyTo.from || '')}</b> — ${escapeHtml((msg.replyTo.text || '').slice(0, 80))}</div>`
@@ -1085,6 +1091,7 @@ function appendRoomMessage(msg){
       ${replyHtml}
       ${textHtml}
       ${imageHtml}
+      ${clipHtml}
       <div class="message-actions">
         <button type="button" class="msg-action action-reply">Reply</button>
         ${isMine && msg.text ? `<button type="button" class="msg-action action-edit">Edit</button>` : ''}
@@ -1095,6 +1102,11 @@ function appendRoomMessage(msg){
   div.querySelectorAll('.chat-image').forEach(img => {
     img.addEventListener('click', () => window.open(img.dataset.url, '_blank'));
   });
+
+  // GIF clips open full-size in a new tab; videos use their inline controls.
+  if (msg.clipUrl && msg.clipType === 'gif') {
+    div.querySelector('.chat-clip')?.addEventListener('click', () => window.open(msg.clipUrl, '_blank'));
+  }
 
   div.querySelector('.action-reply')?.addEventListener('click', () => setRoomReply(msg));
   div.querySelector('.action-edit')?.addEventListener('click', () => {
@@ -1129,6 +1141,7 @@ document.getElementById("roomImageBtn")?.addEventListener("click", () => {
 document.getElementById("roomImageInput")?.addEventListener("change", e => {
   const file = e.target.files[0];
   if (file) uploadRoomImage(file);
+  e.target.value = "";
 });
 
 async function uploadRoomImage(file) {
@@ -1149,6 +1162,51 @@ async function uploadRoomImage(file) {
     display: s.display || s.username,
     imageUrl: data.imageUrl
   });
+}
+
+document.getElementById("roomClipBtn")?.addEventListener("click", () => {
+  document.getElementById("roomClipInput").click();
+});
+
+document.getElementById("roomClipInput")?.addEventListener("change", e => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (file) uploadRoomClip(file);
+});
+
+// Send a GIF / short video clip to the currently open room.
+async function uploadRoomClip(file) {
+  if (!isClipFile(file)) {
+    alert("Only GIF, MP4 and WebM clips are supported");
+    return;
+  }
+
+  const btn = document.getElementById("roomClipBtn");
+  const s = getSession();
+  const room = document.getElementById("roomChatPopup")?.dataset.room;
+  if (!s || !room) return;
+
+  if (btn) { btn.disabled = true; btn.textContent = "…"; }
+  try {
+    const data = await uploadClipToServer(file);
+
+    if (!data.ok) {
+      alert(data.error === "file_too_large"
+        ? "Clip is too large (max 25 MB for GIFs, 50 MB for videos)"
+        : "Clip upload failed");
+      return;
+    }
+
+    socket.emit("roomMessage", {
+      room,
+      from: s.username,
+      display: s.display || s.username,
+      clipUrl: data.clipUrl,
+      clipType: data.clipType
+    });
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "🎬"; }
+  }
 }
 
 /* ============================================================

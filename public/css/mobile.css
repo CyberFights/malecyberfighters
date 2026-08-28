@@ -543,6 +543,17 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
 
 .chat-image { border-radius: 8px; margin-top: 6px; max-height: 240px; }
 
+/* GIF / short video clips in DMs, rooms and stories */
+.chat-clip {
+  display: block;
+  border-radius: 8px;
+  margin-top: 8px;
+  max-width: min(100%, 320px);
+  max-height: 340px;
+  background: #000;
+}
+.chat-clip[alt="GIF clip"] { cursor: pointer; }
+
 .chat-input {
   display: flex;
   flex-wrap: wrap;
@@ -826,7 +837,8 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
   flex: 0 0 auto;
 }
 
-.pm-window .pm-input button[id^="pmImageBtn_"] {
+.pm-window .pm-input button[id^="pmImageBtn_"],
+.pm-window .pm-input button[id^="pmClipBtn_"] {
   min-width: 42px;
   padding: 9px 10px;
 }

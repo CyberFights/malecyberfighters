@@ -3,6 +3,8 @@ dist
 .env
 .env.*
 !.env.example
+# user-uploaded clips (GIFs / short videos) — generated at runtime
+uploads/
 *.AppImage
 *.dmg
 *.exe
