@@ -11,7 +11,7 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/images/mcf.png">
    
-<link rel="stylesheet" href="/css/desktop.css?v=4">
+<link rel="stylesheet" href="/css/desktop.css?v=8">
 <link rel="stylesheet" href="/css/audio-calls.css?v=4">
 
 <style>
@@ -589,27 +589,23 @@
     <div style="display:flex;gap:20px;align-items:flex-start;margin-bottom:20px">
 
       <!-- AVATAR -->
-      <img id="vpAvatar" class="holo-avatar" src="" style="
-        width:150px;
-        height:150px;
-        border-radius:12px;
-        object-fit:cover;
+      <div class="vp-avatar-frame">
+        <img id="vpAvatar" class="holo-avatar" src="" style="
+          width:150px;
+          height:150px;
+          border-radius:12px;
+          object-fit:cover;
         ">
+      </div>
 
       <!-- INFO -->
       <div style="flex:1">
 
         <div class="small muted">@<span id="vpUsername"></span></div>
 
-        <div style="margin-top:12px;display:flex;gap:20px">
-          <div>
-            <div class="muted">Wins</div>
-            <div id="vpWins" style="color:var(--accent);font-weight:700"></div>
-          </div>
-          <div>
-            <div class="muted">Losses</div>
-            <div id="vpLosses" style="color:var(--accent);font-weight:700"></div>
-          </div>
+        <div style="margin-top:12px">
+          <div class="muted">Age</div>
+          <div id="vpAge"></div>
         </div>
 
         <div style="margin-top:12px">
@@ -624,18 +620,24 @@
         </div>
 
         <div style="margin-top:12px">
-          <div class="muted">Bio</div>
-          <div id="vpBio" style="margin-top:4px"></div>
-        </div>
-
-        <div style="margin-top:12px">
           <div class="muted">Language</div>
           <div id="vpLang"></div>
         </div>
 
         <div style="margin-top:12px">
-          <div class="muted">Age</div>
-          <div id="vpAge"></div>
+          <div class="muted">Bio</div>
+          <div id="vpBio" style="margin-top:4px"></div>
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:20px">
+          <div>
+            <div class="muted">Wins</div>
+            <div id="vpWins" style="color:var(--accent);font-weight:700"></div>
+          </div>
+          <div>
+            <div class="muted">Losses</div>
+            <div id="vpLosses" style="color:var(--accent);font-weight:700"></div>
+          </div>
         </div>
 
       </div>

@@ -2366,11 +2366,17 @@ h3{
    ============================================================ */
 #modalViewProfile > div,
 #modalViewProfile .modal-box {
-  --vp-avatar: 168px;
-  --vp-band: 46px;
+  --vp-avatar: clamp(184px, 52vw, 210px);
+  --vp-band: 54px;
   --vp-gap: 14px;
   position: relative;
   padding-top: 14px !important;
+  background-image:
+    linear-gradient(135deg, rgba(2, 6, 23, 0.82), rgba(15, 23, 42, 0.68)),
+    url('/images/mcf2.png') !important;
+  background-position: center !important;
+  background-size: cover !important;
+  background-repeat: no-repeat !important;
 }
 
 #modalViewProfile #vpAvatar {
@@ -2432,13 +2438,24 @@ h3{
   align-items: flex-end;
   justify-content: center;
   text-align: center;
-  font-size: 1.35rem;
+  font-size: 1.6rem;
   font-weight: 800;
   line-height: 1.05;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   pointer-events: none;
+}
+
+#modalViewProfile #vpUsername,
+#modalViewProfile .profile-top .small.muted,
+#modalViewProfile > div > div:nth-child(2) > div:last-child > .small.muted {
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  color: #f0f9ff;
+  text-shadow: 0 0 10px rgba(34, 211, 238, 0.75);
 }
 
 #modalViewProfile .modal-header,
@@ -2453,4 +2470,165 @@ h3{
   padding-left: calc(var(--vp-avatar) + var(--vp-gap));
   min-height: calc(var(--vp-avatar) - 44px);
   align-items: flex-start;
+}
+
+/* Roster profile: stronger 3D light-blue neon treatment. */
+#modalViewProfile #vpName {
+  font-size: 1.9rem;
+  text-shadow:
+    0 2px 2px rgba(0, 15, 30, 0.95),
+    0 0 7px #bae6fd,
+    0 0 15px rgba(56, 189, 248, 0.95),
+    0 0 25px rgba(14, 165, 233, 0.68);
+}
+
+#modalViewProfile #vpAvatar {
+  border: 2px solid rgba(186, 230, 253, 0.95) !important;
+  box-shadow:
+    inset 0 0 14px rgba(224, 242, 254, 0.42),
+    inset 0 -10px 18px rgba(3, 105, 161, 0.28),
+    0 3px 0 rgba(7, 89, 133, 0.9),
+    0 0 10px #bae6fd,
+    0 0 22px rgba(56, 189, 248, 0.9),
+    0 14px 30px rgba(2, 6, 23, 0.82) !important;
+}
+
+#modalViewProfile > div,
+#modalViewProfile .modal-box,
+#modalViewProfile .profile-block,
+#modalViewProfile .profile-stats > div,
+#modalViewProfile .profile-block.field-row > div,
+#modalViewProfile #profileStories,
+#modalViewProfile #profileRelationships,
+#modalViewProfile #profileTimeline,
+#modalViewProfile #vpRelationshipSection {
+  border-color: rgba(125, 211, 252, 0.78) !important;
+  box-shadow:
+    inset 1px 1px 0 rgba(224, 242, 254, 0.3),
+    inset 0 -7px 15px rgba(3, 105, 161, 0.16),
+    0 3px 0 rgba(7, 89, 133, 0.72),
+    0 0 8px rgba(186, 230, 253, 0.72),
+    0 0 18px rgba(56, 189, 248, 0.45),
+    0 10px 24px rgba(2, 6, 23, 0.7) !important;
+}
+
+#modalViewProfile #vpRelationshipSection {
+  padding: 12px !important;
+  border: 1px solid rgba(125, 211, 252, 0.78) !important;
+  border-radius: 12px;
+  background: rgba(2, 20, 38, 0.72);
+}
+
+/* Profile controls carry the 3D depth; their surrounding rows stay clean. */
+#modalViewProfile button {
+  border: 1px solid rgba(186, 230, 253, 0.82) !important;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -3px 5px rgba(3, 37, 65, 0.4),
+    0 4px 0 #075985,
+    0 7px 13px rgba(2, 6, 23, 0.68) !important;
+  transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+}
+
+#modalViewProfile #vpBlockButton {
+  border-color: rgba(254, 202, 202, 0.82) !important;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -3px 5px rgba(69, 10, 10, 0.45),
+    0 4px 0 #7f1d1d,
+    0 7px 13px rgba(2, 6, 23, 0.68) !important;
+}
+
+#modalViewProfile button:active {
+  transform: translateY(3px);
+  box-shadow:
+    inset 0 2px 5px rgba(2, 6, 23, 0.45),
+    0 1px 0 #075985,
+    0 3px 6px rgba(2, 6, 23, 0.62) !important;
+}
+
+#modalViewProfile #vpBlockButton:active {
+  box-shadow:
+    inset 0 2px 5px rgba(69, 10, 10, 0.5),
+    0 1px 0 #7f1d1d,
+    0 3px 6px rgba(2, 6, 23, 0.62) !important;
+}
+
+/* Holographic hex frame and fixed right-side close control. */
+@keyframes vpHolographicFrame {
+  0% { background-position: 0% 50%; filter: brightness(1); }
+  50% { background-position: 100% 50%; filter: brightness(1.28); }
+  100% { background-position: 0% 50%; filter: brightness(1); }
+}
+
+#modalViewProfile .vp-avatar-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  box-sizing: border-box;
+  width: var(--vp-avatar);
+  height: var(--vp-avatar);
+  padding: 7px;
+  clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0 50%);
+  filter:
+    drop-shadow(0 0 6px rgba(224, 242, 254, 1))
+    drop-shadow(0 0 13px rgba(56, 189, 248, 0.92))
+    drop-shadow(0 9px 14px rgba(2, 6, 23, 0.85));
+}
+
+#modalViewProfile .vp-avatar-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  clip-path: inherit;
+  background: linear-gradient(115deg, #e0f2fe, #38bdf8, #c4b5fd, #67e8f9, #ffffff, #0ea5e9, #e0f2fe);
+  background-size: 320% 320%;
+  animation: vpHolographicFrame 4s linear infinite;
+}
+
+#modalViewProfile .vp-avatar-frame::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  z-index: 2;
+  clip-path: inherit;
+  border: 1px solid rgba(240, 249, 255, 0.95);
+  pointer-events: none;
+}
+
+#modalViewProfile .vp-avatar-frame #vpAvatar {
+  position: relative !important;
+  inset: auto !important;
+  z-index: 1;
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0 50%);
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: inset 0 0 18px rgba(125, 211, 252, 0.28) !important;
+}
+
+#modalViewProfile .vp-avatar-frame #vpAvatar > img,
+#modalViewProfile .vp-avatar-frame #vpAvatar .avatar-img,
+#modalViewProfile .vp-avatar-frame #vpAvatar .avatar-fallback {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+  clip-path: inherit;
+}
+
+#modalViewProfile #vpClose {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  left: auto;
+  z-index: 20;
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #modalViewProfile .vp-avatar-frame::before { animation: none; }
 }
