@@ -2553,3 +2553,82 @@ h3{
     0 1px 0 #7f1d1d,
     0 3px 6px rgba(2, 6, 23, 0.62) !important;
 }
+
+/* Holographic hex frame and fixed right-side close control. */
+@keyframes vpHolographicFrame {
+  0% { background-position: 0% 50%; filter: brightness(1); }
+  50% { background-position: 100% 50%; filter: brightness(1.28); }
+  100% { background-position: 0% 50%; filter: brightness(1); }
+}
+
+#modalViewProfile .vp-avatar-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  box-sizing: border-box;
+  width: var(--vp-avatar);
+  height: var(--vp-avatar);
+  padding: 7px;
+  clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0 50%);
+  filter:
+    drop-shadow(0 0 6px rgba(224, 242, 254, 1))
+    drop-shadow(0 0 13px rgba(56, 189, 248, 0.92))
+    drop-shadow(0 9px 14px rgba(2, 6, 23, 0.85));
+}
+
+#modalViewProfile .vp-avatar-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  clip-path: inherit;
+  background: linear-gradient(115deg, #e0f2fe, #38bdf8, #c4b5fd, #67e8f9, #ffffff, #0ea5e9, #e0f2fe);
+  background-size: 320% 320%;
+  animation: vpHolographicFrame 4s linear infinite;
+}
+
+#modalViewProfile .vp-avatar-frame::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  z-index: 2;
+  clip-path: inherit;
+  border: 1px solid rgba(240, 249, 255, 0.95);
+  pointer-events: none;
+}
+
+#modalViewProfile .vp-avatar-frame #vpAvatar {
+  position: relative !important;
+  inset: auto !important;
+  z-index: 1;
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0 50%);
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: inset 0 0 18px rgba(125, 211, 252, 0.28) !important;
+}
+
+#modalViewProfile .vp-avatar-frame #vpAvatar > img,
+#modalViewProfile .vp-avatar-frame #vpAvatar .avatar-img,
+#modalViewProfile .vp-avatar-frame #vpAvatar .avatar-fallback {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+  clip-path: inherit;
+}
+
+#modalViewProfile #vpClose {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  left: auto;
+  z-index: 20;
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #modalViewProfile .vp-avatar-frame::before { animation: none; }
+}
