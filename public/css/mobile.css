@@ -2366,11 +2366,17 @@ h3{
    ============================================================ */
 #modalViewProfile > div,
 #modalViewProfile .modal-box {
-  --vp-avatar: 168px;
-  --vp-band: 46px;
+  --vp-avatar: clamp(184px, 52vw, 210px);
+  --vp-band: 54px;
   --vp-gap: 14px;
   position: relative;
   padding-top: 14px !important;
+  background-image:
+    linear-gradient(135deg, rgba(2, 6, 23, 0.82), rgba(15, 23, 42, 0.68)),
+    url('/images/mcf2.png') !important;
+  background-position: center !important;
+  background-size: cover !important;
+  background-repeat: no-repeat !important;
 }
 
 #modalViewProfile #vpAvatar {
@@ -2432,13 +2438,24 @@ h3{
   align-items: flex-end;
   justify-content: center;
   text-align: center;
-  font-size: 1.35rem;
+  font-size: 1.6rem;
   font-weight: 800;
   line-height: 1.05;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   pointer-events: none;
+}
+
+#modalViewProfile #vpUsername,
+#modalViewProfile .profile-top .small.muted,
+#modalViewProfile > div > div:nth-child(2) > div:last-child > .small.muted {
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  color: #f0f9ff;
+  text-shadow: 0 0 10px rgba(34, 211, 238, 0.75);
 }
 
 #modalViewProfile .modal-header,

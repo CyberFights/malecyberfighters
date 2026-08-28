@@ -89,7 +89,7 @@ app.get('/', (req, res, next) => {
 
     const page = html.replace(
       /<link\s+rel=["']stylesheet["']\s+href=["'][^"']*\/css\/[^"']+["']\s*>/i,
-      `<link rel="stylesheet" href="/css/${cssFile}?v=4">`
+      `<link rel="stylesheet" href="/css/${cssFile}?v=5">`
     );
 
     res.set({

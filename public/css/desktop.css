@@ -2919,11 +2919,17 @@ h3{
    ============================================================ */
 @media (min-width: 769px) {
   #modalViewProfile > div {
-    --vp-avatar: 300px;
-    --vp-band: 68px;
-    --vp-gap: 28px;
+    --vp-avatar: 360px;
+    --vp-band: 78px;
+    --vp-gap: 32px;
     position: relative;
     padding-top: 20px !important;
+    background-image:
+      linear-gradient(135deg, rgba(2, 6, 23, 0.82), rgba(15, 23, 42, 0.68)),
+      url('/images/mcf2.png') !important;
+    background-position: center !important;
+    background-size: cover !important;
+    background-repeat: no-repeat !important;
   }
 
   /* Avatar: flush into the top-left corner, big. */
@@ -2989,7 +2995,7 @@ h3{
     align-items: flex-end;
     justify-content: center;
     text-align: center;
-    font-size: 2rem;
+    font-size: 2.35rem;
     font-weight: 800;
     line-height: 1.05;
     letter-spacing: 0.02em;
@@ -2997,6 +3003,18 @@ h3{
     overflow: hidden;
     text-overflow: ellipsis;
     pointer-events: none;
+  }
+
+  /* Make the @username a prominent part of the roster profile identity. */
+  #modalViewProfile #vpUsername,
+  #modalViewProfile .profile-top .small.muted,
+  #modalViewProfile > div > div:nth-child(2) > div:last-child > .small.muted {
+    font-size: 1.5rem;
+    font-weight: 800;
+    line-height: 1.2;
+    letter-spacing: 0.025em;
+    color: #f0f9ff;
+    text-shadow: 0 0 12px rgba(34, 211, 238, 0.75);
   }
 
   /* Header keeps the close button clear of the avatar. */
