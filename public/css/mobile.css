@@ -2358,3 +2358,99 @@ h3{
     min-height: 80px;
   }
 }
+
+/* ============================================================
+   ROSTER PROFILE POPUP — BIG CORNER AVATAR
+   Avatar fills the top-left corner; the name is overlaid in
+   large type across the bottom of that image.
+   ============================================================ */
+#modalViewProfile > div,
+#modalViewProfile .modal-box {
+  --vp-avatar: 168px;
+  --vp-band: 46px;
+  --vp-gap: 14px;
+  position: relative;
+  padding-top: 14px !important;
+}
+
+#modalViewProfile #vpAvatar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  width: var(--vp-avatar) !important;
+  height: var(--vp-avatar) !important;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  flex: none;
+  clip-path: none;
+  border: 0;
+  border-right: 1px solid rgba(59, 130, 246, 0.5);
+  border-bottom: 1px solid rgba(59, 130, 246, 0.5);
+  border-radius: 15px 0 16px 0 !important;
+  background: #0b1120;
+  object-fit: cover;
+  overflow: hidden;
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.65);
+}
+
+#modalViewProfile #vpAvatar img,
+#modalViewProfile #vpAvatar .avatar-img,
+#modalViewProfile #vpAvatar .avatar-fallback {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0 !important;
+  object-fit: cover;
+  font-size: 2.1rem;
+}
+
+#modalViewProfile .modal-header::before,
+#modalViewProfile > div > div:first-child::before {
+  content: "";
+  position: absolute;
+  z-index: 4;
+  top: calc(var(--vp-avatar) - var(--vp-band));
+  left: 0;
+  width: var(--vp-avatar);
+  height: var(--vp-band);
+  border-radius: 0 0 16px 0;
+  background: linear-gradient(180deg, rgba(2, 6, 23, 0) 0%, rgba(2, 6, 23, 0.68) 38%, rgba(2, 6, 23, 0.95) 100%);
+  pointer-events: none;
+}
+
+#modalViewProfile #vpName {
+  position: absolute;
+  z-index: 5;
+  top: calc(var(--vp-avatar) - var(--vp-band));
+  left: 0;
+  width: var(--vp-avatar);
+  height: var(--vp-band);
+  margin: 0;
+  padding: 0 10px 7px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  text-align: center;
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1.05;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+#modalViewProfile .modal-header,
+#modalViewProfile > div > div:first-child {
+  padding-left: calc(var(--vp-avatar) + var(--vp-gap));
+  justify-content: flex-end;
+  min-height: 34px;
+}
+
+#modalViewProfile .profile-top,
+#modalViewProfile > div > div:nth-child(2) {
+  padding-left: calc(var(--vp-avatar) + var(--vp-gap));
+  min-height: calc(var(--vp-avatar) - 44px);
+  align-items: flex-start;
+}
