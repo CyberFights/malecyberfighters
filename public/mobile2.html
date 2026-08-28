@@ -346,8 +346,11 @@ background:var(--glass);
 
 /* PM WINDOWS --------------------------------------------------------------- */
 .pm-window{
-  position:fixed;right:460px;bottom:28px;
-  width:320px;height:360px;
+  position:fixed;right:28px;bottom:28px;
+  width:480px;
+  max-width:calc(100vw - 56px);
+  height:min(600px, calc(100vh - 56px));
+  max-height:calc(100vh - 56px);
   background:linear-gradient(180deg,#050a16,#0a1324);
   border-radius:10px;
   border:1px solid rgba(160,200,255,0.12);

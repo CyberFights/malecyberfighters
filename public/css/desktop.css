@@ -621,10 +621,15 @@ button.ghost{
 
 .pm-window{
   position:fixed;
-  right:460px;
+  right:28px;
   bottom:28px;
-  width:325px;
-  height:310px;
+  /* Comfortable DM chat size (roughly 3/4 of the 650x620 public chat popup),
+     clamped so smaller windows/laptops never push it off-screen. Multiple
+     open DMs cascade up-left via pm.js offsets. */
+  width:480px;
+  max-width:calc(100vw - 56px);
+  height:min(600px, calc(100vh - 56px));
+  max-height:calc(100vh - 56px);
   background:linear-gradient(180deg,#050a16,#0a1324);
   border-radius:10px;
   border:1px solid rgba(160,200,255,0.12);
@@ -634,11 +639,23 @@ button.ghost{
   box-shadow:0 20px 60px rgba(120,180,255,0.25);
 }
 
-/* Desktop-only size safeguard (1/2 size of public chat room 650px x 620px) — mobile.css overrides this on small screens */
+/* Desktop-only size safeguard — mobile.css overrides this on small screens */
 @media (min-width: 769px){
   .pm-window{
-    width:325px;
-    height:310px;
+    width:480px;
+    max-width:calc(100vw - 56px);
+    height:min(600px, calc(100vh - 56px));
+    max-height:calc(100vh - 56px);
+  }
+}
+
+/* On wide desktops, anchor the first DM beside the 650px arena chat popup
+   (right:28 + 650 + 28 gap = 706px) so they sit side by side instead of
+   overlapping. Below this width bottom-right anchoring keeps it fully
+   on-screen; windows are draggable either way. */
+@media (min-width: 1280px){
+  .pm-window{
+    right:706px;
   }
 }
 
@@ -650,7 +667,9 @@ button.ghost{
     right:0;
     bottom:0;
     width:100%;
+    max-width:none;
     height:100dvh;
+    max-height:none;
     border-radius:0;
   }
 }
