@@ -3057,13 +3057,11 @@ h3{
   }
 
   #modalViewProfile > div,
-  #modalViewProfile .profile-gallery-section,
   #modalViewProfile #profileStories,
   #modalViewProfile #profileRelationships,
   #modalViewProfile #profileTimeline,
   #modalViewProfile #vpRelationshipSection,
-  #modalViewProfile > div > div:nth-child(2) > div:last-child > div:not(.small),
-  #modalViewProfile > div > div:has(#vpDMButton) {
+  #modalViewProfile > div > div:nth-child(2) > div:last-child > div:not(.small) {
     border-color: rgba(125, 211, 252, 0.78) !important;
     box-shadow:
       inset 1px 1px 0 rgba(224, 242, 254, 0.3),
@@ -3074,12 +3072,52 @@ h3{
       0 14px 30px rgba(2, 6, 23, 0.72) !important;
   }
 
-  #modalViewProfile .profile-gallery-section,
-  #modalViewProfile #vpRelationshipSection,
-  #modalViewProfile > div > div:has(#vpDMButton) {
+  #modalViewProfile #vpRelationshipSection {
     padding: 14px 16px !important;
     border: 1px solid rgba(125, 211, 252, 0.78) !important;
     border-radius: 14px;
     background: rgba(2, 20, 38, 0.72);
+  }
+}
+
+/* Profile controls carry the 3D depth; their surrounding rows stay clean. */
+@media (min-width: 769px) {
+  #modalViewProfile button {
+    border: 1px solid rgba(186, 230, 253, 0.82) !important;
+    box-shadow:
+      inset 0 2px 0 rgba(255, 255, 255, 0.42),
+      inset 0 -3px 5px rgba(3, 37, 65, 0.4),
+      0 4px 0 #075985,
+      0 8px 16px rgba(2, 6, 23, 0.7) !important;
+    transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+  }
+
+  #modalViewProfile #vpBlockButton {
+    border-color: rgba(254, 202, 202, 0.82) !important;
+    box-shadow:
+      inset 0 2px 0 rgba(255, 255, 255, 0.35),
+      inset 0 -3px 5px rgba(69, 10, 10, 0.45),
+      0 4px 0 #7f1d1d,
+      0 8px 16px rgba(2, 6, 23, 0.7) !important;
+  }
+
+  #modalViewProfile button:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.12);
+  }
+
+  #modalViewProfile button:active {
+    transform: translateY(3px);
+    box-shadow:
+      inset 0 2px 5px rgba(2, 6, 23, 0.45),
+      0 1px 0 #075985,
+      0 3px 7px rgba(2, 6, 23, 0.65) !important;
+  }
+
+  #modalViewProfile #vpBlockButton:active {
+    box-shadow:
+      inset 0 2px 5px rgba(69, 10, 10, 0.5),
+      0 1px 0 #7f1d1d,
+      0 3px 7px rgba(2, 6, 23, 0.65) !important;
   }
 }
