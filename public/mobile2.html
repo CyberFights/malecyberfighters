@@ -1768,21 +1768,21 @@ h3{
   z-index:9999;
 ">
   <div style="
-  background:rgba(10,30,60,0.55);
-  backdrop-filter:blur(14px) saturate(180%);
-  border:1px solid rgba(0,150,255,0.35);
+  background:linear-gradient(160deg, rgba(125,195,255,0.20), rgba(200,235,255,0.08) 45%, rgba(60,135,205,0.16));
+  backdrop-filter:blur(20px) saturate(150%);
+  border:1px solid rgba(170,220,255,0.45);
   padding:20px;
   border-radius:14px;
   width:520px;
   max-height:90vh;
   overflow:auto;
-  box-shadow:0 0 40px rgba(0,150,255,0.45);
+  box-shadow:0 0 45px rgba(130,200,255,0.35), inset 0 1px 0 rgba(220,240,255,0.28);
 ">
 
 
     <!-- HEADER -->
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <h3 id="vpName" style="margin:0"></h3>
+      <h3 id="vpName" style="margin:0;font-size:28px;font-weight:800;letter-spacing:0.5px;color:#eaf6ff;text-shadow:0 0 14px rgba(140,210,255,0.6)"></h3>
       <button id="vpClose" class="ghost">✕</button>
     </div>
 
@@ -1791,8 +1791,8 @@ h3{
 
       <!-- AVATAR -->
       <img id="vpAvatar" class="holo-avatar" src="" style="
-        width:120px;
-        height:120px;
+        width:150px;
+        height:150px;
         border-radius:12px;
         object-fit:cover;
         ">
@@ -1801,26 +1801,6 @@ h3{
       <div style="flex:1">
 
         <div class="small muted">@<span id="vpUsername"></span></div>
-<!-- DM BUTTON -->
-<button id="vpDMButton" class="small-btn" style="
-  margin-top:10px;
-  width:100%;
-">
-  Message User
-</button>
-<button id="vpBlockButton" class="small-btn" style="
-  margin-top:10px;
-  width:100%;
-  background:#ff3b3b;
-  color:white;
-">
-  Block User
-</button>
-
-        <div style="margin-top:10px">
-          <div class="muted">Bio</div>
-          <div id="vpBio" style="margin-top:4px"></div>
-        </div>
 
         <div style="margin-top:12px;display:flex;gap:20px">
           <div>
@@ -1845,6 +1825,11 @@ h3{
         </div>
 
         <div style="margin-top:12px">
+          <div class="muted">Bio</div>
+          <div id="vpBio" style="margin-top:4px"></div>
+        </div>
+
+        <div style="margin-top:12px">
           <div class="muted">Language</div>
           <div id="vpLang"></div>
         </div>
@@ -1855,6 +1840,30 @@ h3{
         </div>
 
       </div>
+    </div>
+
+    <!-- MESSAGE + BLOCK ACTIONS (full width across the profile) -->
+    <div style="display:flex;gap:12px;margin-bottom:20px">
+      <button id="vpDMButton" class="small-btn" style="
+        flex:1;
+        padding:14px 12px;
+        font-size:16px;
+        font-weight:700;
+        color:#eaf6ff;
+      ">
+        Message User
+      </button>
+      <button id="vpBlockButton" class="small-btn" style="
+        flex:1;
+        padding:14px 12px;
+        font-size:16px;
+        font-weight:700;
+        background:#ff3b3b;
+        border-color:#ff3b3b;
+        color:white;
+      ">
+        Block User
+      </button>
     </div>
 
     <!-- STORIES + RELATIONSHIPS SIDE BY SIDE -->
