@@ -1435,6 +1435,20 @@ button.download-btn:hover{
   display:block;
 }
 
+/* GIF / short video clips attached to DMs, room messages and stories */
+.chat-clip {
+  max-width:260px;
+  max-height:320px;
+  border-radius:8px;
+  margin-top:6px;
+  background:#000;
+  display:block;
+}
+.chat-clip.chat-image,
+.chat-clip[alt="GIF clip"] {
+  cursor:pointer;
+}
+
 .room-item {
   width:100%;
   box-sizing:border-box;

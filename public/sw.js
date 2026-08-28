@@ -52,7 +52,9 @@ self.addEventListener('fetch', event => {
   // updates, auth UI and realtime chat.
   // Proxied remote images (/img?u=...) are already cached by the HTTP layer and
   // would otherwise grow the app-shell cache without bound.
-  if (url.pathname === '/img') return;
+  // Clips (GIFs / short videos) are large media files — HTTP headers cache
+  // them, so keep them out of the app-shell cache as well.
+  if (url.pathname === '/img' || url.pathname.startsWith('/clips/')) return;
 
   if (
     request.mode === 'navigate'

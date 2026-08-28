@@ -485,11 +485,55 @@ card.innerHTML = `
 
 };
 
+/* Clip (GIF / short video) helpers ----------------------------------------
+   Shared by chat.js (rooms), pm.js (DMs + story popup) and the story viewer.
+   Clips are uploaded to /api/upload-clip, stored on the server and served
+   back from the same-origin /clips route, so no proxy rewriting is needed.
+------------------------------------------------------------------------ */
+const CLIP_MIME_TYPES = new Set(["image/gif", "video/mp4", "video/webm"]);
+window.CLIP_MIME_TYPES = CLIP_MIME_TYPES;
+
+function isClipFile(file) {
+  return !!file && (CLIP_MIME_TYPES.has(file.type) || /\.gif$/i.test(file.name || ""));
+}
+window.isClipFile = isClipFile;
+
+async function uploadClipToServer(file) {
+  const form = new FormData();
+  form.append("clip", file); // MUST be "clip" to match multer on the server
+
+  const res = await fetch("/api/upload-clip", {
+    method: "POST",
+    body: form
+  });
+
+  return await res.json(); // { ok, clipUrl, clipType, size } | { ok: false, error }
+}
+window.uploadClipToServer = uploadClipToServer;
+
+// Build the DOM node for a stored clip: <img> for GIFs, <video> for clips.
+function createClipElement(clipUrl, clipType) {
+  const isGif = clipType === "gif";
+  const el = isGif ? document.createElement("img") : document.createElement("video");
+  el.src = clipUrl;
+  el.className = "chat-clip";
+  if (isGif) {
+    el.alt = "GIF clip";
+  } else {
+    el.controls = true;
+    el.playsInline = true;
+    el.preload = "metadata";
+  }
+  return el;
+}
+window.createClipElement = createClipElement;
+
 /* Story viewer popup -----------------------------------------------------
    Replaces the old alert(s.story): shows the story title in an elegant
-   script font and the story text in a regular font, with a close button.
+   script font, an optional clip (GIF / short video), and the story text in
+   a regular font, with a close button.
 ------------------------------------------------------------------------ */
-function openStoryViewer(title, storyText) {
+function openStoryViewer(title, storyText, clipUrl, clipType) {
   // Load the elegant script font once (falls back to system script fonts)
   if (!document.getElementById("storyViewerFont")) {
     const link = document.createElement("link");
@@ -522,6 +566,15 @@ function openStoryViewer(title, storyText) {
     'font-family:"Great Vibes","Brush Script MT","Segoe Script","Lucida Handwriting",cursive;' +
     "font-size:44px;line-height:1.25;color:#00aaff;margin-bottom:20px;word-break:break-word;";
 
+  // Optional clip attached to the story (GIF or short video)
+  let clipEl = null;
+  if (clipUrl) {
+    clipEl = createClipElement(clipUrl, clipType);
+    clipEl.style.cssText =
+      "max-width:100%;max-height:38vh;border-radius:10px;margin:0 auto 18px;" +
+      "display:block;background:#000;";
+  }
+
   const textEl = document.createElement("div");
   textEl.textContent = storyText || "";
   textEl.style.cssText =
@@ -535,6 +588,7 @@ function openStoryViewer(title, storyText) {
   closeBtn.style.cssText = "margin:24px auto 0;";
 
   box.appendChild(titleEl);
+  if (clipEl) box.appendChild(clipEl);
   box.appendChild(textEl);
   box.appendChild(closeBtn);
   overlay.appendChild(box);
@@ -575,7 +629,7 @@ async function loadSelfStories(username) {
       <div><strong>${escapeHtml(title)}</strong></div>
       <div class="small">${escapeHtml(other)} — ${new Date(s.createdAt).toLocaleDateString()}</div>
     `;
-    div.onclick = () => openStoryViewer(title, s.story);
+    div.onclick = () => openStoryViewer(title, s.story, s.clipUrl, s.clipType);
     box.appendChild(div);
   });
 }
@@ -673,7 +727,7 @@ async function loadStories(username) {
       <div><strong>${escapeHtml(title)}</strong></div>
       <div class="small">${escapeHtml(other)} — ${new Date(s.createdAt).toLocaleDateString()}</div>
     `;
-    div.onclick = () => openStoryViewer(title, s.story);
+    div.onclick = () => openStoryViewer(title, s.story, s.clipUrl, s.clipType);
     box.appendChild(div);
   });
 }
