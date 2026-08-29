@@ -14,6 +14,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cors = require("cors");
 const { sendMail, mailerConfigured, MAIL_FROM, escapeHtml } = require('./mailer');
+const { sendDiscordDM, discordEvents } = require('./discordBot');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -330,6 +331,7 @@ const userSchema = new mongoose.Schema({
       message: `A profile can contain at most ${MAX_EXTRA_PROFILE_PHOTOS} extra photos`
     }
   },
+  discordId: { type: String, default: null },
   blockedUsers: { type: [String], default: [] },
   online:   { type: Boolean, default: false },
   socketId: { type: String, default: null },
@@ -668,6 +670,13 @@ async function sendDiscordWebhookMessage(username, message, avatarUrl) {
   }
 }
 
+async function forwardDMToDiscord(senderUsername, receiver, messageContent) {
+  if (receiver && receiver.discordId) {
+    let formattedMessage = `**${senderUsername}** sent you a DM on MaleCyberFighters:\n\n${messageContent}`;
+    await sendDiscordDM(receiver.discordId, formattedMessage);
+  }
+}
+
 // Send a notification email to the admin mailbox (administrator@male-cyber-fighters.com).
 // Only fires when SMTP is configured and EMAIL_ADMIN_ALERTS is enabled, so it is
 // a no-op in normal operation. Never throws — failure only logs.
@@ -855,14 +864,17 @@ app.post("/api/story/save", async (req, res) => {
     });
   } else {
     // If partner is offline → send DM notification
+    let dmText = `${owner} created a story involving your messages: "${storyTitle}". Please approve it.`;
     await DM.create({
       from: "SYSTEM",
       to: partner,
-      text: `${owner} created a story involving your messages: "${storyTitle}". Please approve it.`,
+      text: dmText,
       type: "storyApproval",
       storyId: saved._id,
       time: new Date()
     });
+    const partnerUserDoc = await User.findOne({ username: partner }).lean();
+    await forwardDMToDiscord("SYSTEM", partnerUserDoc, dmText);
   }
 
   res.json({ ok: true, storyId: saved._id });
@@ -938,14 +950,17 @@ app.post("/api/relationship/request", async (req, res) => {
       type
     });
   } else {
+    let dmText = `${requester} wants to add a relationship: ${type}.`;
     await DM.create({
   from: "SYSTEM",
   to: target,
-  text: `${requester} wants to add a relationship: ${type}.`,
+  text: dmText,
   type: "relationshipApproval",
   relationshipId: rel._id,
   time: new Date()
 });
+    const targetUserDoc = await User.findOne({ username: target }).lean();
+    await forwardDMToDiscord("SYSTEM", targetUserDoc, dmText);
 
   }
 
@@ -1340,6 +1355,8 @@ app.post("/api/send-dm", async (req, res) => {
   if (target?.socketId) {
     io.to(target.socketId).emit("privateMessage", dm);
   }
+
+  await forwardDMToDiscord(from, target, text);
 
   res.json({ ok: true });
 });
@@ -2395,6 +2412,8 @@ socket.on("editPublicMessage", async (data) => {
         });
       }
 
+      await forwardDMToDiscord(pm.from, receiver, `[Image attachment: ${pm.imageUrl}]`);
+
       return;
     }
 
@@ -2422,6 +2441,9 @@ socket.on("editPublicMessage", async (data) => {
 
       if (receiver.socketId) io.to(receiver.socketId).emit("privateMessage", clipPayload);
       if (sender.socketId) io.to(sender.socketId).emit("privateMessage", clipPayload);
+
+      let appBaseUrl = APP_BASE_URL || "https://malecyberfighters.com";
+      await forwardDMToDiscord(pm.from, receiver, `[Video/GIF attachment: ${appBaseUrl}${saved.clipUrl}]`);
 
       return;
     }
@@ -2453,6 +2475,8 @@ socket.on("editPublicMessage", async (data) => {
         time: saved.time
       });
     }
+
+    await forwardDMToDiscord(pm.from, receiver, translated || pm.text);
   });
 
   socket.on("joinRoom", async ({ room } = {}) => {
@@ -2693,6 +2717,9 @@ socket.on("editPublicMessage", async (data) => {
     console.log('socket disconnected', socket.id);
   });
 });
+
+const setupDiscordListener = require('./setupDiscordListener');
+setupDiscordListener(User, DM, translateText, io, sendDiscordDM, discordEvents);
 
 // ---------- START ----------
 server.listen(PORT, "0.0.0.0", () => {

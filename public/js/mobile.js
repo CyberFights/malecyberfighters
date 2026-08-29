@@ -3591,6 +3591,7 @@ window.openEditProfileModal = function(user) {
   // Pre-fill modal fields
   $("editDisplay").value = user.display || user.displayName || user.username;
   $("editAge").value = user.age || "";
+  if ($("editDiscordId")) $("editDiscordId").value = user.discordId || "";
   $("editInfo").value = user.info || "";
   $("editColor").value = user.color || "#ffffff";
   $("editLanguage").value = user.language || "en";
@@ -3653,6 +3654,7 @@ $("editSubmit").addEventListener("click", async () => {
   const updates = {
     display: $("editDisplay").value.trim(),
     age: Number($("editAge").value),
+    discordId: $("editDiscordId") ? $("editDiscordId").value.trim() : "",
     info: $("editInfo").value.trim(),
     color: $("editColor").value,
     language: $("editLanguage").value,
