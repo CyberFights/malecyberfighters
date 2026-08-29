@@ -228,6 +228,7 @@ function openPrivateWindow(targetUsername) {
       <button class="small-btn" id="pmImageBtn_${targetUsername}" type="button" title="Send image">📷</button>
       <input type="file" id="pmClip_${targetUsername}" accept="image/gif,video/mp4,video/webm" style="display:none">
       <button class="small-btn" id="pmClipBtn_${targetUsername}" type="button" title="Send GIF or short video">🎬</button>
+      <button class="small-btn emoji-btn" id="pmEmojiBtn_${targetUsername}" type="button" data-emoji-btn title="Insert emoji" aria-label="Insert emoji">😊</button>
       <button class="small-btn" id="pmSend_${targetUsername}" type="button">Send</button>
     </div>
   `;
