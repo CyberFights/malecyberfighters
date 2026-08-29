@@ -28,6 +28,7 @@ if (!process.env.MONGO_URI) console.warn('Warning: MONGO_URI not set — default
 const ADMIN_KEY = process.env.ADMIN_KEY;
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const MAX_PROXIED_IMAGE_SIZE = 12 * 1024 * 1024;
+const IMAGE_PROXY_TIMEOUT_MS = 15 * 1000;
 const MAX_EXTRA_PROFILE_PHOTOS = 10;
 
 // Short video clips + GIFs sent in DMs / custom rooms and attached to
@@ -194,7 +195,24 @@ app.get('/img', imageProxyLimiter, async (req, res) => {
   if (!target) return sendPlaceholderImage(res, 400);
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  let abortReason = null;
+  const abortUpstream = reason => {
+    if (controller.signal.aborted) return;
+    abortReason = reason;
+    controller.abort();
+  };
+  const onRequestAborted = () => abortUpstream('client');
+  const onResponseClosed = () => {
+    if (!res.writableEnded) abortUpstream('client');
+  };
+
+  // Stop opening the upstream connection if its browser tab has gone away.
+  req.once('aborted', onRequestAborted);
+  res.once('close', onResponseClosed);
+
+  const timeout = setTimeout(() => abortUpstream('timeout'), IMAGE_PROXY_TIMEOUT_MS);
+  // This timer should never be the only thing keeping a shutting-down process alive.
+  if (typeof timeout.unref === 'function') timeout.unref();
 
   try {
     const upstream = await fetch(target.href, {
@@ -255,10 +273,28 @@ app.get('/img', imageProxyLimiter, async (req, res) => {
 
     upstream.body.pipe(res);
   } catch (err) {
-    console.error('image proxy error', err.message || err);
+    // node-fetch describes every AbortController cancellation as "The user
+    // aborted a request", including our own timeout. Classify it here so an
+    // expected slow/unreachable CDN is not reported as an application error.
+    const isAbortError = err && (
+      err.name === 'AbortError' || err.type === 'aborted' || err.code === 'ABORT_ERR'
+    );
+
+    if (abortReason === 'client' || res.destroyed) return;
+
+    if (abortReason === 'timeout' && isAbortError) {
+      console.warn('image proxy upstream timed out', {
+        host: target.hostname,
+        timeoutMs: IMAGE_PROXY_TIMEOUT_MS
+      });
+    } else {
+      console.error('image proxy error', err.message || err);
+    }
     sendPlaceholderImage(res, 502);
   } finally {
     clearTimeout(timeout);
+    req.removeListener('aborted', onRequestAborted);
+    res.removeListener('close', onResponseClosed);
   }
 });
 

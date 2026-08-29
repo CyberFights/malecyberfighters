@@ -1,6 +1,6 @@
-/* Route remote (ImgBB / Discord CDN) images through our same-origin /img
- * proxy so Firefox's OpaqueResponseBlocking cannot drop them. Falls back to the
- * raw URL if image-proxy.js has not loaded. */
+/* Use the shared direct-first image loader. If a browser blocks an ImgBB /
+ * Discord image, image-proxy.js retries it once through the same-origin proxy.
+ * Falls back to the raw URL if that helper has not loaded. */
 function utilsImgSrc(value) {
   if (typeof window !== 'undefined' && typeof window.imgSrc === 'function') return window.imgSrc(value);
   return value == null ? '' : String(value);
