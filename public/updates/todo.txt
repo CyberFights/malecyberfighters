@@ -1,1 +1,1 @@
-- add discord account login/account registration
+- to make a suggestion/request for feature make a support report under the app bug option
