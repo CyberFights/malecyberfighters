@@ -340,8 +340,9 @@ button.ghost{
 }
 
 .dm-unread-badge{
-  background:#7fd8ff;
-  color:#00121f;
+  /* Per-thread unread count — same red as the "DMs" tab badge above. */
+  background:#ef4444;
+  color:#fff;
   padding:2px 6px;
   border-radius:6px;
   font-size:11px;
@@ -1418,8 +1419,10 @@ button.download-btn:hover{
 
 .badge,
 #dmBadge {
-  background:#7fd8ff;
-  color:#00121f;
+  /* Red for unread messages, matching .badge in mobile.css so phones and
+     desktops show the same thing (this page loads one stylesheet or the other). */
+  background:#ef4444;
+  color:#fff;
   padding:1px 6px;
   border-radius:999px;
   font-size:11px;
