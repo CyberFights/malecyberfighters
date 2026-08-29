@@ -1471,6 +1471,16 @@ button.download-btn:hover{
   background:rgba(160,200,255,0.15);
 }
 
+/* Room rows hold an unread pill and an Invite button next to the name, so the
+   name takes the free space and truncates instead of squeezing them out. */
+.room-item .room-name {
+  flex:1;
+  min-width:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
 .room-members-panel {
   width:160px;
   border-left:1px solid rgba(160,200,255,0.12);

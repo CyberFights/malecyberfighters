@@ -35,8 +35,13 @@ img { max-width: 100%; }
 .lead  { font-size: 14px; color: #7dd3fc; }
 .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.badge {
+/* Shared unread pill: the "DMs" tab count and the per-thread count that
+   utils.js renders inside the DM sidebar list. That second class only existed
+   in desktop.css, so on phones the thread count showed as bare text. */
+.badge,
+.dm-unread-badge {
   display: inline-block;
+  flex: 0 0 auto;
   min-width: 20px;
   padding: 2px 6px;
   border-radius: 999px;
