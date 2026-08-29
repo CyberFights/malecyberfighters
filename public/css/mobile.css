@@ -323,6 +323,56 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
 }
 
 /* ============================================================
+   FOOTER DOWNLOAD CARDS
+   index.html renders the footer on phones too and these containers had no
+   rule here at all, so the labels and 12px build links sat on the page art.
+   Stacked rather than side by side: two cards need the desktop width.
+   ============================================================ */
+.download-apps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 16px 16px 0;
+}
+
+.download-app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 12px;
+  border: 1px solid rgba(56, 189, 248, .28);
+  border-radius: 14px;
+  /* Both stops stay >= .90 opaque. A low-alpha decorative tint (the top stop
+     .app-download-card uses is 16%) reads at ~1.1:1 against the bright parts of
+     the fixed background photo, which is what made this text unreadable. */
+  background: linear-gradient(145deg, rgba(10, 26, 46, .90), rgba(2, 6, 23, .92));
+  color: #e2e8f0;
+  text-align: center;
+}
+
+.download-app-label {
+  color: #cbd5e1;
+  font-size: 13px;
+  letter-spacing: .4px;
+}
+
+.download-platforms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+.download-platforms a {
+  color: #7dd3fc;
+  text-decoration: none;
+  border-bottom: 1px dotted rgba(125, 211, 252, .45);
+}
+.download-platforms .sep { color: #94a3b8; opacity: .6; }
+
+/* ============================================================
    SIDE PANELS (DMs / Rooms) - CENTERED POPUP
    ============================================================ */
 .modal-overlay,
