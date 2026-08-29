@@ -1,3 +1,7 @@
+- added discord account linking
+- added emojis
+- added 30s vid / gif uploading 
+- added audio call volume control
 - added audio calls to dms, group calls to custom rooms
 - increased dm window size and made dms movable
 - added extra image uploading, each profile can now have up to 10 extra images
