@@ -10,6 +10,25 @@
     });
   }
 
+  function escapeHtml(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, char => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[char]));
+  }
+
+  function memberImageSource(value) {
+    if (!value) return '';
+    if (typeof window.imgSrc === 'function') return window.imgSrc(value);
+
+    const raw = String(value).trim();
+    // image-proxy.js normally validates this value. Keep its fallback strict in
+    // case the helper failed to load so profile data cannot inject markup.
+    if (/^https:\/\//i.test(raw) || /^data:image\//i.test(raw) || /^blob:/i.test(raw)) {
+      return raw;
+    }
+    return '';
+  }
+
   async function loadNewMembers() {
     const container = document.getElementById('newMembersList');
     if (!container) return;
@@ -31,8 +50,11 @@
       container.innerHTML = users.map(u => {
         const name = u.display || u.username || 'Unknown';
         const handle = u.username ? `@${u.username}` : '';
-        const img = u.imageUrl ? `<img src="/img?url=${encodeURIComponent(u.imageUrl)}" alt="" style="width:32px;height:32px;border-radius:8px;object-fit:cover;border:1px solid rgba(160,200,255,0.25);flex-shrink:0;">` : `<div style="width:32px;height:32px;border-radius:8px;background:rgba(127,216,255,0.15);border:1px solid rgba(160,200,255,0.25);display:flex;align-items:center;justify-content:center;font-weight:700;color:#7fd8ff;font-size:13px;flex-shrink:0;">${String(name || '?').charAt(0).toUpperCase()}</div>`;
-        return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid rgba(160,200,255,0.08);">${img}<div style="min-width:0;"><div style="font-weight:600;color:#e9f6ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</div><div class="small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${handle}</div></div></div>`;
+        const imageSource = memberImageSource(u.imageUrl);
+        const img = imageSource
+          ? `<img src="${escapeHtml(imageSource)}" alt="" loading="lazy" referrerpolicy="no-referrer" style="width:32px;height:32px;border-radius:8px;object-fit:cover;border:1px solid rgba(160,200,255,0.25);flex-shrink:0;">`
+          : `<div style="width:32px;height:32px;border-radius:8px;background:rgba(127,216,255,0.15);border:1px solid rgba(160,200,255,0.25);display:flex;align-items:center;justify-content:center;font-weight:700;color:#7fd8ff;font-size:13px;flex-shrink:0;">${escapeHtml(String(name || '?').charAt(0).toUpperCase())}</div>`;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid rgba(160,200,255,0.08);">${img}<div style="min-width:0;"><div style="font-weight:600;color:#e9f6ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(name)}</div><div class="small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(handle)}</div></div></div>`;
       }).join('');
     } catch (e) {
       container.innerHTML = '<div class="small muted">Unable to load members.</div>';
