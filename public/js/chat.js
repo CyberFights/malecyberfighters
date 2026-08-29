@@ -1296,8 +1296,13 @@ function renderRoomsSidebar() {
     const div = document.createElement("div");
     div.className = "room-item";
 
+    // The unread pill has to be part of the row for updateRoomsSidebarBadges()
+    // to have anything to paint — the id was looked up but never rendered, so
+    // room counts silently never appeared. It starts hidden and is filled in
+    // from localStorage at the end of this function.
     div.innerHTML = `
-      ${room.private ? "🔒 " : ""}${room.name}
+      <span class="room-name">${room.private ? "🔒 " : ""}${escapeHtml(room.name)}</span>
+      <span class="dm-unread-badge" id="roomBadge_${room._id}" style="display:none"></span>
     `;
 
     // CLICK TO OPEN ROOM CHAT
@@ -1327,6 +1332,11 @@ function renderRoomsSidebar() {
 
     list.appendChild(div);
   });
+
+  // A re-render throws away every row (new rooms list, sort change), so the
+  // counts have to be repainted here or they disappear until the next room
+  // message happens to arrive.
+  updateRoomsSidebarBadges();
 }
 
 $('roomSort')?.addEventListener('change', renderRoomsSidebar);
@@ -1380,20 +1390,22 @@ $('btnPrivacy')?.addEventListener('click', () => {
 function updateRoomsSidebarBadges() {
   const unread = getRoomUnread();
 
-  Object.keys(unread).forEach(roomId => {
-    const badge = $('roomBadge_' + roomId);
-    if (badge) {
-      badge.textContent = unread[roomId];
-      badge.style.display = 'inline-block';
-    }
-  });
+  // Walk the rooms rather than only the unread entries: opening a room clears
+  // its count, and that row still has a badge that needs taking back off.
+  // Rows for rooms not rendered (private, filtered out) simply have no element.
+  (window.rooms || []).forEach(room => {
+    const badge = $('roomBadge_' + room._id);
+    if (!badge) return;
 
-  // hide badges for cleared rooms
-  (window.rooms || []).forEach(r => {
-    if (!unread[r._id]) {
-      const badge = $('roomBadge_' + r._id);
-      if (badge) badge.style.display = 'none';
+    const count = Number(unread[room._id]) || 0;
+    if (!count) {
+      badge.textContent = "";
+      badge.style.display = "none";
+      return;
     }
+
+    badge.textContent = count > 99 ? "99+" : String(count);
+    badge.style.display = "inline-block";
   });
 }
 

@@ -673,6 +673,12 @@ async function sendDiscordWebhookMessage(username, message, avatarUrl) {
 async function forwardDMToDiscord(senderUsername, receiver, messageContent) {
   if (receiver && receiver.discordId) {
     let formattedMessage = `**${senderUsername}** sent you a DM on MaleCyberFighters:\n\n${messageContent}`;
+    // Replies sent back through the bot have to name their recipient, so show
+    // the syntax instead of letting a bare reply bounce. System notices have no
+    // human to reply to, so they get no hint.
+    if (senderUsername && senderUsername !== "SYSTEM") {
+      formattedMessage += `\n\n*To reply from Discord, send \`@${senderUsername} your message\`.*`;
+    }
     await sendDiscordDM(receiver.discordId, formattedMessage);
   }
 }

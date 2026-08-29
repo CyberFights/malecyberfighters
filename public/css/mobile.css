@@ -35,8 +35,13 @@ img { max-width: 100%; }
 .lead  { font-size: 14px; color: #7dd3fc; }
 .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.badge {
+/* Shared unread pill: the "DMs" tab count and the per-thread count that
+   utils.js renders inside the DM sidebar list. That second class only existed
+   in desktop.css, so on phones the thread count showed as bare text. */
+.badge,
+.dm-unread-badge {
   display: inline-block;
+  flex: 0 0 auto;
   min-width: 20px;
   padding: 2px 6px;
   border-radius: 999px;
@@ -318,6 +323,56 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
 }
 
 /* ============================================================
+   FOOTER DOWNLOAD CARDS
+   index.html renders the footer on phones too and these containers had no
+   rule here at all, so the labels and 12px build links sat on the page art.
+   Stacked rather than side by side: two cards need the desktop width.
+   ============================================================ */
+.download-apps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 16px 16px 0;
+}
+
+.download-app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 12px;
+  border: 1px solid rgba(56, 189, 248, .28);
+  border-radius: 14px;
+  /* Both stops stay >= .90 opaque. A low-alpha decorative tint (the top stop
+     .app-download-card uses is 16%) reads at ~1.1:1 against the bright parts of
+     the fixed background photo, which is what made this text unreadable. */
+  background: linear-gradient(145deg, rgba(10, 26, 46, .90), rgba(2, 6, 23, .92));
+  color: #e2e8f0;
+  text-align: center;
+}
+
+.download-app-label {
+  color: #cbd5e1;
+  font-size: 13px;
+  letter-spacing: .4px;
+}
+
+.download-platforms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+.download-platforms a {
+  color: #7dd3fc;
+  text-decoration: none;
+  border-bottom: 1px dotted rgba(125, 211, 252, .45);
+}
+.download-platforms .sep { color: #94a3b8; opacity: .6; }
+
+/* ============================================================
    SIDE PANELS (DMs / Rooms) - CENTERED POPUP
    ============================================================ */
 .modal-overlay,
@@ -421,7 +476,11 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
   padding-right: 2px;
 }
 
-.dm-row, .room-item {
+/* .dm-sidebar-item is the class utils.js gives the thread rows inside
+   #dmSidebar. It only ever had a rule in desktop.css, so on phones those rows
+   rendered as bare text; popup-dissolve.js already treats all three classes as
+   the same tappable row, so they share one look here. */
+.dm-row, .room-item, .dm-sidebar-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -435,14 +494,15 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
   cursor: pointer;
   transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
 }
-.dm-row:hover, .room-item:hover {
+.dm-row:hover, .room-item:hover, .dm-sidebar-item:hover {
   background: rgba(56, 189, 248, .12);
   border-color: rgba(56, 189, 248, .32);
   transform: translateY(-1px);
 }
 
 .dm-row > *:first-child,
-.room-item > *:first-child {
+.room-item > *:first-child,
+.dm-sidebar-item > *:first-child {
   flex: 1;
   min-width: 0;
 }
