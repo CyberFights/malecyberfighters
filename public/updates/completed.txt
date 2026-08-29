@@ -5,7 +5,10 @@
 - added audio calls to dms, group calls to custom rooms
 - increased dm window size and made dms movable
 - added extra image uploading, each profile can now have up to 10 extra images
-- added edit and replying to messages
+- added message editing (edit your own public + room messages)
+- added message replying (quote/reply to any public + room message)
+- added call sounds (ringing while a call is waiting to be answered, hang up tone when a call ends)
+- call popup now shows "Connected" once the call is answered, has a volume slider, and floats in the corner so dms, public chat and custom rooms stay usable during a call
 - added image displaying from discord to public chat
 - added new message sounds and notifications
 - added more languages (make support report for any language request not listed)
@@ -24,7 +27,3 @@
 - added forums
 - added public story list
 - fixed mobile UI
-- added message editing (edit your own public + room messages)
-- added message replying (quote/reply to any public + room message)
-- added call sounds (ringing while a call is waiting to be answered, hang up tone when a call ends)
-- call popup now shows "Connected" once the call is answered, has a volume slider, and floats in the corner so dms, public chat and custom rooms stay usable during a call
