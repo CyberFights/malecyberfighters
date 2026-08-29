@@ -227,6 +227,23 @@
       <div id="updates" class="muted" style="max-height:200px;overflow-y:auto;white-space:pre-wrap;">Loading updates…</div> <br>
      <h3>COMPLETED UPDATES</h3>
     <div id="completedupdates" class="muted" style="max-height:200px;overflow-y:auto;white-space:pre-wrap;">Loading completed updates…</div>
+
+    <!-- Side-by-side new member and forum post containers -->
+    <div style="display:flex;gap:16px;margin-top:16px;flex-wrap:wrap;">
+      <div class="card" style="flex:1 1 0;min-width:240px;">
+        <h4 style="margin:0 0 10px;color:#7fd8ff;font-size:15px;letter-spacing:0.04em;">New Members</h4>
+        <div id="newMembersList" style="max-height:260px;overflow-y:auto;padding-right:4px;">
+          <div class="small muted">Loading new members…</div>
+        </div>
+      </div>
+      <div class="card" style="flex:1 1 0;min-width:240px;">
+        <h4 style="margin:0 0 10px;color:#7fd8ff;font-size:15px;letter-spacing:0.04em;">Recent Forum Posts</h4>
+        <div id="recentForumsList" style="max-height:260px;overflow-y:auto;padding-right:4px;">
+          <div class="small muted">Loading recent posts…</div>
+        </div>
+      </div>
+    </div>
+
     </div>
   <aside class="card" style="display:none;">
     <h3>Quick Roster</h3>
@@ -1753,6 +1770,7 @@ Don't hesitate to contact us if you have any questions.
 <script src="/js/landing.js"></script>
 
 <script src="/js/updates.js"></script>
+<script src="/js/home-cards.js"></script>
 <script src="/js/popup-dissolve.js"></script>
 <script src="/js/download.js"></script>
 <script src="/js/pwa-install.js"></script>
