@@ -426,7 +426,11 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
   padding-right: 2px;
 }
 
-.dm-row, .room-item {
+/* .dm-sidebar-item is the class utils.js gives the thread rows inside
+   #dmSidebar. It only ever had a rule in desktop.css, so on phones those rows
+   rendered as bare text; popup-dissolve.js already treats all three classes as
+   the same tappable row, so they share one look here. */
+.dm-row, .room-item, .dm-sidebar-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -440,14 +444,15 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
   cursor: pointer;
   transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
 }
-.dm-row:hover, .room-item:hover {
+.dm-row:hover, .room-item:hover, .dm-sidebar-item:hover {
   background: rgba(56, 189, 248, .12);
   border-color: rgba(56, 189, 248, .32);
   transform: translateY(-1px);
 }
 
 .dm-row > *:first-child,
-.room-item > *:first-child {
+.room-item > *:first-child,
+.dm-sidebar-item > *:first-child {
   flex: 1;
   min-width: 0;
 }
