@@ -188,6 +188,19 @@
   color: #34d399;
 }
 
+/* The fighter's saved combat stats (ATK / DEF derived from their
+   height + weight, pulled from user data for the dice match). */
+.roomgame-stats {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: rgba(127, 216, 255, 0.85);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* A single meter: colored fill + label/value overlaid on the right.
    The fill width tracks the 0–100 value directly: HP (green) and
    Stamina (blue) drain downward from 100, Hormone (pink) grows

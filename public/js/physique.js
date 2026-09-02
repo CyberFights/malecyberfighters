@@ -45,6 +45,12 @@
     window.formatHeight = api.formatHeight;
     window.formatWeight = api.formatWeight;
     window.physiqueSummary = api.physiqueSummary;
+    window.inchesToMeters = api.inchesToMeters;
+    window.lbsToKg = api.lbsToKg;
+    window.combatStats = api.combatStats;
+    window.baselineStats = api.baselineStats;
+    window.engineAtkMultiplier = api.engineAtkMultiplier;
+    window.engineDefMultiplier = api.engineDefMultiplier;
   }
 
   if (typeof document !== "undefined") {
@@ -123,6 +129,73 @@
 
   function isValidWeight(value) {
     return normalizeWeight(value) !== null;
+  }
+
+  /* ---------- combat stats (dice match) ---------------------
+     Each fighter's atk / def is derived from their physique:
+
+       atk = height (m) × √weight (kg)
+       def = weight (kg) / height (m)
+
+     Height arrives as a feet + inches string and weight as whole
+     pounds; both are converted to metric first. The values are
+     saved on the user document (userData) and pulled for the dice
+     match calculations (see index.js /api/combat-stats and
+     public/js/slash-commands.js).
+  ------------------------------------------------------------ */
+
+  var INCHES_PER_METER = 100 / 2.54;       // 39.3700787...
+  var LBS_PER_KG = 1000 / 453.59237;       // 2.2046226...
+
+  function round2(x) { return Math.round(x * 100) / 100; }
+  function round3(x) { return Math.round(x * 1000) / 1000; }
+
+  function inchesToMeters(inches) {
+    var n = Number(inches);
+    return isFinite(n) ? n / INCHES_PER_METER : NaN;
+  }
+
+  function lbsToKg(lbs) {
+    var n = Number(lbs);
+    return isFinite(n) ? n / LBS_PER_KG : NaN;
+  }
+
+  // { heightM, weightKg, atk, def } for the given physique, or null when
+  // either half is missing / out of range (stats need both).
+  function combatStats(height, weight) {
+    var inches = heightToInches(height);
+    var lbs = normalizeWeight(weight);
+    if (!isFinite(inches) || lbs === null) return null;
+    var meters = inchesToMeters(inches);
+    var kg = lbsToKg(lbs);
+    if (!(meters > 0) || !(kg > 0)) return null;
+    return {
+      heightM: round3(meters),
+      weightKg: round3(kg),
+      atk: round2(meters * Math.sqrt(kg)),
+      def: round2(kg / meters)
+    };
+  }
+
+  // The legacy dice engine runs on small multipliers (2.26 / 1.84). The
+  // non-damage engine lines (submission recoil, teasing) scale the saved
+  // stats back to that magnitude, using the baseline fighter as the
+  // anchor: a 5'11" / 185 lb build maps to exactly the legacy values.
+  var ENGINE_ATK_BASE = 2.26;
+  var ENGINE_DEF_BASE = 1.84;
+  var BASELINE_HEIGHT_INCHES = 71;   // 5'11"
+  var BASELINE_WEIGHT_LBS = 185;
+
+  var baselineStats = combatStats(inchesToHeight(BASELINE_HEIGHT_INCHES), BASELINE_WEIGHT_LBS);
+
+  function engineAtkMultiplier(atk) {
+    if (!baselineStats || !(atk > 0)) return null;
+    return round2((atk / baselineStats.atk) * ENGINE_ATK_BASE);
+  }
+
+  function engineDefMultiplier(def) {
+    if (!baselineStats || !(def > 0)) return null;
+    return round2((def / baselineStats.def) * ENGINE_DEF_BASE);
   }
 
   /* ---------- menu ----------------------------------------- */
@@ -224,6 +297,14 @@
     normalizeWeight: normalizeWeight,
     isValidHeight: isValidHeight,
     isValidWeight: isValidWeight,
+    inchesToMeters: inchesToMeters,
+    lbsToKg: lbsToKg,
+    combatStats: combatStats,
+    baselineStats: baselineStats,
+    ENGINE_ATK_BASE: ENGINE_ATK_BASE,
+    ENGINE_DEF_BASE: ENGINE_DEF_BASE,
+    engineAtkMultiplier: engineAtkMultiplier,
+    engineDefMultiplier: engineDefMultiplier,
     heightOptions: heightOptions,
     populateHeightSelect: populateHeightSelect,
     initWeightInput: initWeightInput,

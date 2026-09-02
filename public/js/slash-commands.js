@@ -28,10 +28,22 @@
   var GAMES_KEY = 'mcf_hp_games_v1';
   var LAST_GAME_KEY = 'mcf_hp_last_game';
 
-  // Fixed combat multipliers — applied automatically on every turn
-  // (they are no longer accepted as slash-command options).
+  // Per-fighter combat stats. Each person's atk / def is derived from their
+  // physique (height → meters, weight → kg):
+  //     atk = height (m) × √weight (kg)
+  //     def = weight (kg) / height (m)
+  // The values are saved on the user document (userData) by the server and
+  // pulled from /api/combat-stats for the dice match calculations.
+  //
+  // ATK_MULTI / DEF_MULTI are the legacy fixed multipliers, kept as fallbacks
+  // for fighters without a physique on file; BASELINE_STATS is the same
+  // physique formula evaluated for the baseline fighter (5'11" / 185 lbs),
+  // which is what stat-less fighters fight as.
   var ATK_MULTI = 2.26;
   var DEF_MULTI = 1.84;
+  function baselineStats() {
+    return (typeof Physique !== 'undefined' && Physique.baselineStats) || { atk: 16.52, def: 46.53 };
+  }
 
   /* ------------------------------------------------------------
      Tiny helpers
@@ -63,6 +75,83 @@
   function randInt(n) { return Math.floor(Math.random() * n) + 1; }
   function clampNum(v, min, max) { return Math.min(Math.max(v, min), max); }
   function pct(x) { return Math.round(x * 100) + '%'; }
+
+  /* ------------------------------------------------------------
+     Combat stats pulled from user data (see /api/combat-stats)
+     Each game-state slot (p1/p2) carries the fighter's saved atk / def
+     plus the same values scaled to the legacy engine magnitude
+     (atkMultiplier / defMultiplier) for the non-damage engine lines.
+  ------------------------------------------------------------ */
+  function fighterAtk(slot) {
+    return (slot && typeof slot.atk === 'number' && slot.atk > 0) ? slot.atk : baselineStats().atk;
+  }
+  function fighterDef(slot) {
+    return (slot && typeof slot.def === 'number' && slot.def > 0) ? slot.def : baselineStats().def;
+  }
+  function fighterAtkMul(slot) {
+    return (slot && typeof slot.atkMultiplier === 'number' && slot.atkMultiplier > 0) ? slot.atkMultiplier : ATK_MULTI;
+  }
+  function fighterDefMul(slot) {
+    return (slot && typeof slot.defMultiplier === 'number' && slot.defMultiplier > 0) ? slot.defMultiplier : DEF_MULTI;
+  }
+
+  // "· ATK 16.52 · DEF 46.53" — appended to player lines when known.
+  function statSuffix(slot) {
+    return (slot && typeof slot.atk === 'number' && slot.atk > 0)
+      ? ' · ATK ' + slot.atk + ' · DEF ' + slot.def : '';
+  }
+
+  // A slot still needs a stats pull when it has no saved atk AND has not
+  // been checked yet (a fighter without a physique is checked and stays
+  // null — that must not trigger a re-fetch on every poll).
+  function slotNeedsStats(slot) {
+    return !slot || (typeof slot.atk !== 'number' && !slot.statsChecked);
+  }
+  function stateMissingPlayers(state, players) {
+    if (!state || !Array.isArray(players)) return [];
+    return players.filter(function (p, i) {
+      return slotNeedsStats(state[i === 0 ? 'p1' : 'p2']);
+    });
+  }
+
+  // Pull the saved atk / def for a batch of fighters from their userData.
+  function fetchCombatStats(usernames) {
+    if (!usernames || !usernames.length) return Promise.resolve({});
+    return fetch('/api/combat-stats?usernames=' + encodeURIComponent(usernames.join(',')))
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) { return (data && data.stats) ? data.stats : {}; })
+      .catch(function () { return {}; });
+  }
+
+  function applyStatsToState(state, players, stats) {
+    if (!state || !players || !stats) return;
+    players.forEach(function (p, i) {
+      var slot = state[i === 0 ? 'p1' : 'p2'];
+      var s = stats[p];
+      if (!slot || !s) return;
+      slot.atk = (s.atk == null) ? null : s.atk;
+      slot.def = (s.def == null) ? null : s.def;
+      slot.atkMultiplier = (s.atkMultiplier == null) ? null : s.atkMultiplier;
+      slot.defMultiplier = (s.defMultiplier == null) ? null : s.defMultiplier;
+      slot.statsChecked = true;
+    });
+  }
+
+  // Pull both fighters' saved stats into a LOCAL game's state before its
+  // moves are resolved, then persist it (local-engine games live in
+  // localStorage, so the dice match reads what we just saved).
+  function refreshLocalGameStats(roomId) {
+    var games = Local.loadGames();
+    var game = games[roomId];
+    if (!game) return Promise.resolve(null);
+    var missing = stateMissingPlayers(game.state, game.players);
+    if (!missing.length) return Promise.resolve(game);
+    return fetchCombatStats(missing).then(function (stats) {
+      applyStatsToState(game.state, game.players, stats);
+      Local.saveGames(games);
+      return game;
+    });
+  }
 
   /* ------------------------------------------------------------
      Argument parsing
@@ -321,7 +410,13 @@
     },
 
     newPlayerState: function () {
-      return { health: 100, stamina: 100, attraction: 0, atkMultiplier: 1, defMultiplier: 1 };
+      // atk / def + their legacy-magnitude multipliers are filled in from the
+      // fighter's saved userData stats (see refreshLocalGameStats /
+      // fillEntryStats); until then the engine falls back to the baseline.
+      return {
+        health: 100, stamina: 100, attraction: 0,
+        atk: null, def: null, atkMultiplier: null, defMultiplier: null, statsChecked: false
+      };
     },
 
     pinAllowedRolls: function (currentHealth, maxHealth) {
@@ -423,12 +518,19 @@
       var opp = state[oppKey];
 
       var moveType = body.moveType;
-      var atkMul = (typeof body.atkMultiplier === 'number') ? body.atkMultiplier : ATK_MULTI;
-      var defMul = (typeof body.defMultiplier === 'number') ? body.defMultiplier : DEF_MULTI;
+
+      // Damage is driven by the fighters' saved physique stats (userData):
+      // the actor's ATK (height (m) × √weight (kg)) against the defender's
+      // DEF (weight (kg) / height (m)). Stat-less fighters use the baseline
+      // fighter's values. The legacy-magnitude multipliers scale the
+      // non-damage lines (submission recoil, teasing) to their original range.
+      var atkUsed = fighterAtk(self);
+      var defUsed = fighterDef(opp);
 
       var result = {
         playerId: playerId, playerIndex: playerIndex, moveType: moveType,
-        atkMultiplier: atkMul, defMultiplier: defMul,
+        atk: atkUsed, def: defUsed,
+        atkMultiplier: fighterAtkMul(self), defMultiplier: fighterDefMul(self),
         attackRoll: null, submissionRoll: null, selfDamageRoll: null,
         escapeRoll: null, teasingRoll: null, pinRoll: null,
         escaped: false, pinEscaped: false,
@@ -441,7 +543,7 @@
         var roll = Local.rollDice(6);
         result.attackRoll = roll;
         var staminaCost = Math.floor(roll / 2);
-        var damage = Math.max(0, Math.floor(roll * (atkMul - defMul)));
+        var damage = Math.max(0, Math.floor(roll * atkUsed - defUsed));
         result.damageDealt = damage;
         self.stamina = clampNum(self.stamina - staminaCost, 0, 100);
         opp.health = clampNum(opp.health - damage, 0, 100);
@@ -453,8 +555,8 @@
         result.submissionRoll = submissionRoll;
         result.selfDamageRoll = selfDamageRoll;
         var subStaminaCost = Math.floor(submissionRoll / 2);
-        var subDamage = Math.max(0, Math.floor(submissionRoll * (atkMul - defMul)));
-        var recoil = Math.max(0, Math.floor(selfDamageRoll * defMul));
+        var subDamage = Math.max(0, Math.floor(submissionRoll * atkUsed - defUsed));
+        var recoil = Math.max(0, Math.floor(selfDamageRoll * fighterDefMul(self)));
         result.damageDealt = subDamage;
         result.selfDamage = recoil;
         self.stamina = clampNum(self.stamina - subStaminaCost, 0, 100);
@@ -472,7 +574,7 @@
         if (result.escaped) {
           var counterRoll = Local.rollDice(6);
           result.attackRoll = counterRoll;
-          var counterDamage = Math.max(0, Math.floor(counterRoll * atkMul - defMul));
+          var counterDamage = Math.max(0, Math.floor(counterRoll * atkUsed - defUsed));
           result.damageDealt = counterDamage;
           opp.health = clampNum(opp.health - counterDamage, 0, 100);
         }
@@ -482,7 +584,7 @@
         var teasingRoll = Local.rollDice(6);
         result.teasingRoll = teasingRoll;
         var teaseStaminaCost = Math.floor(teasingRoll / 2);
-        var attractionGain = Math.max(0, Math.floor(teasingRoll * atkMul));
+        var attractionGain = Math.max(0, Math.floor(teasingRoll * fighterAtkMul(self)));
         self.stamina = clampNum(self.stamina - teaseStaminaCost, 0, 100);
         opp.attraction = clampNum(opp.attraction + attractionGain, 0, 100);
       }
@@ -653,13 +755,16 @@
       var line;
 
       if (r.moveType === 'attack') {
-        line = '⚔️ ' + currentDisplay() + ' attacks in "' + d.game.id + '" — rolled ' + r.attackRoll + ' → ' + r.damageDealt + ' damage!';
+        line = '⚔️ ' + currentDisplay() + ' attacks in "' + d.game.id + '" — rolled ' + r.attackRoll +
+          ' (ATK ' + r.atk + ' vs DEF ' + r.def + ') → ' + r.damageDealt + ' damage!';
       } else if (r.moveType === 'submission') {
-        line = '🤼 ' + currentDisplay() + ' locks in a submission — roll ' + r.submissionRoll + ' deals ' + r.damageDealt +
-          ', recoil roll ' + r.selfDamageRoll + ' costs ' + r.selfDamage + ' HP.';
+        line = '🤼 ' + currentDisplay() + ' locks in a submission — roll ' + r.submissionRoll +
+          ' deals ' + r.damageDealt + ' (ATK ' + r.atk + ' vs DEF ' + r.def +
+          '), recoil roll ' + r.selfDamageRoll + ' costs ' + r.selfDamage + ' HP.';
       } else if (r.moveType === 'escape') {
         line = r.escaped
-          ? '💨 ' + currentDisplay() + ' breaks free (roll ' + r.escapeRoll + ') and counters for ' + r.damageDealt + '!'
+          ? '💨 ' + currentDisplay() + ' breaks free (roll ' + r.escapeRoll + ') and counters for ' + r.damageDealt +
+            ' (ATK ' + r.atk + ' vs DEF ' + r.def + ')!'
           : '💨 ' + currentDisplay() + ' tries to escape — roll ' + r.escapeRoll + ', held down!';
       } else if (r.moveType === 'teasing') {
         line = '😏 ' + currentDisplay() + ' teases (roll ' + r.teasingRoll + ') — the opponent is getting flustered…';
@@ -672,8 +777,8 @@
 
       var p1 = d.game.players[0] || 'P1';
       var p2 = d.game.players[1] || 'P2';
-      line += '  ·  🩸 ' + p1 + ': ' + st.p1.health + ' HP / ' + st.p1.stamina + ' ST / ' + st.p1.attraction + '♥  ·  ' +
-        p2 + ': ' + st.p2.health + ' HP / ' + st.p2.stamina + ' ST / ' + st.p2.attraction + '♥';
+      line += '  ·  🩸 ' + p1 + ': ' + st.p1.health + ' HP / ' + st.p1.stamina + ' ST / ' + st.p1.attraction + '♥' + statSuffix(st.p1) + '  ·  ' +
+        p2 + ': ' + st.p2.health + ' HP / ' + st.p2.stamina + ' ST / ' + st.p2.attraction + '♥' + statSuffix(st.p2);
 
       if (r.won) line += '  ·  🏆 ' + currentDisplay() + ' WINS the match!';
       else if (r.tie) line += '  ·  🤝 Double knock-out — the match is a tie!';
@@ -692,8 +797,8 @@
         ? '📊 Match "' + d.id + '" — FINISHED (' + (st.outcome || 'ended') + ', winner: ' + (st.winner || '—') + ')'
         : '📊 Match "' + d.id + '" — ' + (d.players[st.turnIndex % Math.max(d.players.length, 1)] || 'nobody') + ' to move';
       return head +
-        '\n🩸 ' + p1 + ': ' + st.p1.health + ' HP / ' + st.p1.stamina + ' ST / ' + st.p1.attraction + '♥  ·  ' +
-        p2 + ': ' + st.p2.health + ' HP / ' + st.p2.stamina + ' ST / ' + st.p2.attraction + '♥' + localTag(out);
+        '\n🩸 ' + p1 + ': ' + st.p1.health + ' HP / ' + st.p1.stamina + ' ST / ' + st.p1.attraction + '♥' + statSuffix(st.p1) + '  ·  ' +
+        p2 + ': ' + st.p2.health + ' HP / ' + st.p2.stamina + ' ST / ' + st.p2.attraction + '♥' + statSuffix(st.p2) + localTag(out);
     },
     'end-game': function (d, out) {
       return '🏁 Match ended — outcome: ' + (d.state.outcome || 'manually ended') +
@@ -731,7 +836,7 @@
   var scoreboardDismissed = {};
 
   function panelDefaultPlayer() {
-    return { health: 100, stamina: 100, attraction: 0 };
+    return { health: 100, stamina: 100, attraction: 0, atk: null, def: null, atkMultiplier: null, defMultiplier: null, statsChecked: false };
   }
 
   function panelDefaultState() {
@@ -799,8 +904,12 @@
         barHtml('hp', 'HP', 100) + barHtml('st', 'ST', 100) + barHtml('hm', 'HORMONE', 0) +
         '</div>';
     }
+    var statsLine = (typeof p.atk === 'number' && p.atk > 0)
+      ? '<div class="roomgame-stats">ATK ' + p.atk + ' · DEF ' + p.def + '</div>'
+      : '';
     return '<div class="roomgame-player' + turnCls + '">' +
       '<div class="roomgame-name">' + arrow + escapeHtml(name) + '</div>' +
+      statsLine +
       barHtml('hp', 'HP', p.health) + barHtml('st', 'ST', p.stamina) + barHtml('hm', 'HORMONE', p.attraction) +
       '</div>';
   }
@@ -1049,6 +1158,30 @@
     GamePanels.syncToRoom();
   }
 
+  // Background pull of the fighters' saved atk / def into a scoreboard
+  // entry (display + local game sync). Skips slots that are already
+  // checked, so a fighter without a physique is only fetched once.
+  function fillEntryStats(roomId) {
+    roomId = String(roomId);
+    var entry = GamePanels.get(roomId);
+    if (!entry || !entry.state || entry.state.finished) return;
+    var missing = stateMissingPlayers(entry.state, entry.players);
+    if (!missing.length) return;
+
+    fetchCombatStats(missing).then(function (stats) {
+      var reg = GamePanels.loadReg();
+      var e = reg[roomId];
+      if (!e || !e.state || e.state.finished) return;
+      applyStatsToState(e.state, e.players, stats);
+      e.updatedAt = Date.now();
+      GamePanels.saveReg(reg);
+      // Keep the local-engine game in step too (the dice match reads it).
+      refreshLocalGameStats(roomId);
+      syncScoreboardUi(roomId);
+      if (currentRoomId() === roomId) GamePanels.renderInline(roomId);
+    }).catch(function () { /* transient — the next upsert retries */ });
+  }
+
   var GamePanels = {
     loadReg: function () {
       try {
@@ -1079,13 +1212,31 @@
       var reg = GamePanels.loadReg();
       var prev = reg[roomId];
 
+      var incomingState = (game && game.state) ? game.state : (prev ? prev.state : panelDefaultState());
+
+      // The remote Hp service knows nothing about our physique stats, so
+      // carry the values already pulled from user data across upserts.
+      if (prev && prev.state) {
+        ['p1', 'p2'].forEach(function (k) {
+          var from = prev.state[k];
+          var to = incomingState[k];
+          if (!from || !to) return;
+          ['atk', 'def', 'atkMultiplier', 'defMultiplier', 'statsChecked'].forEach(function (f) {
+            if (to[f] === undefined) to[f] = from[f];
+          });
+        });
+      }
+
       reg[roomId] = {
         id: (game && game.id) || roomId,
         players: (game && game.players) ? game.players.slice() : (prev ? prev.players : []),
-        state: (game && game.state) ? game.state : (prev ? prev.state : panelDefaultState()),
+        state: incomingState,
         updatedAt: Date.now()
       };
       GamePanels.saveReg(reg);
+
+      // Pull each fighter's saved atk / def from their userData.
+      fillEntryStats(roomId);
 
       // A brand-new game (or a new match in a room whose last match
       // ended) reopens the scoreboard even if an old one was dismissed.
@@ -1431,9 +1582,29 @@
           atkMultiplier: ATK_MULTI,
           defMultiplier: DEF_MULTI
         };
-        return hpAction('dice-match', body).then(function (out) {
-          if (out.data && out.data.game) GamePanels.upsert(out.data.game.id || body.roomId, out.data.game);
-          return { text: formatters['dice-match'](out.data, out), share: true };
+
+        return isRemoteConfigured().then(function (configured) {
+          if (configured) {
+            // Remote Hp engine: it computes damage from the multipliers in
+            // the request body, so send the actor's saved stats (scaled to
+            // the legacy engine magnitude) instead of the fixed defaults.
+            return fetchCombatStats([me]).then(function (stats) {
+              var s = stats && stats[me];
+              if (s) {
+                if (typeof s.atkMultiplier === 'number') body.atkMultiplier = s.atkMultiplier;
+                if (typeof s.defMultiplier === 'number') body.defMultiplier = s.defMultiplier;
+              }
+              return null;
+            });
+          }
+          // Local engine: make sure both fighters' saved atk / def are on
+          // the game state before the move is resolved.
+          return refreshLocalGameStats(body.roomId);
+        }).then(function () {
+          return hpAction('dice-match', body).then(function (out) {
+            if (out.data && out.data.game) GamePanels.upsert(out.data.game.id || body.roomId, out.data.game);
+            return { text: formatters['dice-match'](out.data, out), share: true };
+          });
         });
       }
     },

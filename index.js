@@ -432,6 +432,14 @@ const userSchema = new mongoose.Schema({
     min: [WEIGHT_MIN_LBS, `Weight must be at least ${WEIGHT_MIN_LBS} lbs`],
     max: [WEIGHT_MAX_LBS, `Weight must be at most ${WEIGHT_MAX_LBS} lbs`]
   },
+  // Combat stats derived from the physique above (physique.combatStats):
+  //   atk = height (m) × √weight (kg)
+  //   def = weight (kg) / height (m)
+  // Saved here ("userData") whenever the physique is registered or updated,
+  // and pulled by /api/combat-stats for the dice match calculations.
+  // Both stay null until the user has a complete physique.
+  atk: { type: Number, default: null },
+  def: { type: Number, default: null },
   stats:    { type: Object, default: {} },
   info:     { type: String },
   color:    { type: String },
@@ -1236,7 +1244,7 @@ async function broadcastPresence() {
 app.get("/api/admin/users", requireAdmin, async (req, res) => {
   try {
     const users = await User.find()
-      .select("username display email imageUrl extraPhotos info stats color language age height weight role banned online createdAt")
+      .select("username display email imageUrl extraPhotos info stats color language age height weight atk def role banned online createdAt")
       .sort({ username: 1 })
       .lean();
 
@@ -1753,8 +1761,15 @@ app.post('/api/update-profile', async (req, res) => {
     }
   }
 
+  // The saved combat stats must track the physique — recompute them
+  // whenever the height or weight field is part of this update (including
+  // clearing it, which resets the stats to null).
+  const physiqueTouched =
+    Object.prototype.hasOwnProperty.call(safeUpdates, 'height') ||
+    Object.prototype.hasOwnProperty.call(safeUpdates, 'weight');
+
   try {
-    const user = await User.findOneAndUpdate(
+    let user = await User.findOneAndUpdate(
       { username },
       safeUpdates,
       { new: true, runValidators: true }
@@ -1764,10 +1779,80 @@ app.post('/api/update-profile', async (req, res) => {
       return res.status(404).json({ ok: false, error: 'not_found' });
     }
 
+    if (physiqueTouched) {
+      const combat = physique.combatStats(user.height, user.weight);
+      user.atk = combat ? combat.atk : null;
+      user.def = combat ? combat.def : null;
+      await user.save();
+      user = user.toObject();
+    }
+
     return res.json({ ok: true, user });
 
   } catch (e) {
     console.error('update-profile error', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// ---------- API: COMBAT STATS (dice-match atk / def) ----------
+// How the dice match pulls a fighter's saved atk / def from their userData.
+// The values are derived from the physique (height → meters, weight → kg):
+//   atk = height (m) × √weight (kg)
+//   def = weight (kg) / height (m)
+// and stored on the user document when the physique is registered or
+// updated. `atkMultiplier` / `defMultiplier` are the same values scaled back
+// to the legacy dice engine magnitude (see physique.js).
+app.get('/api/combat-stats', async (req, res) => {
+  const usernames = String(req.query.usernames || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .slice(0, 20);
+
+  if (!usernames.length) {
+    return res.status(400).json({ ok: false, error: 'missing_usernames' });
+  }
+
+  try {
+    const users = await User.find({ username: { $in: usernames } })
+      .select('username height weight atk def')
+      .lean();
+    const byName = new Map(users.map(u => [u.username, u]));
+
+    const stats = {};
+    for (const username of usernames) {
+      const user = byName.get(username);
+      if (!user) {
+        stats[username] = { atk: null, def: null, atkMultiplier: null, defMultiplier: null };
+        continue;
+      }
+
+      // Lazy backfill: accounts created before atk/def existed get their
+      // stats computed from the stored physique the first time they are
+      // pulled, then persisted on the user document.
+      let atk = user.atk;
+      let def = user.def;
+      if (atk == null || def == null) {
+        const computed = physique.combatStats(user.height, user.weight);
+        if (computed) {
+          atk = computed.atk;
+          def = computed.def;
+          await User.updateOne({ _id: user._id }, { $set: { atk, def } }).catch(() => {});
+        }
+      }
+
+      stats[username] = {
+        atk: atk == null ? null : Number(atk),
+        def: def == null ? null : Number(def),
+        atkMultiplier: atk == null ? null : physique.engineAtkMultiplier(Number(atk)),
+        defMultiplier: def == null ? null : physique.engineDefMultiplier(Number(def))
+      };
+    }
+
+    return res.json({ ok: true, stats });
+  } catch (e) {
+    console.error('combat-stats error', e);
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });
@@ -1911,6 +1996,10 @@ app.post('/api/register', async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10);
 
+    // Derive the fighter's combat stats from the physique so they are saved
+    // on the user document from the very first match.
+    const combat = physique.combatStats(height || '', weight == null ? null : weight);
+
     const user = new User({
       username,
       email,
@@ -1919,6 +2008,8 @@ app.post('/api/register', async (req, res) => {
       age: age ? Number(age) : undefined,
       height: height || undefined,
       weight,
+      atk: combat ? combat.atk : null,
+      def: combat ? combat.def : null,
       stats: stats || {},
       info: info || '',
       color: color || '',
@@ -1958,7 +2049,9 @@ app.post('/api/register', async (req, res) => {
         extraPhotos: user.extraPhotos || [],
         age: user.age,
         height: user.height || '',
-        weight: user.weight ?? undefined
+        weight: user.weight ?? undefined,
+        atk: combat ? combat.atk : null,
+        def: combat ? combat.def : null
       }
     });
   } catch (e) {
@@ -2010,7 +2103,9 @@ app.post('/api/login', async (req, res) => {
         info: user.info,
         age: user.age,
         height: user.height || '',
-        weight: user.weight ?? undefined
+        weight: user.weight ?? undefined,
+        atk: user.atk ?? null,
+        def: user.def ?? null
       }
     });
   } catch (e) {
@@ -2233,7 +2328,7 @@ app.post("/api/dm/clear", async (req, res) => {
 app.get("/api/allUsers", async (req, res) => {
   try {
     const users = await User.find()
-      .select("username display imageUrl extraPhotos info wins losses color language age height weight createdAt")
+      .select("username display imageUrl extraPhotos info wins losses color language age height weight atk def createdAt")
       .lean();
 
     res.json({ success: true, users });
