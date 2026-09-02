@@ -244,3 +244,125 @@
 @media (max-width: 560px) {
   .roomgame-players { flex-direction: column; }
 }
+
+/* ============================================================
+   SCOREBOARD POPUP WINDOW
+   When a dice match is FULL (both fighters joined) the bars move
+   out of the room header into their own draggable window so both
+   fighters can watch the match from any chat (room, DM or the
+   public arena). Managed by public/js/slash-commands.js
+   (scoreboardEnsure / scoreboardRender).
+============================================================ */
+.scoreboard-popup {
+  position: fixed;
+  top: 96px;
+  right: 24px;
+  z-index: 99999;
+  width: 440px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(127, 216, 255, 0.35);
+  background: linear-gradient(180deg, rgba(12, 18, 32, 0.97), rgba(8, 12, 22, 0.97));
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.6), 0 0 22px rgba(127, 216, 255, 0.16);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  user-select: none;
+}
+
+.scoreboard-popup.finished {
+  border-color: rgba(52, 211, 153, 0.55);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.6), 0 0 22px rgba(52, 211, 153, 0.22);
+}
+
+.scoreboard-popup.dragging {
+  opacity: 0.92;
+}
+
+.scoreboard-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: grab;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(127, 216, 255, 0.16);
+}
+
+.scoreboard-head:active {
+  cursor: grabbing;
+}
+
+.scoreboard-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(127, 216, 255, 0.95);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scoreboard-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.scoreboard-actions .scoreboard-end {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.scoreboard-actions .scoreboard-close {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.scoreboard-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  user-select: text;
+}
+
+.scoreboard-status {
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  color: #cfeaff;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(127, 216, 255, 0.07);
+  border: 1px solid rgba(127, 216, 255, 0.14);
+  white-space: normal;
+  word-break: break-word;
+}
+
+.scoreboard-status.result {
+  color: #6ee7b7;
+  background: rgba(52, 211, 153, 0.1);
+  border-color: rgba(52, 211, 153, 0.35);
+}
+
+@media (max-width: 600px) {
+  .scoreboard-popup {
+    left: 8px;
+    right: 8px;
+    width: auto;
+    top: 64px;
+    max-height: 60vh;
+  }
+  .scoreboard-popup .roomgame-players { flex-direction: column; }
+}
