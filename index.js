@@ -117,6 +117,57 @@ app.get('/', (req, res, next) => {
   });
 });
 
+// ---------- HP DICE-MATCH API PROXY ----------
+// The chat text bars support slash commands (/roll, /submit, /escape, ...)
+// backed by the Hp stamina-bar service (https://github.com/CyberFights/Hp).
+// That service does not send CORS headers, so the browser calls this proxy
+// instead of the Hp server directly. When HP_API_URL is not configured the
+// client falls back to its built-in local dice engine.
+const HP_API_URL = (process.env.HP_API_URL || '').trim().replace(/\/+$/, '');
+const HP_ALLOWED_ACTIONS = new Set([
+  // server.js — stateless dice-match actions
+  'roll', 'submit', 'escape', 'pin-escape', 'tease', 'recover',
+  // server2.js — stateful game endpoints
+  'create-game', 'join-game', 'dice-match', 'game-state', 'end-game', 'end-all-games'
+]);
+const HP_PROXY_TIMEOUT_MS = 8 * 1000;
+
+app.get('/api/hp-config', (req, res) => {
+  res.json({ configured: !!HP_API_URL });
+});
+
+app.post('/api/hp/:action', async (req, res) => {
+  const action = req.params.action;
+
+  if (!HP_ALLOWED_ACTIONS.has(action)) {
+    return res.status(404).json({ error: 'Unknown Hp action.' });
+  }
+  if (!HP_API_URL) {
+    return res.status(503).json({ error: 'Hp service not configured (set HP_API_URL).' });
+  }
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), HP_PROXY_TIMEOUT_MS);
+
+    const upstream = await fetch(`${HP_API_URL}/api/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body || {}),
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+
+    const body = await upstream.text();
+    const contentType = upstream.headers.get('content-type');
+    if (contentType) res.setHeader('Content-Type', contentType);
+    return res.status(upstream.status).send(body);
+  } catch (err) {
+    console.error('Hp proxy error:', err?.message || err);
+    return res.status(502).json({ error: 'Hp service unreachable.' });
+  }
+});
+
 // ---------- IMAGE PROXY ----------
 // Remote image hosts (ImgBB / Discord CDN) sit behind Cloudflare and sometimes
 // answer a hotlinked <img> request with an HTML challenge/error page or a
