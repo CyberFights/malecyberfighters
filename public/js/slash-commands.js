@@ -28,6 +28,11 @@
   var GAMES_KEY = 'mcf_hp_games_v1';
   var LAST_GAME_KEY = 'mcf_hp_last_game';
 
+  // Fixed combat multipliers — applied automatically on every turn
+  // (they are no longer accepted as slash-command options).
+  var ATK_MULTI = 2.26;
+  var DEF_MULTI = 1.84;
+
   /* ------------------------------------------------------------
      Tiny helpers
   ------------------------------------------------------------ */
@@ -418,8 +423,8 @@
       var opp = state[oppKey];
 
       var moveType = body.moveType;
-      var atkMul = (typeof body.atkMultiplier === 'number') ? body.atkMultiplier : 1;
-      var defMul = (typeof body.defMultiplier === 'number') ? body.defMultiplier : 1;
+      var atkMul = (typeof body.atkMultiplier === 'number') ? body.atkMultiplier : ATK_MULTI;
+      var defMul = (typeof body.defMultiplier === 'number') ? body.defMultiplier : DEF_MULTI;
 
       var result = {
         playerId: playerId, playerIndex: playerIndex, moveType: moveType,
@@ -724,6 +729,40 @@
 
   function panelEl() { return document.getElementById('roomGamePanel'); }
 
+  // Pin the floating scoreboard just under the room header and pad the
+  // chat body by the panel's height so the newest messages are never
+  // hidden underneath it (older text scrolls beneath the card).
+  function positionPanel() {
+    var el = panelEl();
+    var popup = document.getElementById('roomChatPopup');
+    if (!el || !popup) return;
+    var body = popup.querySelector('.chat-body');
+    if (el.hidden) {
+      if (body) body.style.paddingTop = '';
+      return;
+    }
+    var header = popup.querySelector('.chat-header');
+    el.style.top = (header ? header.offsetTop + header.offsetHeight : 0) + 'px';
+    if (body) body.style.paddingTop = el.offsetHeight + 'px';
+  }
+
+  function hidePanelEl() {
+    var el = panelEl();
+    if (!el) return;
+    el.hidden = true;
+    el.innerHTML = '';
+    el.style.top = '';
+    positionPanel(); // clears the chat-body padding
+  }
+
+  function showPanelEl(html) {
+    var el = panelEl();
+    if (!el) return;
+    el.hidden = false;
+    el.innerHTML = html;
+    positionPanel();
+  }
+
   function currentRoomId() {
     var popup = document.getElementById('roomChatPopup');
     if (!popup) return null;
@@ -734,7 +773,7 @@
   function barHtml(cls, label, value) {
     var v = Math.max(0, Math.min(100, Number(value) || 0));
     return '<div class="roomgame-bar ' + cls + '"><span style="width:' + Math.round(v) +
-      '%"></span><em>' + label + ' ' + Math.round(v) + '</em></div>';
+      '%"></span><em>' + label + ' ' + Math.round(v) + '/100</em></div>';
   }
 
   function playerHtml(name, p, isTurn, waiting) {
@@ -901,35 +940,26 @@
       var entry = GamePanels.get(roomId);
 
       if (!entry) {
-        el.hidden = true;
-        el.innerHTML = '';
+        hidePanelEl();
         stopPanelPoll();
         return;
       }
 
       if (entry.state && entry.state.finished) {
-        el.hidden = false;
-        el.innerHTML = panelFinishedHtml(entry);
+        showPanelEl(panelFinishedHtml(entry));
         stopPanelPoll();
         return;
       }
 
-      el.hidden = false;
-      el.innerHTML = panelActiveHtml(roomId, entry);
+      showPanelEl(panelActiveHtml(roomId, entry));
       bindPanelButtons(el, String(roomId));
       startPanelPoll(String(roomId));
     },
 
     syncToRoom: function () {
       var room = currentRoomId();
-      var el = panelEl();
-      if (!room) {
-        if (el) { el.hidden = true; el.innerHTML = ''; }
-        stopPanelPoll();
-        return;
-      }
-      if (!GamePanels.get(room)) {
-        if (el) { el.hidden = true; el.innerHTML = ''; }
+      if (!room || !GamePanels.get(room)) {
+        hidePanelEl();
         stopPanelPoll();
         return;
       }
@@ -1169,7 +1199,7 @@
     {
       name: 'move',
       aliases: ['dice-match', 'attack', 'submission', 'teasing', 'pin'],
-      usage: '/move <attack|submission|escape|teasing|pin> [roomId] [atkMul] [defMul]',
+      usage: '/move <attack|submission|escape|teasing|pin> [roomId]',
       desc: 'Play your turn in the dice match',
       run: function (args, ctx) {
         var me = requireLogin();
@@ -1181,8 +1211,8 @@
           roomId: requireRoom(roomId, this),
           playerId: me,
           moveType: moveType,
-          atkMultiplier: parseNumber(this, args[2], 'atkMul', { optional: true }),
-          defMultiplier: parseNumber(this, args[3], 'defMul', { optional: true })
+          atkMultiplier: ATK_MULTI,
+          defMultiplier: DEF_MULTI
         };
         return hpAction('dice-match', body).then(function (out) {
           if (out.data && out.data.game) GamePanels.upsert(out.data.game.id || body.roomId, out.data.game);
@@ -1511,6 +1541,7 @@
   }, true);
 
   window.addEventListener('resize', hidePopup);
+  window.addEventListener('resize', positionPanel); // keep the floating panel pinned under the header
   window.addEventListener('scroll', hidePopup, true);
 
   // Show/hide the room scoreboard as rooms open and close.
