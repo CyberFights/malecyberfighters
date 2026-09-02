@@ -331,7 +331,12 @@
       var roomId = body && body.roomId;
       if (!roomId) throw hpFail('Missing roomId.');
       var games = Local.loadGames();
-      if (games[roomId]) throw hpFail('Room already exists.');
+      var existing = games[roomId];
+      // A room with a still-running match cannot start a new one, but once
+      // the previous match has ended the room is free to play again.
+      if (existing && !(existing.state && existing.state.finished)) {
+        throw hpFail('Room already exists.');
+      }
       games[roomId] = {
         id: roomId,
         players: [],
@@ -693,6 +698,317 @@
   };
 
   /* ------------------------------------------------------------
+     Room game panels — HP / Stamina / Hormone bars
+     While a dice match is running in a room, a scoreboard with two
+     fighters' bars is shown at the top of the room chat. New games
+     are blocked for that room until the current match has ended.
+  ------------------------------------------------------------ */
+  var PANEL_REG_KEY = 'mcf_hp_room_games_v1';
+  var PANEL_POLL_MS = 8000;
+  var PANEL_LINGER_MS = 5000;
+  var panelPollTimer = null;
+  var panelPollRoom = null;
+  var panelFinalizeTimers = {};
+  var lastPopupSignature = null;
+
+  function panelDefaultPlayer() {
+    return { health: 100, stamina: 100, attraction: 0 };
+  }
+
+  function panelDefaultState() {
+    return {
+      turnIndex: 0, finished: false, winner: null, outcome: null,
+      p1: panelDefaultPlayer(), p2: panelDefaultPlayer()
+    };
+  }
+
+  function panelEl() { return document.getElementById('roomGamePanel'); }
+
+  function currentRoomId() {
+    var popup = document.getElementById('roomChatPopup');
+    if (!popup) return null;
+    var room = popup.getAttribute('data-room');
+    return room ? String(room) : null;
+  }
+
+  function barHtml(cls, label, value) {
+    var v = Math.max(0, Math.min(100, Number(value) || 0));
+    return '<div class="roomgame-bar ' + cls + '"><span style="width:' + Math.round(v) +
+      '%"></span><em>' + label + ' ' + Math.round(v) + '</em></div>';
+  }
+
+  function playerHtml(name, p, isTurn, waiting) {
+    var turnCls = isTurn ? ' turn' : '';
+    var arrow = isTurn ? '▶ ' : '';
+    if (waiting || !p) {
+      return '<div class="roomgame-player waiting">' +
+        '<div class="roomgame-name">' + escapeHtml(name) + '</div>' +
+        barHtml('hp', 'HP', 100) + barHtml('st', 'ST', 100) + barHtml('hm', 'HORMONE', 0) +
+        '</div>';
+    }
+    return '<div class="roomgame-player' + turnCls + '">' +
+      '<div class="roomgame-name">' + arrow + escapeHtml(name) + '</div>' +
+      barHtml('hp', 'HP', p.health) + barHtml('st', 'ST', p.stamina) + barHtml('hm', 'HORMONE', p.attraction) +
+      '</div>';
+  }
+
+  function panelActiveHtml(roomId, entry) {
+    var st = entry.state;
+    var players = entry.players || [];
+    var twoPlayers = players.length >= 2;
+    var turnOf = twoPlayers && !st.finished ? (st.turnIndex % 2) : -1;
+
+    return '<div class="roomgame-panel">' +
+      '<div class="roomgame-head">' +
+        '<span class="roomgame-title">🎮 MATCH · ' + escapeHtml(entry.id || roomId) + '</span>' +
+        '<button type="button" class="roomgame-end small-btn">End match</button>' +
+      '</div>' +
+      '<div class="roomgame-players">' +
+        playerHtml(players[0] || 'Waiting for fighter 1…', st.p1, turnOf === 0, !players[0]) +
+        playerHtml(players[1] || 'Waiting for fighter 2…', st.p2, turnOf === 1, !players[1]) +
+      '</div>' +
+      '</div>';
+  }
+
+  function panelFinishedHtml(entry) {
+    var st = entry.state;
+    var detail = st.outcome ? escapeHtml(st.outcome) : 'finished';
+    if (st.winner) detail += ' · winner: ' + escapeHtml(st.winner);
+    return '<div class="roomgame-panel finished">' +
+      '<div class="roomgame-head"><span class="roomgame-title">🏁 Match over — ' + detail + '</span></div>' +
+      '</div>';
+  }
+
+  function deliverRoomMessage(roomId, text) {
+    var me = currentUser();
+    var sock = window.socket;
+    if (!me || !sock || typeof sock.emit !== 'function') return false;
+    sock.emit('roomMessage', {
+      room: String(roomId),
+      from: me,
+      display: currentDisplay(),
+      text: text,
+      time: new Date().toISOString()
+    });
+    return true;
+  }
+
+  function endRoomGame(roomId) {
+    var cmd = findCommand('end-game');
+    if (!cmd) return;
+    var ctx = { kind: 'room', room: roomId };
+    Promise.resolve(cmd.run([String(roomId)], ctx)).then(function (out) {
+      if (!out || !out.text) return;
+      if (!deliverRoomMessage(roomId, out.text)) echoLocal(ctx, out.text);
+    }).catch(function (err) {
+      echoLocal(ctx, '⚠️ /end-game: ' + (err && err.message ? err.message : 'failed'));
+    });
+  }
+
+  function bindPanelButtons(el, roomId) {
+    var btn = el.querySelector('.roomgame-end');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      if (!window.confirm('End the match in this room?')) return;
+      endRoomGame(roomId);
+    });
+  }
+
+  var GamePanels = {
+    loadReg: function () {
+      try {
+        var raw = localStorage.getItem(PANEL_REG_KEY);
+        var reg = raw ? JSON.parse(raw) : {};
+        return (reg && typeof reg === 'object') ? reg : {};
+      } catch (e) { return {}; }
+    },
+
+    saveReg: function (reg) {
+      try { localStorage.setItem(PANEL_REG_KEY, JSON.stringify(reg)); } catch (e) { /* ignore */ }
+    },
+
+    get: function (roomId) {
+      if (roomId === undefined || roomId === null || roomId === '') return null;
+      return GamePanels.loadReg()[String(roomId)] || null;
+    },
+
+    hasActive: function (roomId) {
+      var entry = GamePanels.get(roomId);
+      return !!(entry && entry.state && !entry.state.finished);
+    },
+
+    upsert: function (roomId, game) {
+      if (roomId === undefined || roomId === null || roomId === '') return;
+      roomId = String(roomId);
+
+      var reg = GamePanels.loadReg();
+      var prev = reg[roomId];
+
+      reg[roomId] = {
+        id: (game && game.id) || roomId,
+        players: (game && game.players) ? game.players.slice() : (prev ? prev.players : []),
+        state: (game && game.state) ? game.state : (prev ? prev.state : panelDefaultState()),
+        updatedAt: Date.now()
+      };
+      GamePanels.saveReg(reg);
+
+      if (currentRoomId() === roomId) GamePanels.render(roomId);
+      if (reg[roomId].state.finished) GamePanels.scheduleFinalize(roomId);
+    },
+
+    markFinished: function (roomId) {
+      if (roomId === undefined || roomId === null || roomId === '') return;
+      roomId = String(roomId);
+      var entry = GamePanels.get(roomId);
+      if (entry) {
+        entry.state.finished = true;
+        if (!entry.state.outcome) entry.state.outcome = 'manually ended';
+        var reg = GamePanels.loadReg();
+        reg[roomId] = entry;
+        GamePanels.saveReg(reg);
+        if (currentRoomId() === roomId) GamePanels.render(roomId);
+      }
+      GamePanels.scheduleFinalize(roomId);
+    },
+
+    finalizeAll: function () {
+      var reg = GamePanels.loadReg();
+      Object.keys(reg).forEach(function (id) { GamePanels.markFinished(id); });
+    },
+
+    scheduleFinalize: function (roomId) {
+      roomId = String(roomId);
+      if (panelFinalizeTimers[roomId]) clearTimeout(panelFinalizeTimers[roomId]);
+      panelFinalizeTimers[roomId] = setTimeout(function () {
+        delete panelFinalizeTimers[roomId];
+        GamePanels.remove(roomId);
+      }, PANEL_LINGER_MS);
+    },
+
+    remove: function (roomId) {
+      roomId = String(roomId);
+      var reg = GamePanels.loadReg();
+      if (!(roomId in reg)) return;
+      delete reg[roomId];
+      GamePanels.saveReg(reg);
+      if (panelPollRoom === roomId) stopPanelPoll();
+      if (currentRoomId() === roomId) GamePanels.render(roomId); // hides the panel
+    },
+
+    render: function (roomId) {
+      var el = panelEl();
+      if (!el) return;
+      var entry = GamePanels.get(roomId);
+
+      if (!entry) {
+        el.hidden = true;
+        el.innerHTML = '';
+        stopPanelPoll();
+        return;
+      }
+
+      if (entry.state && entry.state.finished) {
+        el.hidden = false;
+        el.innerHTML = panelFinishedHtml(entry);
+        stopPanelPoll();
+        return;
+      }
+
+      el.hidden = false;
+      el.innerHTML = panelActiveHtml(roomId, entry);
+      bindPanelButtons(el, String(roomId));
+      startPanelPoll(String(roomId));
+    },
+
+    syncToRoom: function () {
+      var room = currentRoomId();
+      var el = panelEl();
+      if (!room) {
+        if (el) { el.hidden = true; el.innerHTML = ''; }
+        stopPanelPoll();
+        return;
+      }
+      if (!GamePanels.get(room)) {
+        if (el) { el.hidden = true; el.innerHTML = ''; }
+        stopPanelPoll();
+        return;
+      }
+      GamePanels.render(room);
+    }
+  };
+
+  function stopPanelPoll() {
+    if (panelPollTimer) { clearInterval(panelPollTimer); panelPollTimer = null; }
+    panelPollRoom = null;
+  }
+
+  function startPanelPoll(roomId) {
+    stopPanelPoll();
+    panelPollRoom = String(roomId);
+    refreshPanelFromRemote(panelPollRoom);
+    panelPollTimer = setInterval(function () {
+      refreshPanelFromRemote(panelPollRoom);
+    }, PANEL_POLL_MS);
+  }
+
+  // Authoritative refresh from the Hp server while a panel is visible.
+  // (The local engine keeps state in this browser, so nothing to poll.)
+  function refreshPanelFromRemote(roomId) {
+    if (!roomId) { stopPanelPoll(); return; }
+    roomId = String(roomId);
+    if (currentRoomId() !== roomId) { stopPanelPoll(); return; }
+
+    isRemoteConfigured().then(function (configured) {
+      if (!configured || currentRoomId() !== roomId) return null;
+      return fetch('/api/hp/game-state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId: roomId })
+      });
+    }).then(function (res) {
+      if (!res) return;
+      if (res.status === 404) { GamePanels.remove(roomId); return; } // game gone upstream
+      if (!res.ok) return;
+      return res.json().then(function (data) {
+        if (data && data.state) GamePanels.upsert(roomId, data);
+      });
+    }).catch(function () { /* transient — the next tick retries */ });
+  }
+
+  // Watch the room popup: show/hide the panel whenever a room opens or
+  // closes (works across the desktop and mobile UIs without hooking
+  // their open/close functions).
+  function roomPopupSignature() {
+    var popup = document.getElementById('roomChatPopup');
+    if (!popup) return '';
+    var room = popup.getAttribute('data-room') || '';
+    var hiddenByStyle = popup.style && popup.style.display === 'none';
+    var hiddenByAttr = popup.hidden === true;
+    return room + '|' + ((hiddenByStyle || hiddenByAttr) ? '0' : '1');
+  }
+
+  function observeRoomPopup() {
+    var popup = document.getElementById('roomChatPopup');
+    lastPopupSignature = roomPopupSignature();
+    GamePanels.syncToRoom();
+
+    if (!popup || typeof MutationObserver === 'undefined') return;
+    var observer = new MutationObserver(function () {
+      var sig = roomPopupSignature();
+      if (sig === lastPopupSignature) return; // e.g. popup being dragged
+      lastPopupSignature = sig;
+      GamePanels.syncToRoom();
+    });
+    observer.observe(popup, { attributes: true, attributeFilter: ['data-room', 'style', 'class', 'hidden'] });
+  }
+
+  // Another tab changed the panel registry (local-engine games) — refresh.
+  window.addEventListener('storage', function (e) {
+    if (e && e.key && e.key !== PANEL_REG_KEY) return;
+    GamePanels.syncToRoom();
+  });
+
+  /* ------------------------------------------------------------
      Command registry
   ------------------------------------------------------------ */
   var COMMANDS = [
@@ -816,7 +1132,20 @@
       desc: 'Start a dice match in this chat (default: this room)',
       run: function (args, ctx) {
         var roomId = args[0] || defaultRoomId(ctx) || ('game-' + Math.random().toString(36).slice(2, 7));
+
+        // One active match per room: block new game starts until the
+        // current match has ended.
+        if (GamePanels.hasActive(roomId)) {
+          var entry = GamePanels.get(roomId);
+          var who = (entry && entry.players && entry.players.length)
+            ? ' (' + entry.players.join(' vs ') + ')'
+            : '';
+          throw new Error('A match is already underway in "' + roomId + '"' + who +
+            '. End it first with /end-game ' + roomId + '.');
+        }
+
         return hpAction('create-game', { roomId: roomId }).then(function (out) {
+          GamePanels.upsert(roomId, { id: out.data.gameId, players: [], state: panelDefaultState() });
           return { text: formatters['create-game'](out.data, out), share: true };
         });
       }
@@ -830,6 +1159,9 @@
         var roomId = resolveGameRoom(args, ctx, 0);
         var playerId = args[1] || me;
         return hpAction('join-game', { roomId: requireRoom(roomId, this), playerId: playerId }).then(function (out) {
+          if (out.data && out.data.players) {
+            GamePanels.upsert(out.data.gameId || roomId, { id: out.data.gameId || roomId, players: out.data.players });
+          }
           return { text: formatters['join-game'](out.data, out), share: true };
         });
       }
@@ -853,6 +1185,7 @@
           defMultiplier: parseNumber(this, args[3], 'defMul', { optional: true })
         };
         return hpAction('dice-match', body).then(function (out) {
+          if (out.data && out.data.game) GamePanels.upsert(out.data.game.id || body.roomId, out.data.game);
           return { text: formatters['dice-match'](out.data, out), share: true };
         });
       }
@@ -863,7 +1196,9 @@
       desc: 'Show the match scoreboard',
       run: function (args, ctx) {
         var roomId = resolveGameRoom(args, ctx, 0);
-        return hpAction('game-state', { roomId: requireRoom(roomId, this) }).then(function (out) {
+        roomId = requireRoom(roomId, this);
+        return hpAction('game-state', { roomId: roomId }).then(function (out) {
+          if (out.data) GamePanels.upsert(roomId, out.data);
           return { text: formatters['game-state'](out.data, out), share: true };
         });
       }
@@ -874,7 +1209,9 @@
       desc: 'Manually end the match',
       run: function (args, ctx) {
         var roomId = resolveGameRoom(args, ctx, 0);
-        return hpAction('end-game', { roomId: requireRoom(roomId, this), outcome: args[1] }).then(function (out) {
+        roomId = requireRoom(roomId, this);
+        return hpAction('end-game', { roomId: roomId, outcome: args[1] }).then(function (out) {
+          GamePanels.markFinished(roomId);
           return { text: formatters['end-game'](out.data, out), share: true };
         });
       }
@@ -885,6 +1222,7 @@
       desc: 'End every active match on the Hp server',
       run: function (args) {
         return hpAction('end-all-games', { outcome: args[0] }).then(function (out) {
+          GamePanels.finalizeAll();
           return { text: formatters['end-all-games'](out.data, out), share: true };
         });
       }
@@ -902,6 +1240,8 @@
         lines.push('');
         lines.push('Tip: type "/" in any text bar to autocomplete. Match commands');
         lines.push('default to the room you\u2019re chatting in, so duels live right here.');
+        lines.push('While a match runs, the room shows HP / Stamina / Hormone bars up');
+        lines.push('top, and new games are blocked until that match ends.');
         return Promise.resolve({ text: lines.join('\n'), share: false });
       }
     }
@@ -1173,6 +1513,13 @@
   window.addEventListener('resize', hidePopup);
   window.addEventListener('scroll', hidePopup, true);
 
+  // Show/hide the room scoreboard as rooms open and close.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', observeRoomPopup);
+  } else {
+    observeRoomPopup();
+  }
+
   /* ------------------------------------------------------------
      Public API
   ------------------------------------------------------------ */
@@ -1180,6 +1527,8 @@
     tryHandle: tryHandle,
     commands: COMMANDS,
     refreshPopup: syncPopup,
-    hidePopup: hidePopup
+    hidePopup: hidePopup,
+    panels: GamePanels,
+    endRoomGame: endRoomGame
   };
 })();
