@@ -635,7 +635,9 @@
     },
     'create-game': function (d, out) {
       rememberGameRoom(d.gameId);
-      return '🎮 Match "' + d.gameId + '" created! Your opponent can join with /join-game ' +
+      var first = (d.players && d.players[0]) ? d.players[0] : currentDisplay();
+      return '🎮 Match "' + d.gameId + '" created — ' + first +
+        ' is in as fighter 1! An opponent can join with /join-game ' +
         d.gameId + ' (or just /join-game in this chat).' + localTag(out);
     },
     'join-game': function (d, out) {
@@ -703,18 +705,30 @@
   };
 
   /* ------------------------------------------------------------
-     Room game panels — HP / Stamina / Hormone bars
-     While a dice match is running in a room, a scoreboard with two
-     fighters' bars is shown at the top of the room chat. New games
-     are blocked for that room until the current match has ended.
+     Dice-match scoreboards
+     While a match waits for its second fighter, a compact card sits
+     at the top of the room chat. As soon as the game is FULL (both
+     fighters joined) the scoreboard moves into its own draggable
+     popup window, which stays visible no matter which chat the
+     player is typing in (room, DM or public arena). The window is
+     refreshed by every game slash command (/move, /join-game,
+     /game-state, /end-game, /end-all-games), by a background poll
+     of /api/hp/game-state so both fighters see the same bars in
+     real time, and by cross-tab 'storage' events for local-engine
+     games.
   ------------------------------------------------------------ */
   var PANEL_REG_KEY = 'mcf_hp_room_games_v1';
   var PANEL_POLL_MS = 8000;
-  var PANEL_LINGER_MS = 5000;
+  var PANEL_LINGER_MS = 25000;
   var panelPollTimer = null;
-  var panelPollRoom = null;
   var panelFinalizeTimers = {};
   var lastPopupSignature = null;
+
+  // Open scoreboard popup windows, keyed by room id.
+  var scoreboardWindows = {};
+  // Room ids whose live popup the user closed manually (the
+  // finished-result popup is still shown once the match ends).
+  var scoreboardDismissed = {};
 
   function panelDefaultPlayer() {
     return { health: 100, stamina: 100, attraction: 0 };
@@ -729,9 +743,9 @@
 
   function panelEl() { return document.getElementById('roomGamePanel'); }
 
-  // Pin the floating scoreboard just under the room header and pad the
-  // chat body by the panel's height so the newest messages are never
-  // hidden underneath it (older text scrolls beneath the card).
+  // Pin the waiting card just under the room header and pad the chat
+  // body by its height so the newest messages are never hidden
+  // underneath it (older text scrolls beneath the card).
   function positionPanel() {
     var el = panelEl();
     var popup = document.getElementById('roomChatPopup');
@@ -791,30 +805,18 @@
       '</div>';
   }
 
-  function panelActiveHtml(roomId, entry) {
-    var st = entry.state;
-    var players = entry.players || [];
-    var twoPlayers = players.length >= 2;
-    var turnOf = twoPlayers && !st.finished ? (st.turnIndex % 2) : -1;
-
+  // Compact inline card shown in the room header while waiting for
+  // fighter 2. Once the game is full the popup window takes over.
+  function panelWaitingHtml(roomId, entry) {
     return '<div class="roomgame-panel">' +
       '<div class="roomgame-head">' +
         '<span class="roomgame-title">🎮 MATCH · ' + escapeHtml(entry.id || roomId) + '</span>' +
         '<button type="button" class="roomgame-end small-btn">End match</button>' +
       '</div>' +
       '<div class="roomgame-players">' +
-        playerHtml(players[0] || 'Waiting for fighter 1…', st.p1, turnOf === 0, !players[0]) +
-        playerHtml(players[1] || 'Waiting for fighter 2…', st.p2, turnOf === 1, !players[1]) +
+        playerHtml(entry.players[0] || 'Fighter 1', entry.state.p1, false, !entry.players[0]) +
+        playerHtml('Waiting for fighter 2…', entry.state.p2, false, true) +
       '</div>' +
-      '</div>';
-  }
-
-  function panelFinishedHtml(entry) {
-    var st = entry.state;
-    var detail = st.outcome ? escapeHtml(st.outcome) : 'finished';
-    if (st.winner) detail += ' · winner: ' + escapeHtml(st.winner);
-    return '<div class="roomgame-panel finished">' +
-      '<div class="roomgame-head"><span class="roomgame-title">🏁 Match over — ' + detail + '</span></div>' +
       '</div>';
   }
 
@@ -851,6 +853,200 @@
       if (!window.confirm('End the match in this room?')) return;
       endRoomGame(roomId);
     });
+  }
+
+  /* ------------------------------------------------------------
+     Scoreboard popup window — one draggable window per full game
+  ------------------------------------------------------------ */
+
+  // Stack un-dragged windows down from the top-right corner.
+  function scoreboardRestack() {
+    var narrow = window.innerWidth <= 600;
+    var i = 0;
+    Object.keys(scoreboardWindows).forEach(function (roomId) {
+      var win = scoreboardWindows[roomId];
+      if (!win || win.moved) return;
+      win.el.style.top = (narrow ? 64 + i * 150 : 96 + i * 215) + 'px';
+      i++;
+    });
+  }
+
+  // Drag by the header (mouse + touch), same feel as the chat popups.
+  function makeScoreboardDraggable(el, head, win) {
+    var dragging = false, offX = 0, offY = 0;
+    function start(x, y) {
+      dragging = true;
+      win.moved = true;
+      el.classList.add('dragging');
+      offX = x - el.offsetLeft;
+      offY = y - el.offsetTop;
+      el.style.left = el.offsetLeft + 'px';
+      el.style.top = el.offsetTop + 'px';
+      el.style.right = 'auto';
+    }
+    function move(x, y) {
+      if (!dragging) return;
+      var nx = Math.max(0, Math.min(window.innerWidth - el.offsetWidth, x - offX));
+      var ny = Math.max(0, Math.min(window.innerHeight - el.offsetHeight, y - offY));
+      el.style.left = nx + 'px';
+      el.style.top = ny + 'px';
+    }
+    function end() { dragging = false; el.classList.remove('dragging'); }
+
+    function onMouseDown(e) {
+      if (e.target.closest('button')) return;
+      e.preventDefault();
+      start(e.clientX, e.clientY);
+    }
+    function onMouseMove(e) { move(e.clientX, e.clientY); }
+    function onTouchStart(e) {
+      if (e.target.closest('button')) return;
+      var t = e.touches[0];
+      start(t.clientX, t.clientY);
+    }
+    function onTouchMove(e) {
+      if (!dragging) return;
+      var t = e.touches[0];
+      move(t.clientX, t.clientY);
+      e.preventDefault();
+    }
+
+    head.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', end);
+    head.addEventListener('touchstart', onTouchStart, { passive: true });
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    document.addEventListener('touchend', end);
+
+    return function cleanup() {
+      head.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', end);
+      head.removeEventListener('touchstart', onTouchStart);
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchend', end);
+    };
+  }
+
+  function scoreboardEnsure(roomId) {
+    roomId = String(roomId);
+    if (scoreboardWindows[roomId]) return scoreboardWindows[roomId];
+
+    var el = document.createElement('div');
+    el.className = 'scoreboard-popup';
+    el.setAttribute('data-room', roomId);
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-label', 'Dice match scoreboard');
+    el.innerHTML =
+      '<div class="scoreboard-head">' +
+        '<span class="scoreboard-title">🎮 MATCH</span>' +
+        '<span class="scoreboard-actions">' +
+          '<button type="button" class="scoreboard-end small-btn">End match</button>' +
+          '<button type="button" class="scoreboard-close ghost small-btn" aria-label="Close scoreboard">X</button>' +
+        '</span>' +
+      '</div>' +
+      '<div class="scoreboard-body"></div>';
+    document.body.appendChild(el);
+
+    var win = { el: el, roomId: roomId, moved: false, autoCloseTimer: null, cleanup: null };
+    scoreboardWindows[roomId] = win;
+    win.cleanup = makeScoreboardDraggable(el, el.querySelector('.scoreboard-head'), win);
+
+    el.querySelector('.scoreboard-close').addEventListener('click', function () {
+      scoreboardDismiss(roomId, true);
+    });
+    el.querySelector('.scoreboard-end').addEventListener('click', function () {
+      if (!window.confirm('End the match in this game?')) return;
+      endRoomGame(roomId);
+    });
+
+    scoreboardRestack();
+    return win;
+  }
+
+  function scoreboardRender(win, roomId, entry) {
+    var st = entry.state || panelDefaultState();
+    var players = entry.players || [];
+    var twoPlayers = players.length >= 2;
+    var turnOf = twoPlayers && !st.finished ? (st.turnIndex % 2) : -1;
+
+    win.el.classList.toggle('finished', !!st.finished);
+    win.el.querySelector('.scoreboard-title').textContent =
+      (st.finished ? '🏁 MATCH OVER · ' : '🎮 MATCH · ') + (entry.id || roomId);
+
+    var body = win.el.querySelector('.scoreboard-body');
+    var cards = '<div class="roomgame-players">' +
+      playerHtml(players[0] || 'Fighter 1', st.p1, turnOf === 0, !players[0]) +
+      playerHtml(players[1] || 'Fighter 2', st.p2, turnOf === 1, !players[1]) +
+      '</div>';
+
+    var status;
+    if (st.finished) {
+      var detail = st.outcome ? String(st.outcome) : 'ended';
+      if (st.winner) detail += ' — winner: ' + st.winner;
+      status = '<div class="scoreboard-status result">🏆 ' + escapeHtml(detail) + '</div>';
+    } else {
+      status = '<div class="scoreboard-status">▶️ ' + escapeHtml(players[turnOf] || '—') +
+        ', your turn — /move attack|submission|escape|teasing|pin</div>';
+    }
+    body.innerHTML = cards + status;
+
+    var endBtn = win.el.querySelector('.scoreboard-end');
+    if (endBtn) endBtn.style.display = st.finished ? 'none' : '';
+  }
+
+  // Remove a scoreboard window. Manual closes also remember the
+  // dismissal so polls/commands don't pop it straight back open.
+  function scoreboardDismiss(roomId, manual) {
+    roomId = String(roomId);
+    var win = scoreboardWindows[roomId];
+    if (!win) return;
+    if (manual) scoreboardDismissed[roomId] = true;
+    if (win.autoCloseTimer) { clearTimeout(win.autoCloseTimer); win.autoCloseTimer = null; }
+    if (win.cleanup) win.cleanup();
+    if (win.el && win.el.parentNode) win.el.parentNode.removeChild(win.el);
+    delete scoreboardWindows[roomId];
+    scoreboardRestack();
+  }
+
+  // Decide what the scoreboard for a room should look like right now:
+  // finished → result window (always shown, even after a manual close);
+  // full (2 fighters) → live window; waiting → no window (the inline
+  // room card covers that state).
+  function syncScoreboardUi(roomId) {
+    roomId = String(roomId);
+    var entry = GamePanels.get(roomId);
+    if (!entry) { scoreboardDismiss(roomId, false); return; }
+
+    var finished = !!(entry.state && entry.state.finished);
+    var full = (entry.players || []).length >= 2;
+
+    if (finished) {
+      delete scoreboardDismissed[roomId];
+      var win = scoreboardEnsure(roomId);
+      if (win.autoCloseTimer) { clearTimeout(win.autoCloseTimer); win.autoCloseTimer = null; }
+      scoreboardRender(win, roomId, entry);
+      win.autoCloseTimer = setTimeout(function () {
+        win.autoCloseTimer = null;
+        GamePanels.remove(roomId);
+      }, PANEL_LINGER_MS);
+      return;
+    }
+
+    if (full) {
+      if (scoreboardDismissed[roomId]) { scoreboardDismiss(roomId, false); return; }
+      var w = scoreboardEnsure(roomId);
+      if (w.autoCloseTimer) { clearTimeout(w.autoCloseTimer); w.autoCloseTimer = null; }
+      scoreboardRender(w, roomId, entry);
+    } else {
+      scoreboardDismiss(roomId, false);
+    }
+  }
+
+  function syncAllScoreboards() {
+    var reg = GamePanels.loadReg();
+    Object.keys(reg).forEach(function (id) { syncScoreboardUi(id); });
+    GamePanels.syncToRoom();
   }
 
   var GamePanels = {
@@ -891,7 +1087,16 @@
       };
       GamePanels.saveReg(reg);
 
-      if (currentRoomId() === roomId) GamePanels.render(roomId);
+      // A brand-new game (or a new match in a room whose last match
+      // ended) reopens the scoreboard even if an old one was dismissed.
+      if (!prev || (prev.state && prev.state.finished)) {
+        delete scoreboardDismissed[roomId];
+        scoreboardDismiss(roomId, false);
+      }
+
+      ensureScoreboardPolling();
+      syncScoreboardUi(roomId);
+      if (currentRoomId() === roomId) GamePanels.renderInline(roomId);
       if (reg[roomId].state.finished) GamePanels.scheduleFinalize(roomId);
     },
 
@@ -905,8 +1110,9 @@
         var reg = GamePanels.loadReg();
         reg[roomId] = entry;
         GamePanels.saveReg(reg);
-        if (currentRoomId() === roomId) GamePanels.render(roomId);
       }
+      syncScoreboardUi(roomId);
+      if (currentRoomId() === roomId) GamePanels.renderInline(roomId);
       GamePanels.scheduleFinalize(roomId);
     },
 
@@ -930,84 +1136,76 @@
       if (!(roomId in reg)) return;
       delete reg[roomId];
       GamePanels.saveReg(reg);
-      if (panelPollRoom === roomId) stopPanelPoll();
-      if (currentRoomId() === roomId) GamePanels.render(roomId); // hides the panel
+      delete scoreboardDismissed[roomId];
+      scoreboardDismiss(roomId, false);
+      if (currentRoomId() === roomId) GamePanels.renderInline(roomId);
     },
 
-    render: function (roomId) {
+    // Inline room-header card — only used while waiting for fighter 2.
+    // Full and finished games render in the popup window instead.
+    renderInline: function (roomId) {
       var el = panelEl();
       if (!el) return;
       var entry = GamePanels.get(roomId);
 
-      if (!entry) {
-        hidePanelEl();
-        stopPanelPoll();
-        return;
-      }
+      if (!entry) { hidePanelEl(); return; }
 
-      if (entry.state && entry.state.finished) {
-        showPanelEl(panelFinishedHtml(entry));
-        stopPanelPoll();
-        return;
-      }
+      var full = (entry.players || []).length >= 2;
+      var finished = !!(entry.state && entry.state.finished);
+      if (full || finished) { hidePanelEl(); return; }
 
-      showPanelEl(panelActiveHtml(roomId, entry));
+      showPanelEl(panelWaitingHtml(roomId, entry));
       bindPanelButtons(el, String(roomId));
-      startPanelPoll(String(roomId));
     },
 
     syncToRoom: function () {
       var room = currentRoomId();
-      if (!room || !GamePanels.get(room)) {
-        hidePanelEl();
-        stopPanelPoll();
-        return;
-      }
-      GamePanels.render(room);
+      if (!room) { hidePanelEl(); return; }
+      GamePanels.renderInline(room);
     }
   };
 
-  function stopPanelPoll() {
-    if (panelPollTimer) { clearInterval(panelPollTimer); panelPollTimer = null; }
-    panelPollRoom = null;
-  }
-
-  function startPanelPoll(roomId) {
-    stopPanelPoll();
-    panelPollRoom = String(roomId);
-    refreshPanelFromRemote(panelPollRoom);
-    panelPollTimer = setInterval(function () {
-      refreshPanelFromRemote(panelPollRoom);
-    }, PANEL_POLL_MS);
-  }
-
-  // Authoritative refresh from the Hp server while a panel is visible.
-  // (The local engine keeps state in this browser, so nothing to poll.)
-  function refreshPanelFromRemote(roomId) {
-    if (!roomId) { stopPanelPoll(); return; }
-    roomId = String(roomId);
-    if (currentRoomId() !== roomId) { stopPanelPoll(); return; }
-
+  // Background refresh: poll game-state for every open scoreboard
+  // window, plus the room whose inline waiting card is on screen.
+  // (The local engine keeps state in this browser, so it skips
+  // polling entirely — cross-tab updates arrive via 'storage'.)
+  function tickScoreboardPoll() {
     isRemoteConfigured().then(function (configured) {
-      if (!configured || currentRoomId() !== roomId) return null;
-      return fetch('/api/hp/game-state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomId: roomId })
+      if (!configured) return;
+      var rooms = {};
+      Object.keys(scoreboardWindows).forEach(function (id) { rooms[id] = true; });
+      var room = currentRoomId();
+      if (room) {
+        var entry = GamePanels.get(room);
+        if (entry && !entry.state.finished && (entry.players || []).length < 2) {
+          rooms[room] = true;
+        }
+      }
+      Object.keys(rooms).forEach(function (roomId) {
+        fetch('/api/hp/game-state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roomId: roomId })
+        }).then(function (res) {
+          if (res.status === 404) { GamePanels.remove(roomId); return null; } // gone upstream
+          if (!res.ok) return null;
+          return res.json();
+        }).then(function (data) {
+          if (data && data.state) GamePanels.upsert(roomId, data);
+        }).catch(function () { /* transient — the next tick retries */ });
       });
-    }).then(function (res) {
-      if (!res) return;
-      if (res.status === 404) { GamePanels.remove(roomId); return; } // game gone upstream
-      if (!res.ok) return;
-      return res.json().then(function (data) {
-        if (data && data.state) GamePanels.upsert(roomId, data);
-      });
-    }).catch(function () { /* transient — the next tick retries */ });
+    }).catch(function () { /* remote state unknown — retry next tick */ });
   }
 
-  // Watch the room popup: show/hide the panel whenever a room opens or
-  // closes (works across the desktop and mobile UIs without hooking
-  // their open/close functions).
+  function ensureScoreboardPolling() {
+    if (panelPollTimer) return;
+    panelPollTimer = setInterval(tickScoreboardPoll, PANEL_POLL_MS);
+  }
+
+  // Watch the room popup: show/hide the inline waiting card whenever a
+  // room opens or closes (works across the desktop and mobile UIs
+  // without hooking their open/close functions). The popup windows are
+  // independent of which chat is open.
   function roomPopupSignature() {
     var popup = document.getElementById('roomChatPopup');
     if (!popup) return '';
@@ -1020,7 +1218,10 @@
   function observeRoomPopup() {
     var popup = document.getElementById('roomChatPopup');
     lastPopupSignature = roomPopupSignature();
-    GamePanels.syncToRoom();
+    // Restore scoreboard windows for games still in progress after reload
+    // and keep them in sync with the Hp service.
+    ensureScoreboardPolling();
+    syncAllScoreboards();
 
     if (!popup || typeof MutationObserver === 'undefined') return;
     var observer = new MutationObserver(function () {
@@ -1032,10 +1233,12 @@
     observer.observe(popup, { attributes: true, attributeFilter: ['data-room', 'style', 'class', 'hidden'] });
   }
 
-  // Another tab changed the panel registry (local-engine games) — refresh.
+  // Another tab changed game state (local-engine games write both the
+  // game store and the panel registry) — refresh every scoreboard.
   window.addEventListener('storage', function (e) {
-    if (e && e.key && e.key !== PANEL_REG_KEY) return;
-    GamePanels.syncToRoom();
+    if (!e || !e.key || e.key === PANEL_REG_KEY || e.key === GAMES_KEY) {
+      syncAllScoreboards();
+    }
   });
 
   /* ------------------------------------------------------------
@@ -1159,8 +1362,9 @@
     {
       name: 'create-game',
       usage: '/create-game [roomId]',
-      desc: 'Start a dice match in this chat (default: this room)',
+      desc: 'Start a dice match in this chat — you are added as fighter 1 (default: this room)',
       run: function (args, ctx) {
+        var me = requireLogin();
         var roomId = args[0] || defaultRoomId(ctx) || ('game-' + Math.random().toString(36).slice(2, 7));
 
         // One active match per room: block new game starts until the
@@ -1174,9 +1378,22 @@
             '. End it first with /end-game ' + roomId + '.');
         }
 
+        var gameId;
         return hpAction('create-game', { roomId: roomId }).then(function (out) {
-          GamePanels.upsert(roomId, { id: out.data.gameId, players: [], state: panelDefaultState() });
-          return { text: formatters['create-game'](out.data, out), share: true };
+          gameId = out.data.gameId;
+          // Automatically sign the creator up as the first fighter so the
+          // match only needs one /join-game to start. Mirrors the Hp
+          // service flow (create-game then join-game) for both the remote
+          // service and the local engine.
+          return hpAction('join-game', { roomId: gameId, playerId: me });
+        }).then(function (joinOut) {
+          var players = (joinOut && joinOut.data && joinOut.data.players) ? joinOut.data.players : [me];
+          GamePanels.upsert(gameId, {
+            id: gameId,
+            players: players,
+            state: (joinOut.data && joinOut.data.state) || panelDefaultState()
+          });
+          return { text: formatters['create-game']({ gameId: gameId, players: players }, joinOut), share: true };
         });
       }
     },
@@ -1270,8 +1487,10 @@
         lines.push('');
         lines.push('Tip: type "/" in any text bar to autocomplete. Match commands');
         lines.push('default to the room you\u2019re chatting in, so duels live right here.');
-        lines.push('While a match runs, the room shows HP / Stamina / Hormone bars up');
-        lines.push('top, and new games are blocked until that match ends.');
+        lines.push('While a match waits for fighter 2, a small scoreboard sits at');
+        lines.push('the top of the room; once both fighters join it opens in its own');
+        lines.push('draggable window that updates with every move. New games are');
+        lines.push('blocked until that match ends.');
         return Promise.resolve({ text: lines.join('\n'), share: false });
       }
     }
@@ -1541,7 +1760,10 @@
   }, true);
 
   window.addEventListener('resize', hidePopup);
-  window.addEventListener('resize', positionPanel); // keep the floating panel pinned under the header
+  window.addEventListener('resize', positionPanel); // keep the waiting card pinned under the header
+  window.addEventListener('resize', function () {
+    if (typeof scoreboardRestack === 'function') scoreboardRestack();
+  });
   window.addEventListener('scroll', hidePopup, true);
 
   // Show/hide the room scoreboard as rooms open and close.
