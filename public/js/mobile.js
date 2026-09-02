@@ -563,6 +563,9 @@ function mobileImgSrc(value) {
     const password = ($("regPass") && $("regPass").value) || "";
     const display = ($("regDisplay") && $("regDisplay").value || "").trim() || username;
     const age = Number(($("regAge") && $("regAge").value) || 0);
+    // Fighter physique: height comes from the 3'5"–8'0" menu, weight is in lbs.
+    const height = ($("regHeight") && $("regHeight").value) || "";
+    const weight = ($("regWeight") && $("regWeight").value) || "";
 
     if (!username || !email || !password) {
       setError(errEl, "Username, email and password are required");
@@ -570,6 +573,14 @@ function mobileImgSrc(value) {
     }
     if (age && age < 13) {
       setError(errEl, "You must be at least 13 to register");
+      return;
+    }
+    if (!isValidHeight(height)) {
+      setError(errEl, "Select your height (3'5\" to 8'0\")");
+      return;
+    }
+    if (!isValidWeight(weight)) {
+      setError(errEl, "Enter your weight in lbs (60-700)");
       return;
     }
 
@@ -601,6 +612,8 @@ function mobileImgSrc(value) {
         password,
         display,
         age: age || undefined,
+        height: normalizeHeight(height),
+        weight: normalizeWeight(weight) ?? undefined,
         stats: {
           wins: Number(($("regWins") && $("regWins").value) || 0),
           losses: Number(($("regLosses") && $("regLosses").value) || 0)
@@ -942,6 +955,8 @@ function mobileImgSrc(value) {
     set("vpLosses", String(statOf(user, "losses")));
     set("vpLang", user.language || "—");
     set("vpAge", user.age != null ? String(user.age) : "—");
+    set("vpHeight", user.height || "—");
+    set("vpWeight", user.weight != null && user.weight !== "" ? user.weight + " lbs" : "—");
 
     const vpAvatar = $("vpAvatar");
     if (vpAvatar) vpAvatar.innerHTML = avatarHtml(user, 96);
@@ -1360,6 +1375,11 @@ function mobileImgSrc(value) {
     setVal("editWins", statOf(user, "wins"));
     setVal("editLosses", statOf(user, "losses"));
 
+    // Fighter physique: height menu (3'5"–8'0") + weight in lbs
+    const heightSelect = $("editHeight");
+    if (heightSelect) populateHeightSelect(heightSelect, user.height || "");
+    setVal("editWeight", user.weight != null && user.weight !== "" ? user.weight : "");
+
     editImageUrl = user.imageUrl || "";
     editingProfileUsername = user.username;
     editExtraPhotos = normalizeProfilePhotos(user.extraPhotos);
@@ -1383,9 +1403,23 @@ function mobileImgSrc(value) {
     const errEl = $("editError");
     setError(errEl, "");
 
+    const rawHeight = ($("editHeight") && $("editHeight").value) || "";
+    const rawWeight = ($("editWeight") && $("editWeight").value) || "";
+
+    if (rawHeight && !isValidHeight(rawHeight)) {
+      setError(errEl, "Select a height between 3'5\" and 8'0\"");
+      return;
+    }
+    if (rawWeight.trim() && !isValidWeight(rawWeight)) {
+      setError(errEl, "Weight must be between 60 and 700 lbs");
+      return;
+    }
+
     const updates = {
       display: ($("editDisplay") && $("editDisplay").value || "").trim(),
       age: Number(($("editAge") && $("editAge").value) || 0) || undefined,
+      height: normalizeHeight(rawHeight),
+      weight: normalizeWeight(rawWeight) ?? null,
       info: ($("editInfo") && $("editInfo").value || "").trim(),
       color: ($("editColor") && $("editColor").value) || "",
       language: ($("editLanguage") && $("editLanguage").value) || "en",
@@ -2669,6 +2703,11 @@ $('btnUploadImage').addEventListener('click', async () => {
 });
 
 $('regSubmit').addEventListener('click', async () => {
+  /* The canonical mobile registration flow (handleRegister, wired further up
+     this file) already owns this button and validates/sends height + weight.
+     Skip the legacy duplicate submission so the account is only created once. */
+  if (typeof handleRegister === 'function') return;
+
   const username = $('regUser').value.trim().toLowerCase();
   const email = $('regEmail').value.trim().toLowerCase();
   const password = $('regPass').value;
@@ -2679,9 +2718,24 @@ $('regSubmit').addEventListener('click', async () => {
   const info = $('regInfo').value.trim();
   const color = $('regColor').value;
   const language = $('regLanguage').value;
+  // Fighter physique: height comes from the 3'5"–8'0" menu, weight is in lbs.
+  const height = $('regHeight') ? $('regHeight').value : '';
+  const weight = $('regWeight') ? $('regWeight').value : '';
   const err = $('regError');
 
   err.style.display = 'none';
+
+  if(!isValidHeight(height)){
+    err.textContent = 'Select your height (3\'5" to 8\'0")';
+    err.style.display = 'block';
+    return;
+  }
+
+  if(!isValidWeight(weight)){
+    err.textContent = 'Enter your weight in lbs (60-700)';
+    err.style.display = 'block';
+    return;
+  }
 
   if(!username || !email || !password){
     err.textContent = 'Username, email, password required';
@@ -2701,6 +2755,8 @@ $('regSubmit').addEventListener('click', async () => {
 
   const payload = {
     username, email, password, display, age,
+    height: normalizeHeight(height),
+    weight: normalizeWeight(weight) ?? undefined,
     stats:{wins,losses},
     info, color, language,
     imageUrl: uploadedImageUrl
@@ -3643,6 +3699,11 @@ window.openEditProfileModal = function(user) {
   $("editWins").value = user.stats?.wins || 0;
   $("editLosses").value = user.stats?.losses || 0;
 
+  // Fighter physique: height menu (3'5"–8'0") + weight in lbs
+  const heightSelect = $("editHeight");
+  if (heightSelect) populateHeightSelect(heightSelect, user.height || "");
+  if ($("editWeight")) $("editWeight").value = user.weight != null && user.weight !== "" ? user.weight : "";
+
   editImageUrl = user.imageUrl || "";
 
   const status = $("editUploadStatus");
@@ -3693,13 +3754,33 @@ $("btnEditUploadImage").addEventListener("click", async () => {
 
 /* Save profile changes */
 $("editSubmit").addEventListener("click", async () => {
+  /* The canonical mobile profile flow (saveProfile, wired further up this
+     file) already owns this button. Skip the legacy duplicate save. */
+  if (typeof saveProfile === 'function') return;
+
   const user = getSession();
   if (!user) return;
+
+  const rawHeight = $("editHeight") ? $("editHeight").value : "";
+  const rawWeight = $("editWeight") ? $("editWeight").value : "";
+
+  if (rawHeight && !isValidHeight(rawHeight)) {
+    $("editError").textContent = "Select a height between 3'5\" and 8'0\"";
+    $("editError").style.display = "block";
+    return;
+  }
+  if (rawWeight.trim() && !isValidWeight(rawWeight)) {
+    $("editError").textContent = "Weight must be between 60 and 700 lbs";
+    $("editError").style.display = "block";
+    return;
+  }
 
   const updates = {
     display: $("editDisplay").value.trim(),
     age: Number($("editAge").value),
     discordId: $("editDiscordId") ? $("editDiscordId").value.trim() : "",
+    height: normalizeHeight(rawHeight),
+    weight: normalizeWeight(rawWeight) ?? null,
     info: $("editInfo").value.trim(),
     color: $("editColor").value,
     language: $("editLanguage").value,

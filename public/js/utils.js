@@ -386,6 +386,11 @@ window.updateProfileCard = function(user) {
 
   const age = user.age ? `${user.age} years old` : 'Age not set';
   const bio = user.info || 'No bio';
+  // Fighter physique (height 3'5"–8'0" menu / weight in lbs) — only render
+  // the parts the fighter has actually filled in.
+  const physique = (window.physiqueSummary
+    ? window.physiqueSummary(user.height, user.weight)
+    : [user.height, user.weight ? user.weight + ' lbs' : ''].filter(Boolean).join(' • '));
 
 const avatarHtml = user.imageUrl
   ? `<img src="${escapeHtml(utilsImgSrc(user.imageUrl))}" alt="avatar" class="profile-avatar-img">`
@@ -400,6 +405,7 @@ card.innerHTML = `
 
     <div class="profile-details">
       <div class="profile-age">${escapeHtml(age)}</div>
+      ${physique ? `<div class="profile-physique">${escapeHtml(physique)}</div>` : ''}
       <div class="profile-bio">${escapeHtml(bio)}</div>
     </div>
 

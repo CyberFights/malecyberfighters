@@ -33,6 +33,11 @@ window.openEditProfileModal = function(user) {
   $("editWins").value = user.stats?.wins || 0;
   $("editLosses").value = user.stats?.losses || 0;
 
+  // Fighter physique: height menu (3'5"–8'0") + weight in lbs
+  const heightSelect = $("editHeight");
+  if (heightSelect) populateHeightSelect(heightSelect, user.height || "");
+  if ($("editWeight")) $("editWeight").value = user.weight != null && user.weight !== "" ? user.weight : "";
+
   editImageUrl = user.imageUrl || "";
 
   const status = $("editUploadStatus");
@@ -86,10 +91,26 @@ $("editSubmit").addEventListener("click", async () => {
   const user = getSession();
   if (!user) return;
 
+  const rawHeight = $("editHeight") ? $("editHeight").value : "";
+  const rawWeight = $("editWeight") ? $("editWeight").value : "";
+
+  if (rawHeight && !isValidHeight(rawHeight)) {
+    $("editError").textContent = 'Select a height between 3\'5" and 8\'0"';
+    $("editError").style.display = "block";
+    return;
+  }
+  if (rawWeight.trim() && !isValidWeight(rawWeight)) {
+    $("editError").textContent = "Weight must be between 60 and 700 lbs";
+    $("editError").style.display = "block";
+    return;
+  }
+
   const updates = {
     display: $("editDisplay").value.trim(),
     age: Number($("editAge").value),
     discordId: $("editDiscordId") ? $("editDiscordId").value.trim() : "",
+    height: normalizeHeight(rawHeight),
+    weight: normalizeWeight(rawWeight) ?? null,
     info: $("editInfo").value.trim(),
     color: $("editColor").value,
     language: $("editLanguage").value,

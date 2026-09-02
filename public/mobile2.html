@@ -165,6 +165,7 @@ button.ghost{
 }
 
 .profile-age{font-size:12px;color:var(--accent);font-weight:500}
+.profile-physique{font-size:12px;color:var(--accent);font-weight:500}
 .profile-bio{font-size:11px;color:var(--muted);line-height:1.4;max-width:200px}
 
 .profile-stats{display:flex;gap:16px;font-size:12px}
@@ -1589,6 +1590,10 @@ h3{
       <input id="editAge" type="number" min="13" placeholder="Age">
       <input id="editDiscordId" type="text" placeholder="Discord User ID (Optional)">
 
+      <!-- FIGHTER PHYSIQUE: height menu (3'5" – 8'0") + weight in lbs -->
+      <select id="editHeight" data-physique-height data-physique-placeholder="Height not set"></select>
+      <input id="editWeight" type="number" data-physique-weight placeholder="Weight (lbs)">
+
       <textarea id="editInfo" rows="3" placeholder="Bio"></textarea>
 
       <div>
@@ -1672,6 +1677,13 @@ h3{
         </select>
         <input id="regWins" type="number" placeholder="Wins" />
         <input id="regLosses" type="number" placeholder="Losses" />
+      </div>
+
+      <!-- FIGHTER PHYSIQUE: height menu (3'5" – 8'0") + weight in lbs -->
+      <div>
+        <select id="regHeight" data-physique-height
+                data-physique-placeholder="Height (3'5&quot; to 8'0&quot;)"></select>
+        <input id="regWeight" type="number" data-physique-weight placeholder="Weight (lbs)" />
       </div>
 
       <textarea id="regInfo" placeholder="Short bio / info" rows="3"></textarea>
@@ -1844,6 +1856,16 @@ h3{
         <div style="margin-top:12px">
           <div class="muted">Age</div>
           <div id="vpAge"></div>
+        </div>
+
+        <div style="margin-top:12px">
+          <div class="muted">Height</div>
+          <div id="vpHeight"></div>
+        </div>
+
+        <div style="margin-top:12px">
+          <div class="muted">Weight</div>
+          <div id="vpWeight"></div>
         </div>
 
       </div>
@@ -2805,6 +2827,7 @@ Don't hesitate to contact us if you have any questions.
 <script src="/js/viewport-fit.js"></script>
 <script src="/js/image-proxy.js"></script>
 <script src="/socket.io/socket.io.js"></script>
+<script src="/js/physique.js"></script>
 <script src="/js/utils.js"></script>
 <script src="/js/emoji-picker.js"></script>
 <script src="/js/socket.js"></script>
