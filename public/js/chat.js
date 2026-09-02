@@ -868,18 +868,32 @@ function sendPublicMessage(){
   const s = getSession();
   if (!s) return;
 
-  const msg = {
-    from: s.username,
-    display: s.display || s.username,
-    text,
-    time: new Date().toISOString(),
-    replyTo: publicReplyTo
+  const replyTo = publicReplyTo;
+
+  const deliver = outText => {
+    const msg = {
+      from: s.username,
+      display: s.display || s.username,
+      text: outText,
+      time: new Date().toISOString(),
+      replyTo
+    };
+
+    socket.emit('publicMessage', msg);
+
+    // Instant local render
+    appendPublicMessage(msg);
   };
 
-  socket.emit('publicMessage', msg);
+  // Slash commands (/roll, /move, /help, ...) intercept the text bar;
+  // see slash-commands.js (powered by the Hp dice-match endpoints).
+  if (window.SlashCommands && window.SlashCommands.tryHandle(text, { kind: 'public', input, deliver })) {
+    input.value = '';
+    clearPublicReply();
+    return;
+  }
 
-  // Instant local render
-  appendPublicMessage(msg);
+  deliver(text);
 
   input.value = '';
   clearPublicReply();
@@ -1452,9 +1466,21 @@ $('roomSendBtn')?.addEventListener('click', () => {
   const room = $('roomChatPopup')?.dataset.room;
   const input = $('roomMessageInput');
   if (!input || !room) return;
-  
+
   const text = input.value.trim();
   if (!text) return;
+
+  // Slash commands (/roll, /create-game, /move, ...) intercept the text
+  // bar; see slash-commands.js (powered by the Hp dice-match endpoints).
+  if (window.SlashCommands && window.SlashCommands.tryHandle(text, {
+    kind: 'room',
+    room,
+    input,
+    deliver: out => sendRoomMessage(room, out)
+  })) {
+    input.value = '';
+    return;
+  }
 
   sendRoomMessage(room, text);
   input.value = '';

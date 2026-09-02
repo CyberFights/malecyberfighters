@@ -12,6 +12,7 @@
 <link rel="apple-touch-icon" href="/images/mcf.png">
    
 <link rel="stylesheet" href="/css/desktop.css?v=9">
+<link rel="stylesheet" href="/css/slash-commands.css?v=1">
 <link rel="stylesheet" href="/css/audio-calls.css?v=4">
 
 <style>
@@ -936,6 +937,9 @@
     </div>
   </div>
 
+  <!-- HP / Stamina / Hormone scoreboard, shown while a dice match runs in this room (slash-commands.js) -->
+  <div id="roomGamePanel" hidden></div>
+
   <div class="chat-body" style="display:flex; height:100%">
     
     <!-- LEFT: ROOM FEED -->
@@ -1758,6 +1762,7 @@ Don't hesitate to contact us if you have any questions.
 <script src="/js/utils.js"></script>
 <script src="/js/emoji-picker.js"></script>
 <script src="/js/socket.js"></script>
+<script src="/js/slash-commands.js?v=1"></script>
 <script src="/js/audio-calls.js?v=5"></script>
 <script src="/js/auth.js"></script>
 <script src="/js/register.js"></script>

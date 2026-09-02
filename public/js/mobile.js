@@ -714,6 +714,20 @@ function mobileImgSrc(value) {
     feed.scrollTop = feed.scrollHeight;
   }
 
+  function dispatchPublicMessage(text, s) {
+    const msg = {
+      from: s.username,
+      display: s.display || s.username,
+      text,
+      avatar: s.imageUrl || null,
+      color: s.color || null,
+      time: new Date().toISOString()
+    };
+
+    state.socket.emit("publicMessage", msg);
+    appendPublicMessage(msg); // instant local echo
+  }
+
   function sendPublicMessage() {
     const input = $("publicMessage");
     if (!input) return;
@@ -727,23 +741,23 @@ function mobileImgSrc(value) {
       return;
     }
 
-    const msg = {
-      from: s.username,
-      display: s.display || s.username,
-      text,
-      avatar: s.imageUrl || null,
-      color: s.color || null,
-      time: new Date().toISOString()
-    };
-
-    if (state.socket) {
-      state.socket.emit("publicMessage", msg);
-      appendPublicMessage(msg); // instant local echo
-    } else {
+    if (!state.socket) {
       alert("Not connected to the arena. Please reload the page.");
       return;
     }
 
+    // Slash commands (/roll, /move, /help, ...) intercept the text bar;
+    // see slash-commands.js (powered by the Hp dice-match endpoints).
+    if (window.SlashCommands && window.SlashCommands.tryHandle(text, {
+      kind: "public",
+      input,
+      deliver: out => dispatchPublicMessage(out, s)
+    })) {
+      input.value = "";
+      return;
+    }
+
+    dispatchPublicMessage(text, s);
     input.value = "";
   }
 
@@ -1853,6 +1867,16 @@ function mobileImgSrc(value) {
     });
   }
 
+  function emitRoomMessage(text, s, room) {
+    state.socket.emit("roomMessage", {
+      room,
+      from: s.username,
+      display: s.display || s.username,
+      text,
+      time: new Date().toISOString()
+    });
+  }
+
   function sendRoomMessage() {
     const s = getSession();
     const input = $("roomMessageInput");
@@ -1864,14 +1888,19 @@ function mobileImgSrc(value) {
     const text = input.value.trim();
     if (!text) return;
 
-    state.socket.emit("roomMessage", {
+    // Slash commands (/roll, /create-game, /move, ...) intercept the text
+    // bar; see slash-commands.js (powered by the Hp dice-match endpoints).
+    if (window.SlashCommands && window.SlashCommands.tryHandle(text, {
+      kind: "room",
       room,
-      from: s.username,
-      display: s.display || s.username,
-      text,
-      time: new Date().toISOString()
-    });
+      input,
+      deliver: out => emitRoomMessage(out, s, room)
+    })) {
+      input.value = "";
+      return;
+    }
 
+    emitRoomMessage(text, s, room);
     input.value = "";
   }
 
@@ -2884,6 +2913,22 @@ function sendPM(targetUsername) {
 
   const text = input.value.trim();
   if (!text) return;
+
+  // Slash commands (/roll, /create-game, /move, ...) intercept the text
+  // bar; see slash-commands.js (powered by the Hp dice-match endpoints).
+  if (window.SlashCommands && window.SlashCommands.tryHandle(text, {
+    kind: "dm",
+    target: targetUsername,
+    input,
+    deliver: out => socket.emit("privateMessage", {
+      from: s.username,
+      to: targetUsername,
+      text: out
+    })
+  })) {
+    input.value = "";
+    return;
+  }
 
   const message = {
     from: s.username,

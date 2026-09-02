@@ -381,6 +381,22 @@ function sendPM(targetUsername) {
   const text = input.value.trim();
   if (!text) return;
 
+  // Slash commands (/roll, /create-game, /move, ...) intercept the text
+  // bar; see slash-commands.js (powered by the Hp dice-match endpoints).
+  if (window.SlashCommands && window.SlashCommands.tryHandle(text, {
+    kind: "dm",
+    target: targetUsername,
+    input,
+    deliver: out => socket.emit("privateMessage", {
+      from: s.username,
+      to: targetUsername,
+      text: out
+    })
+  })) {
+    input.value = "";
+    return;
+  }
+
   const message = {
     from: s.username,
     to: targetUsername,
