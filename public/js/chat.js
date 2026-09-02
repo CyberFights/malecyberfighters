@@ -271,6 +271,8 @@ function openUserProfile(username) {
   if ($('vpLosses')) $('vpLosses').textContent = user.losses ?? user.stats?.losses ?? 0;
   if ($('vpLang')) $('vpLang').textContent = user.language || "Unknown";
   if ($('vpAge')) $('vpAge').textContent = user.age || "Unknown";
+  if ($('vpHeight')) $('vpHeight').textContent = user.height || "Unknown";
+  if ($('vpWeight')) $('vpWeight').textContent = (user.weight != null && user.weight !== "") ? user.weight + " lbs" : "Unknown";
   if ($('vpColorBox')) $('vpColorBox').style.background = user.color || "#7fd8ff";
   if ($('vpAvatar')) $('vpAvatar').src = chatImgSrc(user.imageUrl) || "/images/mcf.png";
   if (window.renderProfilePhotoGallery) {

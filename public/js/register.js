@@ -49,12 +49,27 @@ $('regSubmit').addEventListener('click', async () => {
   const info = $('regInfo').value.trim();
   const color = $('regColor').value;
   const language = $('regLanguage').value;
+  // Fighter physique: height comes from the 3'5"–8'0" menu, weight is in lbs.
+  const height = $('regHeight') ? $('regHeight').value : '';
+  const weight = $('regWeight') ? $('regWeight').value : '';
   const err = $('regError');
 
   err.style.display = 'none';
 
   if(!username || !email || !password){
     err.textContent = 'Username, email, password required';
+    err.style.display = 'block';
+    return;
+  }
+
+  if(!isValidHeight(height)){
+    err.textContent = 'Select your height (3\'5" to 8\'0")';
+    err.style.display = 'block';
+    return;
+  }
+
+  if(!isValidWeight(weight)){
+    err.textContent = 'Enter your weight in lbs (60-700)';
     err.style.display = 'block';
     return;
   }
@@ -71,6 +86,8 @@ $('regSubmit').addEventListener('click', async () => {
 
   const payload = {
     username, email, password, display, age,
+    height: normalizeHeight(height),
+    weight: normalizeWeight(weight) ?? undefined,
     stats:{wins,losses},
     info, color, language,
     imageUrl: uploadedImageUrl

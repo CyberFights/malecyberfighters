@@ -197,6 +197,19 @@
       </div>
     </div>
 
+    <!-- FIGHTER PHYSIQUE: height menu (3'5" – 8'0") + weight in lbs -->
+    <div class="field field-row">
+      <div>
+        <label for="regHeight">Height</label>
+        <select id="regHeight" data-physique-height
+                data-physique-placeholder="Select height"></select>
+      </div>
+      <div>
+        <label for="regWeight">Weight (lbs)</label>
+        <input id="regWeight" type="number" data-physique-weight placeholder="lbs">
+      </div>
+    </div>
+
     <div class="field">
       <label for="regInfo">Short bio</label>
       <textarea id="regInfo" rows="3" placeholder="Tell the arena about your fighter"></textarea>
@@ -243,6 +256,18 @@
     <div class="field">
       <label for="editDiscordId">Discord User ID</label>
       <input id="editDiscordId" type="text" placeholder="Discord User ID (Optional)">
+    </div>
+
+    <!-- FIGHTER PHYSIQUE: height menu (3'5" – 8'0") + weight in lbs -->
+    <div class="field field-row">
+      <div>
+        <label for="editHeight">Height</label>
+        <select id="editHeight" data-physique-height data-physique-placeholder="Not set"></select>
+      </div>
+      <div>
+        <label for="editWeight">Weight (lbs)</label>
+        <input id="editWeight" type="number" data-physique-weight placeholder="lbs">
+      </div>
     </div>
 
     <div class="field">
@@ -498,6 +523,14 @@
         <div class="muted small">Age</div>
         <strong id="vpAge">—</strong>
       </div>
+      <div>
+        <div class="muted small">Height</div>
+        <strong id="vpHeight">—</strong>
+      </div>
+      <div>
+        <div class="muted small">Weight</div>
+        <strong id="vpWeight">—</strong>
+      </div>
     </div>
 
     <div class="profile-block field-row">
@@ -672,6 +705,8 @@
               <th>Username</th>
               <th>Email</th>
               <th>Role</th>
+              <th>Height</th>
+              <th>Weight</th>
               <th>Online</th>
               <th>Banned</th>
             </tr>
@@ -864,6 +899,7 @@ Moderator decisions are final. </p>
 <script src="/js/slash-commands.js?v=1"></script>
 <script src="/js/audio-calls.js?v=5"></script>
 <script src="/js/emoji-picker.js"></script>
+<script src="/js/physique.js"></script>
 <script src="/js/mobile.js"></script>
 <script src="/js/pwa-install.js"></script>
 <script src="/js/account.js"></script>

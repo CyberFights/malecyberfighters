@@ -41,6 +41,8 @@ window.loadAdminPanel = async function loadAdminPanel() {
         <td>${escapeHtml(u.username || '')}</td>
         <td>${escapeHtml(u.email || '')}</td>
         <td>${escapeHtml(u.role || 'user')}</td>
+        <td>${escapeHtml(u.height || '—')}</td>
+        <td>${u.weight != null && u.weight !== '' ? escapeHtml(String(u.weight) + ' lbs') : '—'}</td>
         <td>${u.online ? '🟢' : '⚪'}</td>
         <td>${u.banned ? '🚫' : '✔'}</td>
         <td>

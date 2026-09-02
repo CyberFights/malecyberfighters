@@ -390,6 +390,25 @@ mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log('MongoDB connected'))
   .catch(err => console.warn('MongoDB connection failed (continuing without DB):', err.message || err));
 
+// ---------- PHYSIQUE HELPERS (height / weight) ----------
+// Fighter physique is captured during registration and can be edited from the
+// profile modal. Height is stored as a feet + inches display string so it can
+// be rendered straight from the database (e.g. 5'11"); the menu runs from
+// 3'5" (41 inches) up to 8'0" (96 inches) in one-inch steps. Weight is always
+// stored as whole pounds (lbs).
+// The rules live in public/js/physique.js so the browser menus and the API
+// validation can never drift apart.
+const physique = require('./public/js/physique.js');
+const {
+  HEIGHT_MIN_INCHES,
+  HEIGHT_MAX_INCHES,
+  WEIGHT_MIN_LBS,
+  WEIGHT_MAX_LBS,
+  inchesToHeight: inchesToHeightString,
+  normalizeHeight,
+  normalizeWeight
+} = physique;
+
 // ---------- SCHEMAS ----------
 const userSchema = new mongoose.Schema({
   username: { type: String, unique: true, required: true, index: true },
@@ -397,6 +416,22 @@ const userSchema = new mongoose.Schema({
   passwordHash: { type: String, required: true },
   display:  { type: String },
   age:      { type: Number },
+  // Fighter physique: height is a feet + inches string (5'11"), weight is lbs.
+  height: {
+    type: String,
+    trim: true,
+    default: undefined,
+    validate: {
+      validator: v => v == null || v === '' || normalizeHeight(v) !== '',
+      message: `Height must be between ${inchesToHeightString(HEIGHT_MIN_INCHES)} and ${inchesToHeightString(HEIGHT_MAX_INCHES)}`
+    }
+  },
+  weight: {
+    type: Number,
+    default: undefined,
+    min: [WEIGHT_MIN_LBS, `Weight must be at least ${WEIGHT_MIN_LBS} lbs`],
+    max: [WEIGHT_MAX_LBS, `Weight must be at most ${WEIGHT_MAX_LBS} lbs`]
+  },
   stats:    { type: Object, default: {} },
   info:     { type: String },
   color:    { type: String },
@@ -1192,7 +1227,7 @@ function requireAdmin(req, res, next) {
 
 async function broadcastPresence() {
   const onlineUsers = await User.find({ online: true })
-    .select("username display imageUrl extraPhotos info wins losses color language age createdAt -_id")
+    .select("username display imageUrl extraPhotos info wins losses color language age height weight createdAt -_id")
     .lean();
 
   io.emit("presence", onlineUsers);
@@ -1201,7 +1236,7 @@ async function broadcastPresence() {
 app.get("/api/admin/users", requireAdmin, async (req, res) => {
   try {
     const users = await User.find()
-      .select("username display email imageUrl extraPhotos info stats color language age role banned online createdAt")
+      .select("username display email imageUrl extraPhotos info stats color language age height weight role banned online createdAt")
       .sort({ username: 1 })
       .lean();
 
@@ -1686,10 +1721,42 @@ app.post('/api/update-profile', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'missing_username' });
   }
 
+  // Physique fields get normalised before they reach Mongo so clients can
+  // send 5'11", 5'11 or raw inches and get the same stored value back.
+  const safeUpdates = Object.assign({}, updates);
+
+  if (Object.prototype.hasOwnProperty.call(safeUpdates, 'height')) {
+    const rawHeight = safeUpdates.height;
+    if (rawHeight === undefined || rawHeight === null || String(rawHeight).trim() === '') {
+      // Clearing physique is allowed — store an empty string.
+      safeUpdates.height = '';
+    } else {
+      const normalized = normalizeHeight(rawHeight);
+      if (!normalized) {
+        return res.status(400).json({ ok: false, error: 'invalid_height' });
+      }
+      safeUpdates.height = normalized;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(safeUpdates, 'weight')) {
+    const rawWeight = safeUpdates.weight;
+    if (rawWeight === undefined || rawWeight === null || String(rawWeight).trim() === '') {
+      // Clearing physique is allowed — store null so the field reads as unset.
+      safeUpdates.weight = null;
+    } else {
+      const normalized = normalizeWeight(rawWeight);
+      if (normalized === null) {
+        return res.status(400).json({ ok: false, error: 'invalid_weight' });
+      }
+      safeUpdates.weight = normalized;
+    }
+  }
+
   try {
     const user = await User.findOneAndUpdate(
       { username },
-      updates,
+      safeUpdates,
       { new: true, runValidators: true }
     ).select('-passwordHash');
 
@@ -1804,9 +1871,32 @@ app.post('/api/account/delete', async (req, res) => {
 // ---------- API: REGISTER ----------
 app.post('/api/register', async (req, res) => {
   const { username, email, password, display, age, stats, info, color, language, imageUrl } = req.body;
+  const rawHeight = req.body.height;
+  const rawWeight = req.body.weight;
+
   if (!username || !email || !password) {
     await logIp(req, { action: 'register_fail', username });
     return res.status(400).json({ ok: false, error: 'missing_fields' });
+  }
+
+  // Physique is optional for older clients, but when it is supplied it must
+  // fall inside the 3'5"–8'0" / 60–700 lbs menu ranges.
+  let height;
+  if (rawHeight !== undefined && rawHeight !== null && String(rawHeight).trim() !== '') {
+    height = normalizeHeight(rawHeight);
+    if (!height) {
+      await logIp(req, { action: 'register_fail', username });
+      return res.status(400).json({ ok: false, error: 'invalid_height' });
+    }
+  }
+
+  let weight;
+  if (rawWeight !== undefined && rawWeight !== null && String(rawWeight).trim() !== '') {
+    weight = normalizeWeight(rawWeight);
+    if (weight === null) {
+      await logIp(req, { action: 'register_fail', username });
+      return res.status(400).json({ ok: false, error: 'invalid_weight' });
+    }
   }
 
   try {
@@ -1827,6 +1917,8 @@ app.post('/api/register', async (req, res) => {
       passwordHash: hash,
       display: display || username,
       age: age ? Number(age) : undefined,
+      height: height || undefined,
+      weight,
       stats: stats || {},
       info: info || '',
       color: color || '',
@@ -1863,7 +1955,10 @@ app.post('/api/register', async (req, res) => {
         username: user.username,
         display: user.display,
         imageUrl: user.imageUrl,
-        extraPhotos: user.extraPhotos || []
+        extraPhotos: user.extraPhotos || [],
+        age: user.age,
+        height: user.height || '',
+        weight: user.weight ?? undefined
       }
     });
   } catch (e) {
@@ -1913,7 +2008,9 @@ app.post('/api/login', async (req, res) => {
         role: user.role,
         stats: user.stats,
         info: user.info,
-        age: user.age
+        age: user.age,
+        height: user.height || '',
+        weight: user.weight ?? undefined
       }
     });
   } catch (e) {
@@ -2136,7 +2233,7 @@ app.post("/api/dm/clear", async (req, res) => {
 app.get("/api/allUsers", async (req, res) => {
   try {
     const users = await User.find()
-      .select("username display imageUrl extraPhotos info wins losses color language age createdAt")
+      .select("username display imageUrl extraPhotos info wins losses color language age height weight createdAt")
       .lean();
 
     res.json({ success: true, users });
@@ -2316,7 +2413,7 @@ io.on("connection", async (socket) => {
     if (!u) return;
 
     const onlineUsers = await User.find({ online: true })
-      .select('username display imageUrl extraPhotos info wins losses color language age createdAt -_id')
+      .select('username display imageUrl extraPhotos info wins losses color language age height weight createdAt -_id')
       .lean();
 
     io.emit('presence', onlineUsers);
@@ -2331,7 +2428,7 @@ io.on("connection", async (socket) => {
     );
 
     const onlineUsers = await User.find({ online: true })
-      .select("username display imageUrl extraPhotos info wins losses color language age createdAt -_id")
+      .select("username display imageUrl extraPhotos info wins losses color language age height weight createdAt -_id")
       .lean();
 
     io.emit("presence", onlineUsers);
@@ -2346,7 +2443,7 @@ io.on("connection", async (socket) => {
     );
 
     const onlineUsers = await User.find({ online: true })
-      .select("username display imageUrl extraPhotos info wins losses color language age createdAt -_id")
+      .select("username display imageUrl extraPhotos info wins losses color language age height weight createdAt -_id")
       .lean();
 
     io.emit("presence", onlineUsers);
@@ -2797,7 +2894,7 @@ socket.on("editPublicMessage", async (data) => {
 
     if (u) {
       const onlineUsers = await User.find({ online: true })
-        .select('username display imageUrl extraPhotos info wins losses color language age createdAt -_id')
+        .select('username display imageUrl extraPhotos info wins losses color language age height weight createdAt -_id')
         .lean();
 
       io.emit('presence', onlineUsers);
