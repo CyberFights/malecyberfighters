@@ -133,7 +133,11 @@ const HP_ALLOWED_ACTIONS = new Set([
 const HP_PROXY_TIMEOUT_MS = 8 * 1000;
 
 app.get('/api/hp-config', (req, res) => {
-  res.json({ configured: !!HP_API_URL });
+  // True whenever /api/hp/* can resolve a command: the external Hp service
+  // (remote: true) or the embedded engine below. Clients therefore always
+  // talk to this server for match state, which is shared across every
+  // player instead of living in one browser's localStorage.
+  res.json({ configured: true, remote: !!HP_API_URL });
 });
 
 app.post('/api/hp/:action', async (req, res) => {
@@ -143,7 +147,20 @@ app.post('/api/hp/:action', async (req, res) => {
     return res.status(404).json({ error: 'Unknown Hp action.' });
   }
   if (!HP_API_URL) {
-    return res.status(503).json({ error: 'Hp service not configured (set HP_API_URL).' });
+    // No external Hp service — resolve the command with the embedded
+    // in-process engine below so match state is shared between all
+    // clients. (Previously this returned 503 and the client fell back to
+    // a per-browser localStorage engine, so a second player on another
+    // device could never find the first player's room and the match was
+    // stuck on "waiting for second player".)
+    let reply;
+    try {
+      reply = hpEmbeddedAction(action, req.body || {});
+    } catch (err) {
+      console.error('Embedded Hp engine error:', err?.message || err);
+      return res.status(500).json({ error: 'Internal server error.' });
+    }
+    return res.status(reply.status).json(reply.body);
   }
 
   try {
@@ -167,6 +184,413 @@ app.post('/api/hp/:action', async (req, res) => {
     return res.status(502).json({ error: 'Hp service unreachable.' });
   }
 });
+
+// ---------- EMBEDDED HP DICE ENGINE ----------
+// In-process fallback for /api/hp/* when HP_API_URL is not set. The match
+// commands (/create-game, /join-game, /move, /game-state, /end-game,
+// /end-all-games) need game state that is shared between every player, so
+// it lives here on the server instead of in each browser's localStorage.
+//
+// The math is a 1:1 port of CyberFights/Hp (stateless actions from
+// server.js, stateful game flow from server2.js) with identical
+// request/response shapes, so the chat client works unchanged. One
+// deliberate deviation: a room whose last match has ended can host a new
+// match (the Hp service blocks such rooms with "Room already exists."
+// forever; the client's local engine — and players — expect the room to
+// be reusable once the match is over).
+const hpGames = new Map();
+
+function hpRollDice(sides) {
+  const n = (typeof sides === 'number' && sides >= 2) ? Math.floor(sides) : 6;
+  return Math.floor(Math.random() * n) + 1;
+}
+function hpDiceSides(sides) {
+  return (typeof sides === 'number' && sides >= 2) ? Math.floor(sides) : 6;
+}
+function hpClamp(value, min, max) { return Math.min(Math.max(value, min), max); }
+function hpIsNumber(v) { return typeof v === 'number' && isFinite(v); }
+function hpPinAllowedRolls(currentHealth, maxHealth) {
+  const hpPct = maxHealth > 0 ? (currentHealth / maxHealth) * 100 : 0;
+  if (hpPct > 75) return [1, 2, 3, 4, 5, 6];
+  if (hpPct > 50) return [1, 2, 3, 4, 5];
+  if (hpPct > 25) return [1, 2, 3, 4];
+  return [1, 6];
+}
+function hpCreatePlayerState() {
+  return { health: 100, stamina: 100, attraction: 0, atkMultiplier: 1, defMultiplier: 1 };
+}
+function hpGameView(game) {
+  return { id: game.id, players: Array.from(game.players), state: game.state, outcome: game.state.outcome };
+}
+
+// Port of CyberFights/Hp server2.js resolveMove().
+function hpResolveMove(game, playerId, payload) {
+  if (game.state.finished) return { success: false, error: 'Match is already finished.' };
+  if (!game.players.has(playerId)) return { success: false, error: 'Player is not in this game.' };
+
+  const playerIds = Array.from(game.players);
+  if (playerIds.indexOf(playerId) !== game.state.turnIndex % playerIds.length) {
+    return { success: false, error: 'Not your turn.' };
+  }
+
+  const playerIndex = playerIds.indexOf(playerId);
+  const selfKey = playerIndex === 0 ? 'p1' : 'p2';
+  const oppKey = playerIndex === 0 ? 'p2' : 'p1';
+  const self = game.state[selfKey];
+  const opp = game.state[oppKey];
+
+  const moveType = payload.moveType;
+  const atkMul = hpIsNumber(payload.atkMultiplier) ? payload.atkMultiplier : 1;
+  const defMul = hpIsNumber(payload.defMultiplier) ? payload.defMultiplier : 1;
+
+  const result = {
+    playerId, playerIndex, moveType,
+    // atk / def echo the multipliers used for this move so the chat line's
+    // "(ATK x vs DEF y)" shows real values (the client formatter reads
+    // these fields; the client's local engine sets the same pair).
+    atk: atkMul, def: defMul,
+    atkMultiplier: atkMul, defMultiplier: defMul,
+    attackRoll: null, submissionRoll: null, selfDamageRoll: null,
+    escapeRoll: null, teasingRoll: null, pinRoll: null,
+    escaped: false, pinEscaped: false,
+    damageDealt: 0, selfDamage: 0, staminaGained: 0,
+    updatedHealth: self.health, updatedStamina: self.stamina, updatedAttraction: self.attraction,
+    won: false, lost: false, tie: false, ko: false
+  };
+
+  if (moveType === 'attack') {
+    const roll = hpRollDice();
+    result.attackRoll = roll;
+    const staminaCost = Math.floor(roll / 2);
+    const damage = Math.max(0, Math.floor(roll * (atkMul - defMul)));
+    result.damageDealt = damage;
+    self.stamina = hpClamp(self.stamina - staminaCost, 0, 100);
+    opp.health = hpClamp(opp.health - damage, 0, 100);
+  }
+
+  if (moveType === 'submission') {
+    const submissionRoll = hpRollDice();
+    const selfDamageRoll = hpRollDice();
+    result.submissionRoll = submissionRoll;
+    result.selfDamageRoll = selfDamageRoll;
+    const staminaCost = Math.floor(submissionRoll / 2);
+    const damage = Math.max(0, Math.floor(submissionRoll * (atkMul - defMul)));
+    const selfDamage = Math.max(0, Math.floor(selfDamageRoll * defMul));
+    result.damageDealt = damage;
+    result.selfDamage = selfDamage;
+    self.stamina = hpClamp(self.stamina - staminaCost, 0, 100);
+    opp.health = hpClamp(opp.health - damage, 0, 100);
+    opp.attraction = hpClamp(opp.attraction + damage, 0, 100);
+    self.health = hpClamp(self.health - selfDamage, 0, 100);
+  }
+
+  if (moveType === 'escape') {
+    const escapeRoll = hpRollDice();
+    result.escapeRoll = escapeRoll;
+    result.escaped = escapeRoll % 2 === 0;
+    const staminaCost = Math.floor(escapeRoll / 2);
+    self.stamina = hpClamp(self.stamina - staminaCost, 0, 100);
+    if (result.escaped) {
+      const attackRoll = hpRollDice();
+      result.attackRoll = attackRoll;
+      const damage = Math.max(0, Math.floor(attackRoll * atkMul - defMul));
+      result.damageDealt = damage;
+      opp.health = hpClamp(opp.health - damage, 0, 100);
+    }
+  }
+
+  if (moveType === 'teasing') {
+    const teasingRoll = hpRollDice();
+    result.teasingRoll = teasingRoll;
+    const staminaCost = Math.floor(teasingRoll / 2);
+    const attractionGain = Math.max(0, Math.floor(teasingRoll * atkMul));
+    self.stamina = hpClamp(self.stamina - staminaCost, 0, 100);
+    opp.attraction = hpClamp(opp.attraction + attractionGain, 0, 100);
+  }
+
+  if (moveType === 'pin') {
+    const pinRoll = hpRollDice();
+    result.pinRoll = pinRoll;
+    result.pinEscaped = hpPinAllowedRolls(self.health, 20).indexOf(pinRoll) !== -1;
+  }
+
+  self.health = hpClamp(self.health, 0, 100);
+  self.stamina = hpClamp(self.stamina, 0, 100);
+  self.attraction = hpClamp(self.attraction, 0, 100);
+  opp.health = hpClamp(opp.health, 0, 100);
+  opp.stamina = hpClamp(opp.stamina, 0, 100);
+  opp.attraction = hpClamp(opp.attraction, 0, 100);
+
+  result.updatedHealth = self.health;
+  result.updatedStamina = self.stamina;
+  result.updatedAttraction = self.attraction;
+
+  const won = opp.health <= 0;
+  const lost = self.health <= 0;
+  const tie = self.health <= 0 && opp.health <= 0;
+
+  result.won = won;
+  result.lost = lost;
+  result.tie = tie;
+  result.ko = tie;
+
+  if (tie) {
+    game.state.finished = true; game.state.outcome = 'tie'; game.state.winner = null;
+  } else if (won) {
+    game.state.finished = true; game.state.outcome = 'win'; game.state.winner = playerId;
+  } else if (lost) {
+    game.state.finished = true; game.state.outcome = 'loss';
+    game.state.winner = playerIds.find(id => id !== playerId) || null;
+  }
+  if (game.state.finished) game.finishedAt = Date.now();
+
+  game.state.turnIndex = (game.state.turnIndex + 1) % playerIds.length;
+
+  return { success: true, result, game: hpGameView(game) };
+}
+
+// Port of CyberFights/Hp server.js stateless actions + server2.js game
+// endpoints. Returns { status, body } for the /api/hp/:action route.
+function hpEmbeddedAction(action, body) {
+  body = body || {};
+  switch (action) {
+    case 'roll': {
+      if (![body.atk, body.def, body.health, body.stamina].every(hpIsNumber)) {
+        return { status: 400, body: { error: 'atk, def, health, and stamina must be numbers' } };
+      }
+      const sides = hpDiceSides(body.sides);
+      const roll = hpRollDice(sides);
+      const effectiveAttack = Math.max(body.atk - body.def, 0);
+      const damage = hpClamp(roll * effectiveAttack, 0, 18);
+      const staminaLoss = Math.floor(roll - 1);
+      return {
+        status: 200,
+        body: {
+          roll, sides, atk: body.atk, def: body.def, effectiveAttack, damage,
+          healthBefore: body.health, healthAfter: Math.max(body.health - damage, 0),
+          staminaBefore: body.stamina, staminaLoss, staminaAfter: Math.max(body.stamina - staminaLoss)
+        }
+      };
+    }
+
+    case 'submit': {
+      if (![body.atk, body.def, body.health, body.stamina].every(hpIsNumber)) {
+        return { status: 400, body: { error: 'atk, def, health, and stamina must be numbers' } };
+      }
+      const sides = hpDiceSides(body.sides);
+      const rollTarget = hpRollDice(sides);
+      const rollSelf = hpRollDice(sides);
+      const effectiveAttack = Math.max(body.atk - body.def, 0);
+      const damageToTarget = hpClamp(rollTarget * effectiveAttack, 0, 18);
+      const damageToSelf = hpClamp(rollSelf * effectiveAttack, 0, 18);
+      const staminaLoss = Math.floor(rollTarget - 1);
+      const healthBeforeAttacker = hpIsNumber(body.attackerHealth) ? body.attackerHealth : body.health;
+      return {
+        status: 200,
+        body: {
+          rollTarget, rollSelf, sides, atk: body.atk, def: body.def, effectiveAttack,
+          damageToTarget, healthBeforeTarget: body.health, healthAfterTarget: Math.max(body.health - damageToTarget),
+          damageToSelf, healthBeforeAttacker, healthAfterAttacker: Math.max(healthBeforeAttacker - damageToSelf),
+          staminaBefore: body.stamina, staminaLoss, staminaAfter: Math.max(body.stamina - staminaLoss)
+        }
+      };
+    }
+
+    case 'escape': {
+      if (![body.atk, body.def, body.health, body.stamina, body.opponentHealth].every(hpIsNumber)) {
+        return { status: 400, body: { error: 'atk, def, health, stamina, and opponentHealth must be numbers' } };
+      }
+      const sides = hpDiceSides(body.sides);
+      const maxOppHealth = (hpIsNumber(body.opponentMaxHealth) && body.opponentMaxHealth > 0) ? body.opponentMaxHealth : 100;
+      const baseChance = (hpIsNumber(body.baseEscapeChance) && body.baseEscapeChance >= 0 && body.baseEscapeChance <= 1) ? body.baseEscapeChance : 0.8;
+      const healthFraction = Math.max(0, Math.min(1, body.health / maxOppHealth));
+      const escapeChance = baseChance * healthFraction;
+      const escapeRoll = Math.random();
+      const escapeSuccess = escapeRoll < escapeChance;
+      const effectiveAttack = Math.max(body.atk - body.def, 0);
+      let attackRoll = null;
+      let damageToOpponent = 0;
+      let opponentHealthAfter = body.opponentHealth;
+      let staminaLoss = 0;
+      let staminaAfter = body.stamina;
+      if (escapeSuccess) {
+        attackRoll = hpRollDice(sides);
+        damageToOpponent = hpClamp(attackRoll * effectiveAttack, 0, 18);
+        opponentHealthAfter = Math.max(body.opponentHealth - damageToOpponent);
+        staminaLoss = Math.floor(attackRoll - 1);
+        staminaAfter = Math.max(body.stamina - staminaLoss);
+      }
+      return {
+        status: 200,
+        body: {
+          atk: body.atk, def: body.def, effectiveAttack, health: body.health, opponentMaxHealth: maxOppHealth,
+          opponentHealthBefore: body.opponentHealth, opponentHealthAfter, sides,
+          baseEscapeChance: baseChance, healthFraction, escapeChance, escapeRoll, escapeSuccess,
+          attackRoll, damageToOpponent, staminaBefore: body.stamina, staminaLoss, staminaAfter
+        }
+      };
+    }
+
+    case 'pin-escape': {
+      if (![body.health, body.stamina, body.opponentHealth].every(hpIsNumber)) {
+        return { status: 400, body: { error: 'health, stamina, and opponentHealth must be numbers' } };
+      }
+      const sides = hpDiceSides(body.sides);
+      const maxOppHealth = (hpIsNumber(body.opponentMaxHealth) && body.opponentMaxHealth > 0) ? body.opponentMaxHealth : 100;
+      const baseChance = (hpIsNumber(body.baseEscapeChance) && body.baseEscapeChance >= 0 && body.baseEscapeChance <= 1) ? body.baseEscapeChance : 0.8;
+      const healthFraction = Math.max(0, Math.min(1, body.health / maxOppHealth));
+      const escapeChancePerRoll = baseChance * healthFraction;
+      const rolls = [];
+      let anySuccess = false;
+      for (let i = 0; i < 3; i++) {
+        const rollValue = Math.random();
+        const success = rollValue < escapeChancePerRoll;
+        rolls.push({ rollValue, success });
+        if (success) anySuccess = true;
+      }
+      return {
+        status: 200,
+        body: {
+          health: body.health, opponentMaxHealth: maxOppHealth,
+          opponentHealthBefore: body.opponentHealth, opponentHealthAfter: body.opponentHealth,
+          sides, baseEscapeChance: baseChance, healthFraction, escapeChancePerRoll,
+          rolls, escapeSuccess: anySuccess
+        }
+      };
+    }
+
+    case 'tease': {
+      if (![body.atk, body.def, body.stamina, body.opponentAttraction].every(hpIsNumber)) {
+        return { status: 400, body: { error: 'atk, def, stamina, and opponentAttraction must be numbers' } };
+      }
+      const sides = hpDiceSides(body.sides);
+      const maxAttraction = (hpIsNumber(body.opponentMaxAttraction) && body.opponentMaxAttraction > 0) ? body.opponentMaxAttraction : null;
+      const roll = hpRollDice(sides);
+      const effectiveAttack = Math.max(body.atk - body.def, 0);
+      const attractionIncrease = hpClamp(roll * effectiveAttack, 0, 18);
+      let attractionAfter = body.opponentAttraction + attractionIncrease;
+      if (maxAttraction !== null) attractionAfter = Math.min(attractionAfter, maxAttraction);
+      attractionAfter = Math.max(attractionAfter);
+      const staminaLoss = Math.floor(roll - 1);
+      return {
+        status: 200,
+        body: {
+          roll, sides, atk: body.atk, def: body.def, effectiveAttack,
+          attractionIncrease, attractionBefore: body.opponentAttraction, attractionAfter,
+          opponentMaxAttraction: maxAttraction, staminaBefore: body.stamina, staminaLoss,
+          staminaAfter: Math.max(body.stamina - staminaLoss)
+        }
+      };
+    }
+
+    case 'recover': {
+      if (![body.health, body.stamina].every(hpIsNumber)) {
+        return { status: 400, body: { error: 'health and stamina must be numbers' } };
+      }
+      const sides = hpDiceSides(body.sides);
+      const rolls = [hpRollDice(sides), hpRollDice(sides), hpRollDice(sides), hpRollDice(sides)];
+      const recoveryTotal = rolls.reduce((sum, r) => sum + r, 0);
+      const healthCap = (hpIsNumber(body.maxHealth) && body.maxHealth > 0) ? body.maxHealth : null;
+      const staminaCap = (hpIsNumber(body.maxStamina) && body.maxStamina > 0) ? body.maxStamina : null;
+      const healthAfter = healthCap !== null
+        ? hpClamp(body.health + recoveryTotal, 0, healthCap)
+        : Math.max(body.health + recoveryTotal, 0);
+      const staminaAfter = staminaCap !== null
+        ? hpClamp(body.stamina + recoveryTotal, 0, staminaCap)
+        : Math.max(body.stamina + recoveryTotal, 0);
+      return {
+        status: 200,
+        body: {
+          rolls, sides, recoveryTotal,
+          healthBefore: body.health, healthAfter,
+          staminaBefore: body.stamina, staminaAfter,
+          maxHealth: healthCap, maxStamina: staminaCap
+        }
+      };
+    }
+
+    case 'create-game': {
+      const roomId = body.roomId ? String(body.roomId) : null;
+      if (!roomId) return { status: 400, body: { error: 'Missing roomId.' } };
+      const existing = hpGames.get(roomId);
+      // A room with a still-running match cannot start a new one, but once
+      // the previous match has ended the room is free to play again.
+      if (existing && !existing.state.finished) {
+        return { status: 400, body: { error: 'Room already exists.' } };
+      }
+      const game = {
+        id: roomId,
+        players: new Set(),
+        state: {
+          turnIndex: 0, finished: false, winner: null, outcome: null,
+          p1: hpCreatePlayerState(), p2: hpCreatePlayerState()
+        }
+      };
+      hpGames.set(roomId, game);
+      return { status: 200, body: { gameId: game.id } };
+    }
+
+    case 'join-game': {
+      const game = hpGames.get(String(body.roomId || ''));
+      if (!game) return { status: 404, body: { error: 'Room not found.' } };
+      if (game.state.finished) return { status: 400, body: { error: 'The game is already finished.' } };
+      if (game.players.size >= 2) return { status: 400, body: { error: 'Room is full.' } };
+      game.players.add(body.playerId);
+      return { status: 200, body: { success: true, gameId: game.id, players: Array.from(game.players) } };
+    }
+
+    case 'dice-match': {
+      const game = hpGames.get(String(body.roomId || ''));
+      if (!game) return { status: 404, body: { error: 'Game not found.' } };
+      const outcome = hpResolveMove(game, body.playerId, body);
+      if (!outcome.success) return { status: 400, body: { success: false, error: outcome.error } };
+      return { status: 200, body: { result: outcome.result, game: hpGameView(game) } };
+    }
+
+    case 'game-state': {
+      const game = hpGames.get(String(body.roomId || ''));
+      if (!game) return { status: 404, body: { error: 'Game not found.' } };
+      return { status: 200, body: hpGameView(game) };
+    }
+
+    case 'end-game': {
+      const game = hpGames.get(String(body.roomId || ''));
+      if (!game) return { status: 404, body: { error: 'Game not found.' } };
+      if (game.state.finished) return { status: 400, body: { error: 'The game is already finished.' } };
+      game.state.finished = true;
+      game.state.winner = body.winner || null;
+      game.state.outcome = body.outcome || 'manually ended';
+      game.finishedAt = Date.now();
+      return { status: 200, body: { success: true, message: 'The game has been manually ended.', state: game.state } };
+    }
+
+    case 'end-all-games': {
+      let endedGamesCount = 0;
+      hpGames.forEach((game) => {
+        if (!game.state.finished) {
+          game.state.finished = true;
+          game.state.winner = null;
+          game.state.outcome = body.outcome || 'manually ended';
+          game.finishedAt = Date.now();
+          endedGamesCount++;
+        }
+      });
+      return { status: 200, body: { success: true, message: 'All active games have been manually ended.', endedGamesCount } };
+    }
+
+    default:
+      return { status: 404, body: { error: 'Unknown Hp action.' } };
+  }
+}
+
+// Finished matches linger so late /game-state polls can still show the
+// final result, then get swept so the map does not grow forever.
+setInterval(() => {
+  const cutoff = Date.now() - 30 * 60 * 1000;
+  hpGames.forEach((game, id) => {
+    if (game.state.finished && game.finishedAt && game.finishedAt < cutoff) hpGames.delete(id);
+  });
+}, 10 * 60 * 1000);
 
 // ---------- IMAGE PROXY ----------
 // Remote image hosts (ImgBB / Discord CDN) sit behind Cloudflare and sometimes
@@ -386,7 +810,13 @@ app.use((req, res, next) => {
 });
 
 // ---------- DB ----------
-mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+// serverSelectionTimeoutMS / bufferTimeoutMS: without a reachable Mongo,
+// DB-backed endpoints should answer fast with an error instead of hanging
+// on the driver's defaults (30 s server-selection, 10 s per buffered
+// operation — a handler doing several queries in sequence could stall for
+// 20+ s). Both timers only apply while the connection is not ready, so a
+// healthy Mongo is unaffected.
+mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 5000, bufferTimeoutMS: 5000 })
   .then(() => console.log('MongoDB connected'))
   .catch(err => console.warn('MongoDB connection failed (continuing without DB):', err.message || err));
 
