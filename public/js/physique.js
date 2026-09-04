@@ -135,7 +135,7 @@
      Each fighter's atk / def is derived from their physique:
 
        atk = height (m) × √weight (kg)
-       def = weight (kg) / height (m)
+       def = (weight (kg) / height (m)) / 2
 
      Height arrives as a feet + inches string and weight as whole
      pounds; both are converted to metric first. The values are
@@ -173,7 +173,7 @@
       heightM: round3(meters),
       weightKg: round3(kg),
       atk: round2(meters * Math.sqrt(kg)),
-      def: round2(kg / meters)
+      def: round2((kg / meters) / 2)
     };
   }
 
