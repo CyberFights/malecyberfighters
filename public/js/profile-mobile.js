@@ -134,7 +134,10 @@ $("editSubmit").addEventListener("click", async () => {
     const data = await resp.json();
 
     if (!data.ok) {
-      $("editError").textContent = data.error || "Update failed";
+      $("editError").textContent =
+        data.error === "invalid_discord_id"
+          ? "Discord User ID must be the numeric ID (17–20 digits), not your @username. In Discord: Settings → Advanced → Developer Mode, then right-click your name → Copy User ID."
+          : (data.error || "Update failed");
       $("editError").style.display = "block";
       return;
     }

@@ -2247,6 +2247,31 @@ app.delete('/api/profile/photos', async (req, res) => {
 });
 
 // ---------- API: UPDATE PROFILE ----------
+// A Discord user ID is a snowflake: a plain run of digits. The profile field is
+// free text, so people paste a mention (<@123456789012345678>), a username
+// (john_doe) or an old tag (john#1234) instead. Anything that is not a
+// snowflake breaks the DM bridge in both directions, but only one direction
+// says so: outbound calls users.fetch() and swallows the failure into the log,
+// so the site looks fine while nothing is delivered. Accept every form that
+// clearly names a snowflake and reject the rest instead of storing it.
+const DISCORD_SNOWFLAKE = /^\d{16,25}$/;
+
+function normalizeDiscordId(value) {
+  if (value === null || value === undefined) return { ok: true, value: null };
+
+  const raw = String(value).trim();
+  if (!raw) return { ok: true, value: null };          // clearing the field is allowed
+
+  // A pasted mention: <@123456789012345678> or <@!123456789012345678>.
+  const mention = raw.match(/^<@!?(\d+)>$/) || raw.match(/^@(\d+)$/);
+  // Otherwise drop stray spaces and the zero-width characters that survive a
+  // copy/paste out of Discord.
+  const candidate = mention ? mention[1] : raw.replace(/[\s\u200b-\u200d\ufeff]/g, '');
+
+  if (DISCORD_SNOWFLAKE.test(candidate)) return { ok: true, value: candidate };
+  return { ok: false, value: raw };
+}
+
 app.post('/api/update-profile', async (req, res) => {
   const { username, updates } = req.body;
 
@@ -2257,6 +2282,14 @@ app.post('/api/update-profile', async (req, res) => {
   // Physique fields get normalised before they reach Mongo so clients can
   // send 5'11", 5'11 or raw inches and get the same stored value back.
   const safeUpdates = Object.assign({}, updates);
+
+  if (Object.prototype.hasOwnProperty.call(safeUpdates, 'discordId')) {
+    const discordId = normalizeDiscordId(safeUpdates.discordId);
+    if (!discordId.ok) {
+      return res.status(400).json({ ok: false, error: 'invalid_discord_id' });
+    }
+    safeUpdates.discordId = discordId.value;
+  }
 
   if (Object.prototype.hasOwnProperty.call(safeUpdates, 'height')) {
     const rawHeight = safeUpdates.height;

@@ -12,6 +12,8 @@
 // so the mention runs up to the first space and whatever follows is the message
 // body. The body is optional so "@jane" on its own gets a "what to send?" prompt
 // instead of a generic usage error.
+const mongoose = require('mongoose');
+
 const MENTION = /^\s*@(\S+?)(?:\s+([\s\S]*))?$/;
 
 // "@jane, hey" — punctuation typed after the name is not part of the username.
@@ -24,6 +26,24 @@ const setupDiscordListener = (User, DM, translateText, io, sendDiscordDM, discor
   discordEvents.on('dm', async ({ discordId, text }) => {
     try {
       const sender = await User.findOne({ discordId }).lean();
+
+      // One line per inbound DM, including the database this process is
+      // talking to. When the same Discord account alternates between working
+      // and "please link your account", the log says which of the three
+      // possible causes it is:
+      //   no line at all          → another process answered (a second
+      //                             deployment holding the gateway, i.e. the
+      //                             running code is not this code)
+      //   a different from= id    → the failing DM came from another Discord
+      //                             account (desktop vs phone, two accounts)
+      //   same id, account=NONE   → the row is gone or this process reads a
+      //                             different database (db= tells you which)
+      console.log(
+        `[Discord DM] db=${mongoose.connection.name} from=${discordId} ` +
+        `account=${sender ? sender.username : "NONE"} ` +
+        `socket=${sender ? (sender.socketId || "-") : "-"}`
+      );
+
       if (!sender) {
         await sendDiscordDM(discordId, "Please link your Discord account on the MaleCyberFighters website to use this feature.");
         return;
