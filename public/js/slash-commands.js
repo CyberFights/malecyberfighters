@@ -31,7 +31,7 @@
   // Per-fighter combat stats. Each person's atk / def is derived from their
   // physique (height → meters, weight → kg):
   //     atk = height (m) × √weight (kg)
-  //     def = (weight (kg) / height (m)) / 2
+  //     def = weight (kg) / height (m)
   // The values are saved on the user document (userData) by the server and
   // pulled from /api/combat-stats for the dice match calculations.
   //
@@ -43,6 +43,21 @@
   var DEF_MULTI = 1.84;
   function baselineStats() {
     return (typeof Physique !== 'undefined' && Physique.baselineStats) || { atk: 16.52, def: 46.53 };
+  }
+  // Per-hit damage ceiling, shared with the server engine via physique.js.
+  function damageCap() {
+    return (typeof Physique !== 'undefined' && typeof Physique.DAMAGE_CAP === 'number' && Physique.DAMAGE_CAP > 0)
+      ? Physique.DAMAGE_CAP : 30;
+  }
+  // Divisor applied to every damaging hit before the cap (1 = unchanged).
+  function damageScale() {
+    return (typeof Physique !== 'undefined' && typeof Physique.DAMAGE_SCALE === 'number' && Physique.DAMAGE_SCALE > 0)
+      ? Physique.DAMAGE_SCALE : 1;
+  }
+  // Floor for a landed blow (a hit that would deal 0 still deals this much).
+  function minDamage() {
+    return (typeof Physique !== 'undefined' && typeof Physique.MIN_DAMAGE === 'number' && Physique.MIN_DAMAGE >= 0)
+      ? Physique.MIN_DAMAGE : 1;
   }
 
   /* ------------------------------------------------------------
@@ -528,7 +543,7 @@
 
       // Damage is driven by the fighters' saved physique stats (userData):
       // the actor's ATK (height (m) × √weight (kg)) against the defender's
-      // DEF ((weight (kg) / height (m)) / 2). Stat-less fighters use the baseline
+      // DEF (weight (kg) / height (m)). Stat-less fighters use the baseline
       // fighter's values. The legacy-magnitude multipliers scale the
       // non-damage lines (submission recoil, teasing) to their original range.
       var atkUsed = fighterAtk(self);
@@ -550,7 +565,7 @@
         var roll = Local.rollDice(6);
         result.attackRoll = roll;
         var staminaCost = Math.floor(roll / 2);
-        var damage = Math.max(0, Math.floor(roll * atkUsed - defUsed));
+        var damage = clampNum(Math.floor((roll * atkUsed - defUsed) / damageScale()), minDamage(), damageCap());
         result.damageDealt = damage;
         self.stamina = clampNum(self.stamina - staminaCost, 0, 100);
         opp.health = clampNum(opp.health - damage, 0, 100);
@@ -562,7 +577,7 @@
         result.submissionRoll = submissionRoll;
         result.selfDamageRoll = selfDamageRoll;
         var subStaminaCost = Math.floor(submissionRoll / 2);
-        var subDamage = Math.max(0, Math.floor(submissionRoll * atkUsed - defUsed));
+        var subDamage = clampNum(Math.floor((submissionRoll * atkUsed - defUsed) / damageScale()), minDamage(), damageCap());
         var recoil = Math.max(0, Math.floor(selfDamageRoll * fighterDefMul(self)));
         result.damageDealt = subDamage;
         result.selfDamage = recoil;
@@ -581,7 +596,7 @@
         if (result.escaped) {
           var counterRoll = Local.rollDice(6);
           result.attackRoll = counterRoll;
-          var counterDamage = Math.max(0, Math.floor(counterRoll * atkUsed - defUsed));
+          var counterDamage = clampNum(Math.floor((counterRoll * atkUsed - defUsed) / damageScale()), minDamage(), damageCap());
           result.damageDealt = counterDamage;
           opp.health = clampNum(opp.health - counterDamage, 0, 100);
         }
