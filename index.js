@@ -240,6 +240,13 @@ function hpResolveMove(game, playerId, payload) {
   const opp = game.state[oppKey];
 
   const moveType = payload.moveType;
+  const needsRecover = self.health < 5 || self.stamina < 5;
+  if (needsRecover && moveType !== 'recover') {
+    return { success: false, error: 'HP or stamina is below 5 — use /move recover.' };
+  }
+  if (!needsRecover && moveType === 'recover') {
+    return { success: false, error: 'Recover is only available when HP or stamina is below 5.' };
+  }
   const atkMul = hpIsNumber(payload.atkMultiplier) ? payload.atkMultiplier : 1;
   const defMul = hpIsNumber(payload.defMultiplier) ? payload.defMultiplier : 1;
 
@@ -253,7 +260,7 @@ function hpResolveMove(game, playerId, payload) {
     attackRoll: null, submissionRoll: null, selfDamageRoll: null,
     escapeRoll: null, teasingRoll: null, pinRoll: null,
     escaped: false, pinEscaped: false,
-    damageDealt: 0, selfDamage: 0, staminaGained: 0,
+    damageDealt: 0, selfDamage: 0, staminaGained: 0, recoveryRolls: null,
     updatedHealth: self.health, updatedStamina: self.stamina, updatedAttraction: self.attraction,
     won: false, lost: false, tie: false, ko: false
   };
@@ -314,6 +321,15 @@ function hpResolveMove(game, playerId, payload) {
     result.pinEscaped = hpPinAllowedRolls(self.health, 20).indexOf(pinRoll) !== -1;
   }
 
+  if (moveType === 'recover') {
+    const rolls = [hpRollDice(), hpRollDice(), hpRollDice(), hpRollDice()];
+    const recoveryTotal = rolls.reduce((sum, r) => sum + r, 0);
+    result.recoveryRolls = rolls;
+    result.staminaGained = recoveryTotal;
+    self.health = hpClamp(self.health + recoveryTotal, 0, 100);
+    self.stamina = hpClamp(self.stamina + recoveryTotal, 0, 100);
+  }
+
   self.health = hpClamp(self.health, 0, 100);
   self.stamina = hpClamp(self.stamina, 0, 100);
   self.attraction = hpClamp(self.attraction, 0, 100);
@@ -334,13 +350,25 @@ function hpResolveMove(game, playerId, payload) {
   result.tie = tie;
   result.ko = tie;
 
+  const oppId = playerIds.find(id => id !== playerId) || null;
+  if (moveType === 'pin' && !result.pinEscaped) {
+    game.state.hold = { type: 'pin', holder: playerId, victim: oppId };
+  } else if (moveType === 'submission') {
+    game.state.hold = { type: 'submission', holder: playerId, victim: oppId };
+  } else if (moveType === 'escape' && result.escaped) {
+    game.state.hold = null;
+  } else if (moveType === 'attack' || moveType === 'teasing' || (moveType === 'pin' && result.pinEscaped)) {
+    game.state.hold = null;
+  }
+
   if (tie) {
-    game.state.finished = true; game.state.outcome = 'tie'; game.state.winner = null;
+    game.state.finished = true; game.state.outcome = 'tie'; game.state.winner = null; game.state.hold = null;
   } else if (won) {
-    game.state.finished = true; game.state.outcome = 'win'; game.state.winner = playerId;
+    game.state.finished = true; game.state.outcome = 'win'; game.state.winner = playerId; game.state.hold = null;
   } else if (lost) {
     game.state.finished = true; game.state.outcome = 'loss';
-    game.state.winner = playerIds.find(id => id !== playerId) || null;
+    game.state.winner = oppId;
+    game.state.hold = null;
   }
   if (game.state.finished) game.finishedAt = Date.now();
 
@@ -522,7 +550,7 @@ function hpEmbeddedAction(action, body) {
         id: roomId,
         players: new Set(),
         state: {
-          turnIndex: 0, finished: false, winner: null, outcome: null,
+          turnIndex: 0, finished: false, winner: null, outcome: null, hold: null,
           p1: hpCreatePlayerState(), p2: hpCreatePlayerState()
         }
       };
@@ -864,7 +892,7 @@ const userSchema = new mongoose.Schema({
   },
   // Combat stats derived from the physique above (physique.combatStats):
   //   atk = height (m) × √weight (kg)
-  //   def = weight (kg) / height (m)
+  //   def = (weight (kg) / height (m)) / 2
   // Saved here ("userData") whenever the physique is registered or updated,
   // and pulled by /api/combat-stats for the dice match calculations.
   // Both stay null until the user has a complete physique.
@@ -1234,7 +1262,7 @@ async function forwardDMToDiscord(senderUsername, receiver, messageContent) {
   if (receiver && receiver.discordId) {
     let formattedMessage = `**${senderUsername}** sent you a DM on MaleCyberFighters:\n\n${messageContent}`;
     // Replies sent back through the bot have to name their recipient, so show
-    // the syntax instead of letting a bare reply bounce. System notices have no
+    // the syntax instead of letting a bary bounce. System notices have no
     // human to reply to, so they get no hint.
     if (senderUsername && senderUsername !== "SYSTEM") {
       formattedMessage += `\n\n*To reply from Discord, send \`@${senderUsername} your message\`.*`;
@@ -2229,7 +2257,7 @@ app.post('/api/update-profile', async (req, res) => {
 // How the dice match pulls a fighter's saved atk / def from their userData.
 // The values are derived from the physique (height → meters, weight → kg):
 //   atk = height (m) × √weight (kg)
-//   def = weight (kg) / height (m)
+//   def = (weight (kg) / height (m)) / 2
 // and stored on the user document when the physique is registered or
 // updated. `atkMultiplier` / `defMultiplier` are the same values scaled back
 // to the legacy dice engine magnitude (see physique.js).

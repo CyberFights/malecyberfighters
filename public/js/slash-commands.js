@@ -31,7 +31,7 @@
   // Per-fighter combat stats. Each person's atk / def is derived from their
   // physique (height → meters, weight → kg):
   //     atk = height (m) × √weight (kg)
-  //     def = weight (kg) / height (m)
+  //     def = (weight (kg) / height (m)) / 2
   // The values are saved on the user document (userData) by the server and
   // pulled from /api/combat-stats for the dice match calculations.
   //
@@ -441,7 +441,7 @@
         id: roomId,
         players: [],
         state: {
-          turnIndex: 0, finished: false, winner: null, outcome: null,
+          turnIndex: 0, finished: false, winner: null, outcome: null, hold: null,
           p1: Local.newPlayerState(), p2: Local.newPlayerState()
         }
       };
@@ -518,10 +518,17 @@
       var opp = state[oppKey];
 
       var moveType = body.moveType;
+      var needsRecover = self.health < 5 || self.stamina < 5;
+      if (needsRecover && moveType !== 'recover') {
+        throw hpFail('HP or stamina is below 5 — use /move recover.');
+      }
+      if (!needsRecover && moveType === 'recover') {
+        throw hpFail('Recover is only available when HP or stamina is below 5.');
+      }
 
       // Damage is driven by the fighters' saved physique stats (userData):
       // the actor's ATK (height (m) × √weight (kg)) against the defender's
-      // DEF (weight (kg) / height (m)). Stat-less fighters use the baseline
+      // DEF ((weight (kg) / height (m)) / 2). Stat-less fighters use the baseline
       // fighter's values. The legacy-magnitude multipliers scale the
       // non-damage lines (submission recoil, teasing) to their original range.
       var atkUsed = fighterAtk(self);
@@ -534,7 +541,7 @@
         attackRoll: null, submissionRoll: null, selfDamageRoll: null,
         escapeRoll: null, teasingRoll: null, pinRoll: null,
         escaped: false, pinEscaped: false,
-        damageDealt: 0, selfDamage: 0, staminaGained: 0,
+        damageDealt: 0, selfDamage: 0, staminaGained: 0, recoveryRolls: null,
         updatedHealth: self.health, updatedStamina: self.stamina, updatedAttraction: self.attraction,
         won: false, lost: false, tie: false, ko: false
       };
@@ -595,6 +602,15 @@
         result.pinEscaped = Local.pinAllowedRolls(self.health, 20).indexOf(pinRoll) !== -1;
       }
 
+      if (moveType === 'recover') {
+        var recRolls = [Local.rollDice(6), Local.rollDice(6), Local.rollDice(6), Local.rollDice(6)];
+        var recoveryTotal = recRolls.reduce(function (sum, n) { return sum + n; }, 0);
+        result.recoveryRolls = recRolls;
+        result.staminaGained = recoveryTotal;
+        self.health = clampNum(self.health + recoveryTotal, 0, 100);
+        self.stamina = clampNum(self.stamina + recoveryTotal, 0, 100);
+      }
+
       self.health = clampNum(self.health, 0, 100);
       self.stamina = clampNum(self.stamina, 0, 100);
       self.attraction = clampNum(self.attraction, 0, 100);
@@ -611,15 +627,27 @@
       result.tie = self.health <= 0 && opp.health <= 0;
       result.ko = result.tie;
 
+      var oppId = game.players.find(function (id) { return id !== playerId; }) || null;
+      if (moveType === 'pin' && !result.pinEscaped) {
+        state.hold = { type: 'pin', holder: playerId, victim: oppId };
+      } else if (moveType === 'submission') {
+        state.hold = { type: 'submission', holder: playerId, victim: oppId };
+      } else if (moveType === 'escape' && result.escaped) {
+        state.hold = null;
+      } else if (moveType === 'attack' || moveType === 'teasing' || (moveType === 'pin' && result.pinEscaped)) {
+        state.hold = null;
+      }
+
       if (result.tie) {
-        state.finished = true; state.outcome = 'tie'; state.winner = null;
+        state.finished = true; state.outcome = 'tie'; state.winner = null; state.hold = null;
       } else if (result.ko) {
-        state.finished = true; state.outcome = 'ko'; state.winner = null;
+        state.finished = true; state.outcome = 'ko'; state.winner = null; state.hold = null;
       } else if (result.won) {
-        state.finished = true; state.outcome = 'win'; state.winner = playerId;
+        state.finished = true; state.outcome = 'win'; state.winner = playerId; state.hold = null;
       } else if (result.lost) {
         state.finished = true; state.outcome = 'loss';
-        state.winner = game.players.find(function (id) { return id !== playerId; }) || null;
+        state.winner = oppId;
+        state.hold = null;
       }
 
       state.turnIndex = (state.turnIndex + 1) % game.players.length;
@@ -692,6 +720,26 @@
      Result formatters
   ------------------------------------------------------------ */
   function localTag(out) { return out.local ? '  ·  ⚙️ local engine' : ''; }
+
+  // Next-turn command hint. Recover wins if that fighter's HP or ST is
+  // below 5; a pin/submission hold limits them to escape; otherwise the
+  // full move list.
+  function slotForPlayer(players, state, name) {
+    if (!players || !state || !name) return null;
+    var i = players.indexOf(name);
+    if (i === 0) return state.p1;
+    if (i === 1) return state.p2;
+    return null;
+  }
+  function nextMoveHint(next, players, st, lastResult) {
+    var slot = slotForPlayer(players, st, next);
+    if (slot && (Number(slot.health) < 5 || Number(slot.stamina) < 5)) return '/move recover';
+    var trapped = (st && st.hold && st.hold.victim === next) ||
+      (lastResult && lastResult.moveType === 'pin' && !lastResult.pinEscaped) ||
+      (lastResult && lastResult.moveType === 'submission');
+    if (trapped) return '/move escape';
+    return '/move attack|submission|escape|teasing|pin';
+  }
 
   var formatters = {
     roll: function (d, out) {
@@ -771,21 +819,22 @@
       } else if (r.moveType === 'pin') {
         line = '📌 ' + currentDisplay() + ' goes for the pin — roll ' + r.pinRoll + ': ' +
           (r.pinEscaped ? 'kicked out!' : 'held down!');
+      } else if (r.moveType === 'recover') {
+        var rec = (r.recoveryRolls && r.recoveryRolls.length) ? r.recoveryRolls.join(' + ') : '?';
+        line = '💖 ' + currentDisplay() + ' recovers — rolls ' + rec +
+          ' = +' + (r.staminaGained || 0) + ' HP & ST.';
       } else {
         line = '🎮 ' + currentDisplay() + ' plays "' + r.moveType + '".';
       }
 
-      var p1 = d.game.players[0] || 'P1';
-      var p2 = d.game.players[1] || 'P2';
-      line += '  ·  🩸 ' + p1 + ': ' + st.p1.health + ' HP / ' + st.p1.stamina + ' ST / ' + st.p1.attraction + '♥' + statSuffix(st.p1) + '  ·  ' +
-        p2 + ': ' + st.p2.health + ' HP / ' + st.p2.stamina + ' ST / ' + st.p2.attraction + '♥' + statSuffix(st.p2);
+      line += '  ·  ✍️ ' + currentDisplay() + ', please type out your move.';
 
       if (r.won) line += '  ·  🏆 ' + currentDisplay() + ' WINS the match!';
       else if (r.tie) line += '  ·  🤝 Double knock-out — the match is a tie!';
       else if (r.lost) line += '  ·  💀 ' + currentDisplay() + ' is down!';
       else {
         var next = d.game.players[st.turnIndex % d.game.players.length];
-        if (next) line += '  ·  ▶️ ' + next + ', your turn — /move attack|submission|escape|teasing|pin';
+        if (next) line += '  ·  ▶️ ' + next + ', your turn — ' + nextMoveHint(next, d.game.players, st, r);
       }
       return line + localTag(out);
     },
@@ -1095,8 +1144,9 @@
       if (st.winner) detail += ' — winner: ' + st.winner;
       status = '<div class="scoreboard-status result">🏆 ' + escapeHtml(detail) + '</div>';
     } else {
-      status = '<div class="scoreboard-status">▶️ ' + escapeHtml(players[turnOf] || '—') +
-        ', your turn — /move attack|submission|escape|teasing|pin</div>';
+      var turnName = players[turnOf] || '—';
+      status = '<div class="scoreboard-status">▶️ ' + escapeHtml(turnName) +
+        ', your turn — ' + escapeHtml(nextMoveHint(turnName, players, st, null)) + '</div>';
     }
     body.innerHTML = cards + status;
 
@@ -1567,12 +1617,12 @@
     {
       name: 'move',
       aliases: ['dice-match', 'attack', 'submission', 'teasing', 'pin'],
-      usage: '/move <attack|submission|escape|teasing|pin> [roomId]',
+      usage: '/move <attack|submission|escape|teasing|pin|recover> [roomId]',
       desc: 'Play your turn in the dice match',
       run: function (args, ctx) {
         var me = requireLogin();
         var moveType = String(args[0] || '').toLowerCase();
-        var valid = ['attack', 'submission', 'escape', 'teasing', 'pin'];
+        var valid = ['attack', 'submission', 'escape', 'teasing', 'pin', 'recover'];
         if (valid.indexOf(moveType) === -1) throw usageError(this);
         var roomId = resolveGameRoom(args, ctx, 1);
         var body = {
