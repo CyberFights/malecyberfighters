@@ -19,6 +19,17 @@
     --radius: 14px;
     --border: 1px solid rgba(79,209,255,0.35);
     --glass: rgba(10,16,32,0.55);
+
+    /* ---- Darker neon exterior frame ---------------------------------
+       Applied to the OUTSIDE edge of popup shells only (spread box-shadow
+       rings), so nothing inside a popup picks them up.
+       Values match css/desktop.css and css/mobile.css.
+    ------------------------------------------------------------------- */
+    --popup-neon: #0091ff;
+    --popup-neon-hairline: rgba(0, 214, 255, 0.7);
+    --popup-neon-glow: rgba(0, 145, 255, 0.62);
+    --popup-neon-glow-wide: rgba(0, 62, 190, 0.34);
+    --popup-halo: rgba(0, 2, 10, 0.95);
   }
 
   body {
@@ -287,11 +298,19 @@ background:var(--glass);
   height: 620px;
   background: linear-gradient(180deg,#050a16,#0a1324);
   border-radius: 12px;
-  border: 1px solid rgba(160,200,255,0.12);
+  /* Darker neon frame on the exterior only — the rings spread outward
+     from the border box, leaving the contents untouched. */
+  border: 1px solid var(--popup-neon);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 20px 60px rgba(120,180,255,0.25);
+  box-shadow:
+    inset 0 0 0 1px var(--popup-neon-hairline),
+    0 0 0 1px var(--popup-neon),
+    0 0 0 3px var(--popup-halo),
+    0 0 13px 1px var(--popup-neon-glow),
+    0 0 32px 6px var(--popup-neon-glow-wide),
+    0 20px 60px rgba(0,0,0,0.6);
 
   /* ADD THIS */
   cursor: default;
@@ -485,9 +504,14 @@ animation: holoParticles 22s linear infinite;
 /* Admin Panel */
 #modalAdmin > div {
   background: rgba(0, 20, 30, 0.9);
-  border: 1px solid var(--accent);
+  border: 1px solid var(--popup-neon);
   border-radius: 14px;
-  box-shadow: var(--accent-glow);
+  box-shadow:
+    inset 0 0 0 1px var(--popup-neon-hairline),
+    0 0 0 1px var(--popup-neon),
+    0 0 0 3px var(--popup-halo),
+    0 0 13px 1px var(--popup-neon-glow),
+    0 0 32px 6px var(--popup-neon-glow-wide);
 }
 
 table {
@@ -504,15 +528,25 @@ table tr:hover {
   background: rgba(0, 255, 255, 0.08);
 }
 
-  #modalLogin > div {
+  #modalLogin > div,
+  #modalRegister > div {
     background:#111;
+    border:1px solid var(--popup-neon);
+    box-shadow:
+      inset 0 0 0 1px var(--popup-neon-hairline),
+      0 0 0 1px var(--popup-neon),
+      0 0 0 3px var(--popup-halo),
+      0 0 13px 1px var(--popup-neon-glow),
+      0 0 32px 6px var(--popup-neon-glow-wide);
+  }
+
+  #modalLogin > div {
     padding:20px;
     border-radius:10px;
     width:360px
   }
 
   #modalRegister > div {
-    background:#111;
     padding:18px;
     border-radius:10px;
     width:520px;
@@ -672,7 +706,13 @@ table tr:hover {
   width: 600px;
   max-height: 80vh;
   overflow: hidden;
-  border: 1px solid rgba(160,200,255,0.25);
+  border: 1px solid var(--popup-neon);
+  box-shadow:
+    inset 0 0 0 1px var(--popup-neon-hairline),
+    0 0 0 1px var(--popup-neon),
+    0 0 0 3px var(--popup-halo),
+    0 0 13px 1px var(--popup-neon-glow),
+    0 0 32px 6px var(--popup-neon-glow-wide);
 }
 
 .modal-scroll {
@@ -786,8 +826,13 @@ table tr:hover {
   width: 480px;
   max-width: 90%;
   border-radius: 12px;
-  box-shadow: 0 0 25px rgba(0,150,255,0.4);
-  border: 1px solid rgba(0,150,255,0.4);
+  border: 1px solid var(--popup-neon);
+  box-shadow:
+    inset 0 0 0 1px var(--popup-neon-hairline),
+    0 0 0 1px var(--popup-neon),
+    0 0 0 3px var(--popup-halo),
+    0 0 13px 1px var(--popup-neon-glow),
+    0 0 32px 6px var(--popup-neon-glow-wide);
   color: #fff;
   font-family: Arial, sans-serif;
   animation: scaleIn 0.25s ease;
@@ -895,7 +940,13 @@ table tr:hover {
   width: 400px;
   text-align: center;
   color: #fff;
-  border: 1px solid #00aaff;
+  border: 1px solid var(--popup-neon);
+  box-shadow:
+    inset 0 0 0 1px var(--popup-neon-hairline),
+    0 0 0 1px var(--popup-neon),
+    0 0 0 3px var(--popup-halo),
+    0 0 13px 1px var(--popup-neon-glow),
+    0 0 32px 6px var(--popup-neon-glow-wide);
 }
 
 .modal-content button {

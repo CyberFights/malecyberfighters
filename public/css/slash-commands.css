@@ -12,9 +12,18 @@
   max-height: 300px;
   overflow-y: auto;
   background: rgba(10, 16, 28, 0.97);
-  border: 1px solid rgba(127, 216, 255, 0.35);
+  /* Darker neon exterior frame, matching the popup shells in the main
+     stylesheets. Rings spread outward only — the popup contents are
+     untouched. Fallbacks keep this working on pages that load
+     slash-commands.css without desktop.css/mobile.css. */
+  border: 1px solid var(--popup-neon, #0091ff);
   border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55), 0 0 18px rgba(127, 216, 255, 0.12);
+  box-shadow:
+    0 0 0 1px var(--popup-neon, #0091ff),
+    0 0 0 3px var(--popup-halo, rgba(0, 2, 10, 0.95)),
+    0 0 12px 1px var(--popup-neon-glow, rgba(0, 145, 255, 0.62)),
+    0 0 28px 6px var(--popup-neon-glow-wide, rgba(0, 62, 190, 0.34)),
+    0 10px 30px rgba(0, 0, 0, 0.65);
   backdrop-filter: blur(6px);
   font-size: 13px;
   color: #e8f7ff;
@@ -280,17 +289,27 @@
   gap: 8px;
   padding: 10px 12px 12px;
   border-radius: 12px;
-  border: 1px solid rgba(127, 216, 255, 0.35);
+  border: 1px solid var(--popup-neon, #0091ff);
   background: linear-gradient(180deg, rgba(12, 18, 32, 0.97), rgba(8, 12, 22, 0.97));
-  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.6), 0 0 22px rgba(127, 216, 255, 0.16);
+  box-shadow:
+    0 0 0 1px var(--popup-neon, #0091ff),
+    0 0 0 3px var(--popup-halo, rgba(0, 2, 10, 0.95)),
+    0 0 13px 1px var(--popup-neon-glow, rgba(0, 145, 255, 0.62)),
+    0 0 30px 6px var(--popup-neon-glow-wide, rgba(0, 62, 190, 0.34)),
+    0 16px 44px rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   user-select: none;
 }
 
 .scoreboard-popup.finished {
-  border-color: rgba(52, 211, 153, 0.55);
-  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.6), 0 0 22px rgba(52, 211, 153, 0.22);
+  border-color: rgba(52, 211, 153, 0.75);
+  box-shadow:
+    0 0 0 1px rgba(52, 211, 153, 0.75),
+    0 0 0 3px var(--popup-halo, rgba(0, 2, 10, 0.95)),
+    0 0 13px 1px rgba(52, 211, 153, 0.55),
+    0 0 30px 6px rgba(6, 150, 110, 0.3),
+    0 16px 44px rgba(0, 0, 0, 0.6);
 }
 
 .scoreboard-popup.dragging {
