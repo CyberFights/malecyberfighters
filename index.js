@@ -155,7 +155,7 @@ app.post('/api/hp/:action', async (req, res) => {
     // stuck on "waiting for second player".)
     let reply;
     try {
-      reply = hpEmbeddedAction(action, req.body || {});
+      reply = await hpEmbeddedAction(action, req.body || {});
     } catch (err) {
       console.error('Embedded Hp engine error:', err?.message || err);
       return res.status(500).json({ error: 'Internal server error.' });
@@ -208,6 +208,11 @@ function hpDiceSides(sides) {
   return (typeof sides === 'number' && sides >= 2) ? Math.floor(sides) : 6;
 }
 function hpClamp(value, min, max) { return Math.min(Math.max(value, min), max); }
+// Damage for a landed blow: floor((roll*atk - def)/scale), floored at
+// MIN_DAMAGE (a landed hit always chips at least 1) and capped at DAMAGE_CAP.
+function hpDamage(raw, scale, cap, min) {
+  return hpClamp(Math.floor(raw / scale), min, cap);
+}
 function hpIsNumber(v) { return typeof v === 'number' && isFinite(v); }
 function hpPinAllowedRolls(currentHealth, maxHealth) {
   const hpPct = maxHealth > 0 ? (currentHealth / maxHealth) * 100 : 0;
@@ -224,7 +229,13 @@ function hpGameView(game) {
 }
 
 // Port of CyberFights/Hp server2.js resolveMove().
-function hpResolveMove(game, playerId, payload) {
+//
+// Damage uses the fighters' saved physique stats (userData), like the
+// client's local engine: the actor's raw ATK (height (m) × √weight (kg))
+// against the defender's raw DEF (weight (kg) / height (m)). The legacy-
+// magnitude multipliers (atkMultiplier / defMultiplier) are only used for
+// the non-damage lines (submission recoil, teasing).
+async function hpResolveMove(game, playerId, payload) {
   if (game.state.finished) return { success: false, error: 'Match is already finished.' };
   if (!game.players.has(playerId)) return { success: false, error: 'Player is not in this game.' };
 
@@ -247,16 +258,26 @@ function hpResolveMove(game, playerId, payload) {
   if (!needsRecover && moveType === 'recover') {
     return { success: false, error: 'Recover is only available when HP or stamina is below 5.' };
   }
-  const atkMul = hpIsNumber(payload.atkMultiplier) ? payload.atkMultiplier : 1;
-  const defMul = hpIsNumber(payload.defMultiplier) ? payload.defMultiplier : 1;
+
+  // Resolve both fighters' stats from their user data so damage is the
+  // actor's ATK against the opponent's DEF (stat-less fighters fight as
+  // the baseline 5'11" / 185 lb fighter).
+  const oppId = playerIds.find(id => id !== playerId) || null;
+  const selfStats = await hpPlayerStats(playerId);
+  const oppStats = oppId ? await hpPlayerStats(oppId) : selfStats;
+  const atk = selfStats.atk;            // actor's raw ATK
+  const def = oppStats.def;             // opponent's raw DEF
+  const selfAtkMul = selfStats.atkMultiplier;
+  const selfDefMul = selfStats.defMultiplier;
+  const damageScale = physique.DAMAGE_SCALE > 0 ? physique.DAMAGE_SCALE : 1;
 
   const result = {
     playerId, playerIndex, moveType,
-    // atk / def echo the multipliers used for this move so the chat line's
+    // atk / def echo the stats used for this move so the chat line's
     // "(ATK x vs DEF y)" shows real values (the client formatter reads
     // these fields; the client's local engine sets the same pair).
-    atk: atkMul, def: defMul,
-    atkMultiplier: atkMul, defMultiplier: defMul,
+    atk: atk, def: def,
+    atkMultiplier: selfAtkMul, defMultiplier: selfDefMul,
     attackRoll: null, submissionRoll: null, selfDamageRoll: null,
     escapeRoll: null, teasingRoll: null, pinRoll: null,
     escaped: false, pinEscaped: false,
@@ -269,7 +290,7 @@ function hpResolveMove(game, playerId, payload) {
     const roll = hpRollDice();
     result.attackRoll = roll;
     const staminaCost = Math.floor(roll / 2);
-    const damage = Math.max(0, Math.floor(roll * (atkMul - defMul)));
+    const damage = hpDamage(roll * atk - def, damageScale, physique.DAMAGE_CAP, physique.MIN_DAMAGE);
     result.damageDealt = damage;
     self.stamina = hpClamp(self.stamina - staminaCost, 0, 100);
     opp.health = hpClamp(opp.health - damage, 0, 100);
@@ -281,8 +302,8 @@ function hpResolveMove(game, playerId, payload) {
     result.submissionRoll = submissionRoll;
     result.selfDamageRoll = selfDamageRoll;
     const staminaCost = Math.floor(submissionRoll / 2);
-    const damage = Math.max(0, Math.floor(submissionRoll * (atkMul - defMul)));
-    const selfDamage = Math.max(0, Math.floor(selfDamageRoll * defMul));
+    const damage = hpDamage(submissionRoll * atk - def, damageScale, physique.DAMAGE_CAP, physique.MIN_DAMAGE);
+    const selfDamage = Math.max(0, Math.floor(selfDamageRoll * selfDefMul));
     result.damageDealt = damage;
     result.selfDamage = selfDamage;
     self.stamina = hpClamp(self.stamina - staminaCost, 0, 100);
@@ -300,7 +321,7 @@ function hpResolveMove(game, playerId, payload) {
     if (result.escaped) {
       const attackRoll = hpRollDice();
       result.attackRoll = attackRoll;
-      const damage = Math.max(0, Math.floor(attackRoll * atkMul - defMul));
+      const damage = hpDamage(attackRoll * atk - def, damageScale, physique.DAMAGE_CAP, physique.MIN_DAMAGE);
       result.damageDealt = damage;
       opp.health = hpClamp(opp.health - damage, 0, 100);
     }
@@ -310,7 +331,7 @@ function hpResolveMove(game, playerId, payload) {
     const teasingRoll = hpRollDice();
     result.teasingRoll = teasingRoll;
     const staminaCost = Math.floor(teasingRoll / 2);
-    const attractionGain = Math.max(0, Math.floor(teasingRoll * atkMul));
+    const attractionGain = Math.max(0, Math.floor(teasingRoll * selfAtkMul));
     self.stamina = hpClamp(self.stamina - staminaCost, 0, 100);
     opp.attraction = hpClamp(opp.attraction + attractionGain, 0, 100);
   }
@@ -350,7 +371,6 @@ function hpResolveMove(game, playerId, payload) {
   result.tie = tie;
   result.ko = tie;
 
-  const oppId = playerIds.find(id => id !== playerId) || null;
   if (moveType === 'pin' && !result.pinEscaped) {
     game.state.hold = { type: 'pin', holder: playerId, victim: oppId };
   } else if (moveType === 'submission') {
@@ -379,7 +399,7 @@ function hpResolveMove(game, playerId, payload) {
 
 // Port of CyberFights/Hp server.js stateless actions + server2.js game
 // endpoints. Returns { status, body } for the /api/hp/:action route.
-function hpEmbeddedAction(action, body) {
+async function hpEmbeddedAction(action, body) {
   body = body || {};
   switch (action) {
     case 'roll': {
@@ -570,7 +590,7 @@ function hpEmbeddedAction(action, body) {
     case 'dice-match': {
       const game = hpGames.get(String(body.roomId || ''));
       if (!game) return { status: 404, body: { error: 'Game not found.' } };
-      const outcome = hpResolveMove(game, body.playerId, body);
+      const outcome = await hpResolveMove(game, body.playerId, body);
       if (!outcome.success) return { status: 400, body: { success: false, error: outcome.error } };
       return { status: 200, body: { result: outcome.result, game: hpGameView(game) } };
     }
@@ -892,7 +912,7 @@ const userSchema = new mongoose.Schema({
   },
   // Combat stats derived from the physique above (physique.combatStats):
   //   atk = height (m) × √weight (kg)
-  //   def = (weight (kg) / height (m)) / 2
+  //   def = weight (kg) / height (m)
   // Saved here ("userData") whenever the physique is registered or updated,
   // and pulled by /api/combat-stats for the dice match calculations.
   // Both stay null until the user has a complete physique.
@@ -1067,6 +1087,53 @@ const IpLog = mongoose.model('IpLog', ipLogSchema);
 const Room = mongoose.model('Room', RoomSchema);
 const Forum = mongoose.model('Forum', forumSchema);
 const ForumReply = mongoose.model('ForumReply', forumReplySchema);
+
+// ---------- COMBAT STATS (shared dice-match resolver) ----------
+// Single source of truth for a fighter's atk / def plus the same values
+// scaled to the legacy engine magnitude. atk / def are deterministic
+// functions of the stored physique, so they are recomputed (and persisted)
+// whenever the stored values are missing or out of step with the current
+// formula (e.g. after the def formula dropped its /2 factor) — no separate
+// migration sweep is needed. Returns null when the fighter has no complete
+// physique.
+async function resolveCombatStats(user) {
+  let atk = user.atk;
+  let def = user.def;
+  const computed = physique.combatStats(user.height, user.weight);
+  if (computed && (atk == null || def == null || Number(atk) !== computed.atk || Number(def) !== computed.def)) {
+    atk = computed.atk;
+    def = computed.def;
+    await User.updateOne({ _id: user._id }, { $set: { atk, def } }).catch(() => {});
+  }
+  if (atk == null || def == null) return null;
+  return {
+    atk: Number(atk),
+    def: Number(def),
+    atkMultiplier: physique.engineAtkMultiplier(Number(atk)),
+    defMultiplier: physique.engineDefMultiplier(Number(def))
+  };
+}
+
+// A fighter's combat stats by username, falling back to the baseline
+// fighter (5'11" / 185 lb) when the account or its physique is missing.
+async function hpPlayerStats(username) {
+  const fallback = {
+    atk: physique.baselineStats.atk,
+    def: physique.baselineStats.def,
+    atkMultiplier: physique.ENGINE_ATK_BASE,
+    defMultiplier: physique.ENGINE_DEF_BASE
+  };
+  if (!username) return fallback;
+  try {
+    const user = await User.findOne({ username }).select('height weight atk def').lean();
+    if (!user) return fallback;
+    const stats = await resolveCombatStats(user);
+    return stats || fallback;
+  } catch (err) {
+    console.error('hpPlayerStats error', err?.message || err);
+    return fallback;
+  }
+}
 
 // One-time password-reset tokens. Only the SHA-256 hash of the token is stored
 // (never the token itself) so a leaked DB dump can't be used to reset accounts.
@@ -2257,7 +2324,7 @@ app.post('/api/update-profile', async (req, res) => {
 // How the dice match pulls a fighter's saved atk / def from their userData.
 // The values are derived from the physique (height → meters, weight → kg):
 //   atk = height (m) × √weight (kg)
-//   def = (weight (kg) / height (m)) / 2
+//   def = weight (kg) / height (m)
 // and stored on the user document when the physique is registered or
 // updated. `atkMultiplier` / `defMultiplier` are the same values scaled back
 // to the legacy dice engine magnitude (see physique.js).
@@ -2286,26 +2353,12 @@ app.get('/api/combat-stats', async (req, res) => {
         continue;
       }
 
-      // Lazy backfill: accounts created before atk/def existed get their
-      // stats computed from the stored physique the first time they are
-      // pulled, then persisted on the user document.
-      let atk = user.atk;
-      let def = user.def;
-      if (atk == null || def == null) {
-        const computed = physique.combatStats(user.height, user.weight);
-        if (computed) {
-          atk = computed.atk;
-          def = computed.def;
-          await User.updateOne({ _id: user._id }, { $set: { atk, def } }).catch(() => {});
-        }
-      }
+      // Recompute (and persist) whenever the stored atk/def are missing or
+      // out of step with the current physique formula (e.g. after the def
+      // formula dropped its /2 factor) — see resolveCombatStats.
+      const resolved = await resolveCombatStats(user);
 
-      stats[username] = {
-        atk: atk == null ? null : Number(atk),
-        def: def == null ? null : Number(def),
-        atkMultiplier: atk == null ? null : physique.engineAtkMultiplier(Number(atk)),
-        defMultiplier: def == null ? null : physique.engineDefMultiplier(Number(def))
-      };
+      stats[username] = resolved || { atk: null, def: null, atkMultiplier: null, defMultiplier: null };
     }
 
     return res.json({ ok: true, stats });
@@ -2509,7 +2562,8 @@ app.post('/api/register', async (req, res) => {
         height: user.height || '',
         weight: user.weight ?? undefined,
         atk: combat ? combat.atk : null,
-        def: combat ? combat.def : null
+        def: combat ? combat.def : null,
+        discordId: user.discordId ?? null
       }
     });
   } catch (e) {
@@ -2563,7 +2617,8 @@ app.post('/api/login', async (req, res) => {
         height: user.height || '',
         weight: user.weight ?? undefined,
         atk: user.atk ?? null,
-        def: user.def ?? null
+        def: user.def ?? null,
+        discordId: user.discordId ?? null
       }
     });
   } catch (e) {

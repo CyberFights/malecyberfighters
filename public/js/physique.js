@@ -51,6 +51,9 @@
     window.baselineStats = api.baselineStats;
     window.engineAtkMultiplier = api.engineAtkMultiplier;
     window.engineDefMultiplier = api.engineDefMultiplier;
+    window.DAMAGE_CAP = api.DAMAGE_CAP;
+    window.DAMAGE_SCALE = api.DAMAGE_SCALE;
+    window.MIN_DAMAGE = api.MIN_DAMAGE;
   }
 
   if (typeof document !== "undefined") {
@@ -67,6 +70,25 @@
   var HEIGHT_MAX_INCHES = 96;   // 8'0"
   var WEIGHT_MIN_LBS = 60;
   var WEIGHT_MAX_LBS = 700;
+
+  // Dice-match damage tuning. A single damaging move (attack, submission,
+  // escape counter) can never deal more than DAMAGE_CAP in one hit, so a
+  // match can't be ended by a single blow. Fighter health is 100, so the
+  // default cap of 30 guarantees at least four damaging hits per match even
+  // in the most lopsided physique matchup.
+  //
+  // DAMAGE_SCALE divides every damaging hit before the cap is applied, so
+  // the whole damage curve is compressed rather than just clipped at the
+  // top: 1 = unchanged, 2 = half damage, 3 = a third, and so on. Higher
+  // values make for longer, grindier matches while keeping big fighters
+  // proportionally ahead of small ones.
+  //
+  // MIN_DAMAGE is the floor for any landed blow: a hit whose scaled damage
+  // would be 0 still deals MIN_DAMAGE (1), so attacks always chip away at
+  // least a little HP.
+  var DAMAGE_CAP = 30;
+  var DAMAGE_SCALE = 4;
+  var MIN_DAMAGE = 1;
 
   /* ---------- conversions ---------------------------------- */
 
@@ -135,7 +157,7 @@
      Each fighter's atk / def is derived from their physique:
 
        atk = height (m) × √weight (kg)
-       def = (weight (kg) / height (m)) / 2
+       def = weight (kg) / height (m)
 
      Height arrives as a feet + inches string and weight as whole
      pounds; both are converted to metric first. The values are
@@ -173,7 +195,7 @@
       heightM: round3(meters),
       weightKg: round3(kg),
       atk: round2(meters * Math.sqrt(kg)),
-      def: round2((kg / meters) / 2)
+      def: round2(kg / meters)
     };
   }
 
@@ -291,6 +313,9 @@
     HEIGHT_MAX_INCHES: HEIGHT_MAX_INCHES,
     WEIGHT_MIN_LBS: WEIGHT_MIN_LBS,
     WEIGHT_MAX_LBS: WEIGHT_MAX_LBS,
+    DAMAGE_CAP: DAMAGE_CAP,
+    DAMAGE_SCALE: DAMAGE_SCALE,
+    MIN_DAMAGE: MIN_DAMAGE,
     inchesToHeight: inchesToHeight,
     heightToInches: heightToInches,
     normalizeHeight: normalizeHeight,
