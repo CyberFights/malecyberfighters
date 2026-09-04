@@ -59,12 +59,20 @@
   min-width: 260px;
   max-width: min(320px, calc(100vw - 32px));
   padding: 16px 18px;
-  border: 1px solid #39e6ff;
+  /* Darker neon exterior frame so the floating call card stays readable
+     over the page. Only the outside edge is framed; the controls inside
+     keep their own styling. */
+  border: 1px solid var(--popup-neon, #0091ff);
   border-radius: 12px;
   background: rgba(16, 24, 39, 0.96);
   backdrop-filter: blur(8px);
   color: #eef7ff;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 24px rgba(0, 217, 255, 0.35);
+  box-shadow:
+    0 0 0 1px var(--popup-neon, #0091ff),
+    0 0 0 3px var(--popup-halo, rgba(0, 2, 10, 0.95)),
+    0 0 13px 1px var(--popup-neon-glow, rgba(0, 145, 255, 0.62)),
+    0 0 30px 6px var(--popup-neon-glow-wide, rgba(0, 62, 190, 0.34)),
+    0 8px 32px rgba(0, 0, 0, 0.7);
   text-align: center;
   cursor: grab;
   user-select: none;
@@ -198,7 +206,12 @@
   align-items: center;
   gap: 8px;
   border-radius: 999px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7), 0 0 16px rgba(0, 217, 255, 0.4);
+  box-shadow:
+    0 0 0 1px var(--popup-neon, #0091ff),
+    0 0 0 3px var(--popup-halo, rgba(0, 2, 10, 0.95)),
+    0 0 12px 1px var(--popup-neon-glow, rgba(0, 145, 255, 0.62)),
+    0 0 26px 5px var(--popup-neon-glow-wide, rgba(0, 62, 190, 0.34)),
+    0 4px 20px rgba(0, 0, 0, 0.7);
 }
 
 .audio-call-card.minimized .audio-call-header-row {

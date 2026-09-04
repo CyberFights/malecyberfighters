@@ -79,8 +79,14 @@
     '  width:322px;max-width:calc(100vw - 16px);',
     '  max-height:min(320px,45vh);overflow-y:auto;overscroll-behavior:contain;',
     '  background:linear-gradient(180deg,#0c1526,#0a1120);',
-    '  border:1px solid rgba(79,209,255,0.35);border-radius:12px;',
-    '  box-shadow:0 14px 44px rgba(0,0,0,0.6),0 0 24px rgba(79,209,255,0.15);',
+    /* Darker neon exterior frame, same treatment as the popup shells in
+       desktop.css / mobile.css. Spread rings only touch the outside. */
+    '  border:1px solid var(--popup-neon,#0091ff);border-radius:12px;',
+    '  box-shadow:0 0 0 1px var(--popup-neon,#0091ff),',
+    '    0 0 0 3px var(--popup-halo,rgba(0,2,10,0.95)),',
+    '    0 0 12px 1px var(--popup-neon-glow,rgba(0,145,255,0.62)),',
+    '    0 0 28px 6px var(--popup-neon-glow-wide,rgba(0,62,190,0.34)),',
+    '    0 14px 44px rgba(0,0,0,0.65);',
     '  padding:10px 8px 8px;',
     '  display:grid;grid-template-columns:repeat(8,1fr);gap:2px;',
     '}',
