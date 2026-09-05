@@ -253,8 +253,14 @@
 
   // Keep the popover glued to its bar; simpler to dismiss when the
   // viewport moves (window drags, mobile keyboard opening, page scroll).
+  // Scrolling *inside* the picker's own overflow-y region must not
+  // dismiss it — only outside scrolls do.
   window.addEventListener('resize', close);
-  window.addEventListener('scroll', close, true);
+  window.addEventListener('scroll', function (e) {
+    var t = e.target;
+    if (t && t.nodeType === 1 && pop && (t === pop || pop.contains(t))) return;
+    close();
+  }, true);
 
   // Small public API for future consumers.
   window.EmojiPicker = {

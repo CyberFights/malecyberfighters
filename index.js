@@ -231,6 +231,24 @@ async function movesRandomMove() {
   return (picked.status === 200 && Array.isArray(list) && list.length) ? list[0] : null;
 }
 
+// The full move list: page through /api/moves (limit/offset) until every
+// move has been collected.
+async function movesListAll() {
+  const all = [];
+  const pageSize = 100;
+  let offset = 0;
+  while (true) {
+    const page = await movesFetch(`/api/moves?limit=${pageSize}&offset=${offset}`);
+    const data = page.data;
+    if (page.status !== 200 || !data || !Array.isArray(data.moves)) break;
+    all.push(...data.moves);
+    const count = (typeof data.count === 'number') ? data.count : all.length;
+    offset += pageSize;
+    if (!data.moves.length || all.length >= count || data.moves.length < pageSize) break;
+  }
+  return all;
+}
+
 // A named move: exact slug lookup first (the upstream get-move endpoint is
 // slug-only), then the API's ?q= search (first = best match).
 async function movesNamedMove(name) {
@@ -246,11 +264,19 @@ async function movesNamedMove(name) {
 }
 
 // GET /api/get-move?move=<name|slug>  → { move } (exact slug, then search)
-// GET /api/get-move | ?move=random    → { move } (a random move)
+// GET /api/get-move?move=random       → { move } (a random move)
+// GET /api/get-move (no move param)   → { moves, count } (the full list)
 app.get('/api/get-move', async (req, res) => {
   const query = String(req.query.move || '').trim();
   try {
-    const move = (!query || query.toLowerCase() === 'random')
+    if (!query) {
+      const moves = await movesListAll();
+      if (!moves.length) {
+        return res.status(404).json({ error: 'No moves available.' });
+      }
+      return res.json({ moves, count: moves.length });
+    }
+    const move = (query.toLowerCase() === 'random')
       ? await movesRandomMove()
       : await movesNamedMove(query);
     if (!move) {

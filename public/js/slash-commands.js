@@ -5,16 +5,15 @@
    Adds slash commands to every chat text bar (public arena chat,
    room chat and DMs, on both the desktop and mobile UIs):
 
-     Stateless dice actions (Hp server.js):
-       /roll  /submit  /escape  /pin-escape  /tease  /recover
-
-     Match lifecycle (Hp server2.js):
+     Match lifecycle (Hp server2.js) — every dice action (attack,
+     submission, escape, teasing, pin, recover) goes through /move:
        /create-game  /join-game  /move  /game-state
        /end-game  /end-all-games        + /help
 
      Move database (SlamDB, https://wrestling-moves-production.up.railway.app):
-       /get-move — look up a pro wrestling move (or get a random one),
-       resolved through our /api/get-move proxy.
+       /get-move — with no name, list every available move (rendered only
+       in your own chat); with a name, look up that move (/get-move random
+       for a random one); resolved through our /api/get-move proxy.
 
    When the server is configured with HP_API_URL the commands are
    resolved through our /api/hp/* proxy against the real Hp service.
@@ -93,7 +92,6 @@
 
   function randInt(n) { return Math.floor(Math.random() * n) + 1; }
   function clampNum(v, min, max) { return Math.min(Math.max(v, min), max); }
-  function pct(x) { return Math.round(x * 100) + '%'; }
 
   /* ------------------------------------------------------------
      Combat stats pulled from user data (see /api/combat-stats)
@@ -177,25 +175,6 @@
   ------------------------------------------------------------ */
   function usageError(cmd) {
     return new Error('Usage: ' + cmd.usage);
-  }
-
-  function parseNumber(cmd, raw, label, opts) {
-    opts = opts || {};
-    if (raw === undefined || raw === '') {
-      if (opts.optional) return undefined;
-      throw usageError(cmd);
-    }
-    var n = Number(raw);
-    if (!isFinite(n)) throw new Error('"' + label + '" must be a number. Usage: ' + cmd.usage);
-    if (opts.int) n = Math.floor(n);
-    return n;
-  }
-
-  function parseSides(cmd, raw) {
-    if (raw === undefined || raw === '') return undefined;
-    var n = Number(raw);
-    if (!isFinite(n) || n < 2) throw new Error('sides must be a number ≥ 2. Usage: ' + cmd.usage);
-    return Math.floor(n);
   }
 
   /* ------------------------------------------------------------
@@ -761,47 +740,6 @@
   }
 
   var formatters = {
-    roll: function (d, out) {
-      return '🎲 ' + currentDisplay() + ' attacks! Rolled ' + d.roll + ' on a d' + d.sides +
-        ' • ATK ' + d.atk + ' − DEF ' + d.def + ' = ' + d.effectiveAttack +
-        ' → ' + d.damage + ' damage' +
-        ' • target HP ' + d.healthBefore + '→' + d.healthAfter +
-        ' • stamina ' + d.staminaBefore + '→' + d.staminaAfter + localTag(out);
-    },
-    submit: function (d, out) {
-      return '🤼 ' + currentDisplay() + ' locks in a submission hold! Rolls ' +
-        d.rollTarget + '/' + d.rollSelf + ' (d' + d.sides + ')' +
-        ' → ' + d.damageToTarget + ' dmg to target (' + d.healthBeforeTarget + '→' + d.healthAfterTarget + ' HP)' +
-        ', ' + d.damageToSelf + ' recoil (' + d.healthBeforeAttacker + '→' + d.healthAfterAttacker + ' HP)' +
-        ' • stamina ' + d.staminaBefore + '→' + d.staminaAfter + localTag(out);
-    },
-    escape: function (d, out) {
-      if (!d.escapeSuccess) {
-        return '💨 ' + currentDisplay() + ' tries to escape… and fails! (' +
-          pct(d.escapeChance) + ' chance, rolled ' + d.escapeRoll.toFixed(2) + ')' + localTag(out);
-      }
-      return '💨 ' + currentDisplay() + ' ESCAPES! (' + pct(d.escapeChance) + ' chance, rolled ' +
-        d.escapeRoll.toFixed(2) + ') Counter hit for ' + d.damageToOpponent +
-        ' — opponent ' + d.opponentHealthBefore + '→' + d.opponentHealthAfter + ' HP' +
-        ' • stamina ' + d.staminaBefore + '→' + d.staminaAfter + localTag(out);
-    },
-    'pin-escape': function (d, out) {
-      var marks = d.rolls.map(function (r) { return r.success ? '✅' : '❌'; }).join(' ');
-      return '🪤 ' + currentDisplay() + ' fights the pin — 3 shakes: ' + marks +
-        ' (' + pct(d.escapeChancePerRoll) + ' each) → ' +
-        (d.escapeSuccess ? 'ESCAPED! 🎉' : 'still pinned down…') + localTag(out);
-    },
-    tease: function (d, out) {
-      var cap = d.opponentMaxAttraction != null ? ' (cap ' + d.opponentMaxAttraction + ')' : '';
-      return '😏 ' + currentDisplay() + ' teases! Rolled ' + d.roll + ' on a d' + d.sides +
-        ' → attraction +' + d.attractionIncrease + ' (' + d.attractionBefore + '→' + d.attractionAfter + ')' + cap +
-        ' • stamina ' + d.staminaBefore + '→' + d.staminaAfter + localTag(out);
-    },
-    recover: function (d, out) {
-      return '💖 ' + currentDisplay() + ' recovers! Rolls ' + d.rolls.join(' + ') + ' = ' + d.recoveryTotal +
-        ' → HP ' + d.healthBefore + '→' + d.healthAfter +
-        ' • stamina ' + d.staminaBefore + '→' + d.staminaAfter + localTag(out);
-    },
     'create-game': function (d, out) {
       rememberGameRoom(d.gameId);
       var first = (d.players && d.players[0]) ? d.players[0] : currentDisplay();
@@ -888,6 +826,23 @@
       }
       if (meta.length) parts.push(meta.join('  ·  '));
       return parts.join('\n');
+    },
+    // Full move list → compact reference list, sorted by name.
+    'get-move-list': function (moves) {
+      var list = (moves || []).slice().sort(function (a, b) {
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      });
+      var lines = ['🤼 AVAILABLE WRESTLING MOVES (' + list.length + '):', ''];
+      list.forEach(function (m) {
+        var meta = [];
+        if (m.category) meta.push(m.category);
+        if (m.difficulty) meta.push(m.difficulty);
+        lines.push('• ' + (m.name || 'Unknown move') +
+          (meta.length ? ' — ' + meta.join(' · ') : ''));
+      });
+      lines.push('');
+      lines.push('Tip: /get-move <name> shows the full card for a move.');
+      return lines.join('\n');
     }
   };
 
@@ -1480,120 +1435,6 @@
   ------------------------------------------------------------ */
   var COMMANDS = [
     {
-      name: 'roll',
-      usage: '/roll <atk> <def> <health> <stamina> [sides]',
-      desc: 'Attack roll — dice damage from the Hp API',
-      run: function (args, ctx) {
-        var cmd = this;
-        var body = {
-          atk: parseNumber(cmd, args[0], 'atk'),
-          def: parseNumber(cmd, args[1], 'def'),
-          health: parseNumber(cmd, args[2], 'health'),
-          stamina: parseNumber(cmd, args[3], 'stamina'),
-          sides: parseSides(cmd, args[4])
-        };
-        return hpAction('roll', body).then(function (out) {
-          return { text: formatters.roll(out.data, out), share: true };
-        });
-      }
-    },
-    {
-      name: 'submit',
-      usage: '/submit <atk> <def> <health> <stamina> [attackerHealth] [sides]',
-      desc: 'Submission hold — damages target, recoil on you',
-      run: function (args, ctx) {
-        var cmd = this;
-        var body = {
-          atk: parseNumber(cmd, args[0], 'atk'),
-          def: parseNumber(cmd, args[1], 'def'),
-          health: parseNumber(cmd, args[2], 'health'),
-          stamina: parseNumber(cmd, args[3], 'stamina'),
-          attackerHealth: parseNumber(cmd, args[4], 'attackerHealth', { optional: true }),
-          sides: parseSides(cmd, args[5])
-        };
-        return hpAction('submit', body).then(function (out) {
-          return { text: formatters.submit(out.data, out), share: true };
-        });
-      }
-    },
-    {
-      name: 'escape',
-      usage: '/escape <atk> <def> <health> <stamina> <oppHP> [oppMaxHP] [chance] [sides]',
-      desc: 'Try to escape — counter-attack on success',
-      run: function (args, ctx) {
-        var cmd = this;
-        var body = {
-          atk: parseNumber(cmd, args[0], 'atk'),
-          def: parseNumber(cmd, args[1], 'def'),
-          health: parseNumber(cmd, args[2], 'health'),
-          stamina: parseNumber(cmd, args[3], 'stamina'),
-          opponentHealth: parseNumber(cmd, args[4], 'oppHP'),
-          opponentMaxHealth: parseNumber(cmd, args[5], 'oppMaxHP', { optional: true }),
-          baseEscapeChance: parseNumber(cmd, args[6], 'chance', { optional: true }),
-          sides: parseSides(cmd, args[7])
-        };
-        return hpAction('escape', body).then(function (out) {
-          return { text: formatters.escape(out.data, out), share: true };
-        });
-      }
-    },
-    {
-      name: 'pin-escape',
-      usage: '/pin-escape <health> <stamina> <oppHP> [oppMaxHP] [chance] [sides]',
-      desc: 'Shake 3 times to kick out of a pin',
-      run: function (args, ctx) {
-        var cmd = this;
-        var body = {
-          health: parseNumber(cmd, args[0], 'health'),
-          stamina: parseNumber(cmd, args[1], 'stamina'),
-          opponentHealth: parseNumber(cmd, args[2], 'oppHP'),
-          opponentMaxHealth: parseNumber(cmd, args[3], 'oppMaxHP', { optional: true }),
-          baseEscapeChance: parseNumber(cmd, args[4], 'chance', { optional: true }),
-          sides: parseSides(cmd, args[5])
-        };
-        return hpAction('pin-escape', body).then(function (out) {
-          return { text: formatters['pin-escape'](out.data, out), share: true };
-        });
-      }
-    },
-    {
-      name: 'tease',
-      usage: '/tease <atk> <def> <stamina> <oppAttraction> [maxAttraction] [sides]',
-      desc: 'Raise the opponent\u2019s attraction',
-      run: function (args, ctx) {
-        var cmd = this;
-        var body = {
-          atk: parseNumber(cmd, args[0], 'atk'),
-          def: parseNumber(cmd, args[1], 'def'),
-          stamina: parseNumber(cmd, args[2], 'stamina'),
-          opponentAttraction: parseNumber(cmd, args[3], 'oppAttraction'),
-          opponentMaxAttraction: parseNumber(cmd, args[4], 'maxAttraction', { optional: true }),
-          sides: parseSides(cmd, args[5])
-        };
-        return hpAction('tease', body).then(function (out) {
-          return { text: formatters.tease(out.data, out), share: true };
-        });
-      }
-    },
-    {
-      name: 'recover',
-      usage: '/recover <health> <stamina> [maxHP] [maxStamina] [sides]',
-      desc: 'Heal HP & stamina with 4 dice',
-      run: function (args, ctx) {
-        var cmd = this;
-        var body = {
-          health: parseNumber(cmd, args[0], 'health'),
-          stamina: parseNumber(cmd, args[1], 'stamina'),
-          maxHealth: parseNumber(cmd, args[2], 'maxHP', { optional: true }),
-          maxStamina: parseNumber(cmd, args[3], 'maxStamina', { optional: true }),
-          sides: parseSides(cmd, args[4])
-        };
-        return hpAction('recover', body).then(function (out) {
-          return { text: formatters.recover(out.data, out), share: true };
-        });
-      }
-    },
-    {
       name: 'create-game',
       usage: '/create-game [roomId]',
       desc: 'Start a dice match in this chat — you are added as fighter 1 (default: this room)',
@@ -1732,14 +1573,20 @@
       name: 'get-move',
       aliases: ['slamdb'],
       usage: '/get-move [move name|random]',
-      desc: 'Look up a pro wrestling move in the SlamDB database (random if no name)',
+      desc: 'List every wrestling move in SlamDB (shown only to you), or look one up (/get-move random for a random one)',
       run: function (args) {
         var query = args.join(' ').trim();
         var url = '/api/get-move' + (query ? '?move=' + encodeURIComponent(query) : '');
         return fetch(url).then(function (res) {
           return res.json().catch(function () { return null; }).then(function (data) {
-            if (!res.ok || !data || !data.move) {
+            if (!res.ok || !data) {
               throw new Error((data && data.error) || ('Move lookup failed (HTTP ' + res.status + ')'));
+            }
+            if (Array.isArray(data.moves)) {
+              return { text: formatters['get-move-list'](data.moves), share: false };
+            }
+            if (!data.move) {
+              throw new Error((data && data.error) || 'No move found.');
             }
             return { text: formatters['get-move'](data.move), share: true };
           });
@@ -1778,9 +1625,9 @@
     return null;
   }
 
-  /* /attack, /submission, /teasing, /pin and /escape are also accepted as
+  /* /attack, /submission, /teasing and /pin are also accepted as
      bare shortcuts for a match move, e.g. "/attack" == "/move attack".
-     (/escape stays the stateless escape command; use /move escape there.) */
+     Use /move escape (not /escape) for the escape move. */
 
   /* ------------------------------------------------------------
      Local (non-shared) output
@@ -2036,7 +1883,13 @@
   window.addEventListener('resize', function () {
     if (typeof scoreboardRestack === 'function') scoreboardRestack();
   });
-  window.addEventListener('scroll', hidePopup, true);
+  // Scrolling inside the autocomplete popup's own overflow-y region must
+  // not dismiss it — only outside scrolls do.
+  window.addEventListener('scroll', function (e) {
+    var t = e.target;
+    if (t && t.nodeType === 1 && popup && (t === popup || popup.contains(t))) return;
+    hidePopup();
+  }, true);
 
   // Show/hide the room scoreboard as rooms open and close.
   if (document.readyState === 'loading') {
