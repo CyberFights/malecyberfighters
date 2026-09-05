@@ -1,3 +1,5 @@
+- added wrestling move database lookup
+- added chance matches aka dice matches 
 - added discord account linking
 - added emojis
 - added 30s vid / gif uploading 
