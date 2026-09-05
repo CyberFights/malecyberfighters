@@ -371,18 +371,31 @@ function mobileImgSrc(value) {
     socket.on("externalPublicMessage", msg => appendPublicMessage(msg));
 
     /* direct messages -------------------------------------------------- */
+    // This page holds two socket.io connections (this one, and the global
+    // `socket` declared further down the file). Both belong to the user's
+    // delivery room, so the same DM can be delivered twice — the shared
+    // seenDmIds set makes sure only one of the two handlers acts on it.
     socket.on("privateMessage", pm => {
       const s = getSession();
       if (!s || !pm) return;
+      if (pm.id) {
+        if (seenDmIds.has(pm.id)) return;
+        seenDmIds.add(pm.id);
+      }
       const other = pm.from === s.username ? pm.to : pm.from;
-      if (state.dmPartner && other === state.dmPartner) {
+      const openPartner = activeDmPartner();
+      if (openPartner && other === openPartner) {
         appendDmMessage(pm);
+        markDmConversationRead(other);
       } else if (pm.from !== s.username) {
-        state.dmUnread[pm.from] = (state.dmUnread[pm.from] || 0) + 1;
-        renderDmBadge();
-        updateDmSidebar();
+        bumpDmUnread(pm.from);
       }
     });
+
+    /* DMs that arrived while no socket was connected (a message bridged in
+       from Discord, the phone asleep) are counted on the server and sent here
+       on connect — the live handler above never saw them. */
+    socket.on("dmUnread", ({ counts } = {}) => applyServerUnread(counts));
 
     socket.on("pmError", ({ reason } = {}) => {
       alert(reason || "User not found");
@@ -659,6 +672,9 @@ function mobileImgSrc(value) {
     setSession(null);
     state.dmPartner = null;
     state.dmUnread = {};
+    // Unread counts live in localStorage, which is per browser rather than per
+    // account — clear them so the next sign-in does not inherit this one.
+    saveUnreadMap({});
     hide($("mainUI"));
     hide($("chatPopup"));
     hide($("dmPopup"));
@@ -1448,6 +1464,118 @@ function mobileImgSrc(value) {
   /* ---------------------------------------------------------------------
      Direct messages
      --------------------------------------------------------------------- */
+
+  /* Message ids already handled. This page keeps two socket.io connections
+     open and both sit in the user's delivery room, so the same DM can arrive
+     twice. Both DM handlers share this set: whichever sees a message first
+     renders and counts it, the other one stays out of the way. */
+  const seenDmIds = new Set();
+
+  /* The two halves of this file track the open conversation separately
+     (`state.dmPartner` for the DM sidebar, `currentDmPartner` for the roster),
+     so a live message has to be checked against both or it gets badged as
+     unread while the conversation is on screen. */
+  function activeDmPartner() {
+    const popup = document.getElementById("dmPopup");
+    // .chat-popup is display:none in CSS, so an empty inline style means the
+    // popup has never been opened — only an explicit value counts as on screen.
+    const display = popup ? popup.style.display : "";
+    if (display === "" || display === "none") return null;
+    return state.dmPartner || currentDmPartner || null;
+  }
+
+  /* Count one unread DM in both counters this page renders from, so the badge
+     cannot disagree with itself depending on which handler ran. */
+  function bumpDmUnread(from) {
+    if (!from) return;
+    state.dmUnread[from] = (Number(state.dmUnread[from]) || 0) + 1;
+    incrementUnread(from);
+    renderDmBadge();
+    updateDMBadge();
+    updateDmSidebar();
+  }
+
+  /* Unread counters, persisted the same way the desktop client does it
+     (mobile.html does not load utils.js, so these did not exist here: opening
+     a DM threw before the popup was shown, and an incoming DM with no popup
+     open threw before the badge could update). */
+  const DM_UNREAD_KEY = "cw_dm_unread";
+
+  function getUnreadMap() {
+    try {
+      return JSON.parse(localStorage.getItem(DM_UNREAD_KEY) || "{}");
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveUnreadMap(map) {
+    try {
+      localStorage.setItem(DM_UNREAD_KEY, JSON.stringify(map || {}));
+    } catch (e) {
+      // Private mode / quota — the in-memory counters still work.
+    }
+  }
+
+  function incrementUnread(fromUser) {
+    if (!fromUser) return;
+    const map = getUnreadMap();
+    map[fromUser] = (Number(map[fromUser]) || 0) + 1;
+    saveUnreadMap(map);
+  }
+
+  function clearUnread(user) {
+    if (!user) return;
+    const map = getUnreadMap();
+    delete map[user];
+    saveUnreadMap(map);
+  }
+
+  /* Tell the server a conversation is read so the counts it sends on the next
+     connect match what this device already shows. */
+  function markDmConversationRead(partner) {
+    const s = getSession();
+    if (!s || !partner || partner === s.username) return;
+    const sock = state.socket || socket;
+    if (!sock) return;
+    try {
+      sock.emit("dmRead", { username: s.username, partner });
+    } catch (e) {
+      // Not connected — the server keeps the marker it already has.
+    }
+  }
+
+  /* Merge the server's unread counts into both counters on this page. Takes
+     the larger of the two so a message already counted live is not doubled. */
+  function applyServerUnread(counts) {
+    if (!counts || typeof counts !== "object") return;
+    const s = getSession();
+    if (!s) return;
+
+    const map = getUnreadMap();
+    let changed = false;
+
+    Object.keys(counts).forEach(from => {
+      if (!from || from === s.username) return;
+      const n = Number(counts[from]) || 0;
+      if (n > (Number(state.dmUnread[from]) || 0)) {
+        state.dmUnread[from] = n;
+        changed = true;
+      }
+      if (n > (Number(map[from]) || 0)) {
+        map[from] = n;
+        changed = true;
+      }
+    });
+
+    if (!changed) return;
+
+    saveUnreadMap(map);
+    renderDmBadge();
+    updateDMBadge();
+    updateDmSidebar();
+  }
+
   function renderDmBadge() {
     const badge = $("dmBadge");
     if (!badge) return;
@@ -1511,6 +1639,8 @@ function mobileImgSrc(value) {
 
     state.dmPartner = username;
     delete state.dmUnread[username];
+    clearUnread(username);
+    markDmConversationRead(username);
     renderDmBadge();
 
     const popup = $("dmPopup");
@@ -1543,6 +1673,7 @@ function mobileImgSrc(value) {
 
   function closeDm() {
     state.dmPartner = null;
+    currentDmPartner = null;
     hideId("dmPopup");
   }
 
@@ -2932,8 +3063,11 @@ function openPrivateWindow(targetUsername) {
 
   // Clear unread
   clearUnread(targetUsername);
+  delete state.dmUnread[targetUsername];
+  markDmConversationRead(targetUsername);
   if (window.updateDMListSidebar) updateDMListSidebar();
   updateDMBadge();
+  renderDmBadge();
 
   // Show the popup
   popup.style.display = "flex";
@@ -3118,7 +3252,14 @@ document.addEventListener("click", async (e) => {
 
 socket.on("privateMessage", pm => {
   const me = getSession();
-  if (!me) return;
+  if (!me || !pm) return;
+
+  // Same message, second socket: the handler in initSocket() already dealt
+  // with it (or is about to).
+  if (pm.id) {
+    if (seenDmIds.has(pm.id)) return;
+    seenDmIds.add(pm.id);
+  }
 
   // Don't count our own echo as unread
   const other = pm.from === me.username ? pm.to : pm.from;
@@ -3127,21 +3268,22 @@ socket.on("privateMessage", pm => {
   // MOBILE: if the dmPopup is open and showing this partner, append message
   const popup = document.getElementById("dmPopup");
   const body = document.getElementById("dmMessages");
-  const isOpen = popup && popup.style.display !== "none" && currentDmPartner === other;
+  const isOpen = popup && popup.style.display !== "none" && activeDmPartner() === other;
 
   if (isOpen && body) {
-    // Append the new message to the current view
-    renderDMMessages(other, [pm]); // append single message
-    // Actually, we need to maintain history. Let's just append directly.
-    // We'll re-render by appending the message element
+    // Append the new message to the current view. This used to call
+    // renderDMMessages(other, [pm]) first, which cleared the whole
+    // conversation and left the incoming message on screen twice.
     appendSingleDMMessage(pm, me);
     body.scrollTop = body.scrollHeight;
+    markDmConversationRead(other);
   } else if (pm.from !== me.username) {
-    incrementUnread(other);
-    if (window.updateDMListSidebar) updateDMListSidebar();
-    updateDMBadge();
+    bumpDmUnread(other);
   }
 });
+
+// Unread DMs the server counted while this device was disconnected.
+socket.on("dmUnread", ({ counts } = {}) => applyServerUnread(counts));
 
 /* ---------- Append a single DM message without clearing ---------- */
 function appendSingleDMMessage(pm, me) {
@@ -3296,6 +3438,8 @@ document.getElementById("dmClear")?.addEventListener("click", async () => {
   });
 
   clearUnread(currentDmPartner);
+  delete state.dmUnread[currentDmPartner];
+  markDmConversationRead(currentDmPartner);
   const body = document.getElementById("dmMessages");
   if (body) body.innerHTML = "";
   if (window.updateDMListSidebar) updateDMListSidebar();

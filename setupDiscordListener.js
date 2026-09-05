@@ -22,7 +22,7 @@ const TRAILING_PUNCTUATION = /[,.;:!?]+$/;
 const USAGE = "Send a DM as `@username message` — for example `@jane hey there`. " +
   "You have to name the recipient: messages are never forwarded to your last conversation automatically.";
 
-const setupDiscordListener = (User, DM, translateText, io, sendDiscordDM, discordEvents) => {
+const setupDiscordListener = (User, DM, translateText, emitToUser, sendDiscordDM, discordEvents) => {
   discordEvents.on('dm', async ({ discordId, text }) => {
     try {
       const sender = await User.findOne({ discordId }).lean();
@@ -40,8 +40,7 @@ const setupDiscordListener = (User, DM, translateText, io, sendDiscordDM, discor
       //                             different database (db= tells you which)
       console.log(
         `[Discord DM] db=${mongoose.connection.name} from=${discordId} ` +
-        `account=${sender ? sender.username : "NONE"} ` +
-        `socket=${sender ? (sender.socketId || "-") : "-"}`
+        `account=${sender ? sender.username : "NONE"}`
       );
 
       if (!sender) {
@@ -74,6 +73,15 @@ const setupDiscordListener = (User, DM, translateText, io, sendDiscordDM, discor
         return;
       }
 
+      // The website refuses self-DMs ("You cannot message yourself"), so a
+      // message addressed to your own account would be stored where no client
+      // ever renders it: the bot would say "message sent" and nothing would
+      // ever appear. Say no here instead.
+      if (receiver.username === sender.username) {
+        await sendDiscordDM(discordId, `You can't DM yourself — \`@${targetUsername}\` is your own website account. Name the person you want to reach.`);
+        return;
+      }
+
       if (receiver.blockedUsers && receiver.blockedUsers.includes(sender.username)) {
         await sendDiscordDM(discordId, `Message not delivered. **${targetUsername}** has blocked you.`);
         return;
@@ -88,23 +96,37 @@ const setupDiscordListener = (User, DM, translateText, io, sendDiscordDM, discor
         text: translated || messageContent
       });
 
-      if (receiver.socketId) {
-        io.to(receiver.socketId).emit("privateMessage", {
-          from: sender.username,
-          to: receiver.username,
-          text: translated || messageContent,
-          time: saved.time
-        });
-      }
+      // Deliver to every session the recipient has open rather than to the
+      // single `socketId` stored on their user document. That field points at
+      // whichever socket logged in last and is routinely stale — closed tab,
+      // asleep phone, desktop app in the background — which is exactly when a
+      // bridged Discord DM appeared to do nothing: it landed in the database
+      // but nothing live-updated and the badge never moved.
+      const reached = emitToUser(receiver.username, "privateMessage", {
+        id: String(saved._id),
+        from: sender.username,
+        to: receiver.username,
+        text: translated || messageContent,
+        time: saved.time
+      });
 
-      if (sender.socketId) {
-        io.to(sender.socketId).emit("privateMessage", {
-          from: sender.username,
-          to: receiver.username,
-          text: messageContent,
-          time: saved.time
-        });
-      }
+      // The sender is usually signed in on the website as well; echo the
+      // message back so the DM they just sent from Discord appears in that
+      // conversation too.
+      emitToUser(sender.username, "privateMessage", {
+        id: String(saved._id),
+        from: sender.username,
+        to: receiver.username,
+        text: messageContent,
+        time: saved.time
+      });
+
+      console.log(
+        `[Discord DM] ${sender.username} -> ${receiver.username}: ` +
+        (reached
+          ? `live to ${reached} socket(s)`
+          : "recipient offline — the unread badge picks it up on their next connect")
+      );
 
       await sendDiscordDM(discordId, `*(Message sent to **${targetUsername}**)*`);
 

@@ -1,3 +1,5 @@
+- fixed dms sent from discord not showing up live on the website: they now appear straight away in the open dm and in the notification badge, and anything that arrived while you were offline is badged when you next connect
+- dms now reach every device/tab you have signed in, not just the last one that logged in
 - added wrestling move database lookup
 - added chance matches aka dice matches 
 - added discord account linking
