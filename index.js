@@ -15,6 +15,7 @@ const rateLimit = require('express-rate-limit');
 const cors = require("cors");
 const { sendMail, mailerConfigured, MAIL_FROM, escapeHtml } = require('./mailer');
 const { sendDiscordDM, discordEvents } = require('./discordBot');
+const { createDmDelivery } = require('./dmDelivery');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -1020,6 +1021,17 @@ const userSchema = new mongoose.Schema({
   },
   discordId: { type: String, default: null },
   blockedUsers: { type: [String], default: [] },
+  // Per-conversation DM read markers: { [partnerUsername]: ISO date string }.
+  // The unread badge used to be purely client-side (localStorage, fed by live
+  // socket events), so a DM that arrived while the recipient had no live
+  // socket — the normal case for a message bridged in from Discord — was
+  // stored but never badged. These markers let the server compute what is
+  // still unread and send it on connect.
+  dmSeen: { type: Object, default: {} },
+  // Nothing older than this is counted as unread. Set at registration, and
+  // backfilled the first time an existing account's counts are computed, so
+  // shipping this does not badge every DM in the user's history.
+  dmUnreadSince: { type: String, default: () => new Date().toISOString() },
   online:   { type: Boolean, default: false },
   socketId: { type: String, default: null },
   role:     { type: String, default: 'user' },
@@ -2092,9 +2104,7 @@ app.post("/api/send-dm", async (req, res) => {
 
   const target = await User.findOne({ username: to }).lean();
 
-  if (target?.socketId) {
-    io.to(target.socketId).emit("privateMessage", dm);
-  }
+  emitToUser(to, "privateMessage", { ...dm.toObject(), id: String(dm._id) });
 
   await forwardDMToDiscord(from, target, text);
 
@@ -3095,7 +3105,12 @@ app.post('/api/forums/:forumId/replies', async (req, res) => {
 
 
 // ---------- SOCKET.IO ----------
-const onlineByUsername = new Map();
+
+// Directed DM delivery (per-user socket rooms) and the server-side unread
+// counts the client is sent on connect. Split into its own module so the
+// rules can be tested without a running deployment; see dmDelivery.js.
+const { userRoom, emitToUser, markDMRead, getUnreadDMCounts } =
+  createDmDelivery({ User, DM, io });
 
 // Room access is enforced on the server. The room list is only a UI aid and
 // must never be treated as authorization, since clients can emit socket events
@@ -3124,7 +3139,13 @@ io.on("connection", async (socket) => {
   }
 
   socket.on('login', async (user) => {
+    if (!user || !user.username) return;
+
     socket.username = user.username;
+    // Join this user's delivery room so DMs reach every session they have
+    // open, not just the one socketId happens to point at.
+    socket.join(userRoom(user.username));
+
     const u = await User.findOneAndUpdate(
       { username: user.username },
       { online: true, socketId: socket.id },
@@ -3137,6 +3158,29 @@ io.on("connection", async (socket) => {
       .lean();
 
     io.emit('presence', onlineUsers);
+
+    // Catch up on DMs that arrived while this user had no live socket (bridged
+    // in from Discord, laptop asleep, app backgrounded). They are in the
+    // database but never reached the client's own unread counter, so without
+    // this the badge stays empty until the conversation is opened by hand.
+    try {
+      const counts = await getUnreadDMCounts(u);
+      if (Object.keys(counts).length) socket.emit("dmUnread", { counts });
+    } catch (err) {
+      console.error('dm unread catch-up error:', err);
+    }
+  });
+
+  // The client reports a conversation as read when it opens a DM window or
+  // renders an incoming message into one.
+  socket.on("dmRead", async ({ username, partner } = {}) => {
+    const who = username || socket.username;
+    if (!who || !partner) return;
+    try {
+      await markDMRead(who, partner);
+    } catch (err) {
+      console.error('dmRead error:', err);
+    }
   });
 
   socket.on("chatClosed", async ({ username }) => {
@@ -3280,7 +3324,6 @@ socket.on("editPublicMessage", async (data) => {
   });
 
   socket.on("privateMessage", async pm => {
-    const sender = await User.findOne({ username: pm.from }).lean();
     const receiver = await User.findOne({ username: pm.to }).lean();
 
     // ✅ FIXED: Check receiver.blockedUsers instead of undefined targetUser
@@ -3304,23 +3347,19 @@ socket.on("editPublicMessage", async (data) => {
         originalText: null
       });
 
-      if (receiver.socketId) {
-        io.to(receiver.socketId).emit("privateMessage", {
-          from: pm.from,
-          to: pm.to,
-          imageUrl: pm.imageUrl,
-          time: saved.time
-        });
-      }
+      const imagePayload = {
+        id: String(saved._id),
+        from: pm.from,
+        to: pm.to,
+        imageUrl: pm.imageUrl,
+        time: saved.time
+      };
 
-      if (sender.socketId) {
-        io.to(sender.socketId).emit("privateMessage", {
-          from: pm.from,
-          to: pm.to,
-          imageUrl: pm.imageUrl,
-          time: saved.time
-        });
-      }
+      // One emit per user room: the recipient's other sessions and the
+      // sender's own echo both need it, and neither should depend on which
+      // single socket the user document happens to remember.
+      emitToUser(pm.to, "privateMessage", imagePayload);
+      emitToUser(pm.from, "privateMessage", imagePayload);
 
       await forwardDMToDiscord(pm.from, receiver, `[Image attachment: ${pm.imageUrl}]`);
 
@@ -3342,6 +3381,7 @@ socket.on("editPublicMessage", async (data) => {
       });
 
       const clipPayload = {
+        id: String(saved._id),
         from: pm.from,
         to: pm.to,
         clipUrl: saved.clipUrl,
@@ -3349,8 +3389,8 @@ socket.on("editPublicMessage", async (data) => {
         time: saved.time
       };
 
-      if (receiver.socketId) io.to(receiver.socketId).emit("privateMessage", clipPayload);
-      if (sender.socketId) io.to(sender.socketId).emit("privateMessage", clipPayload);
+      emitToUser(pm.to, "privateMessage", clipPayload);
+      emitToUser(pm.from, "privateMessage", clipPayload);
 
       let appBaseUrl = APP_BASE_URL || "https://malecyberfighters.com";
       await forwardDMToDiscord(pm.from, receiver, `[Video/GIF attachment: ${appBaseUrl}${saved.clipUrl}]`);
@@ -3368,23 +3408,25 @@ socket.on("editPublicMessage", async (data) => {
       text: translated
     });
 
-    if (receiver.socketId) {
-      io.to(receiver.socketId).emit("privateMessage", {
-        from: pm.from,
-        to: pm.to,
-        text: translated,
-        time: saved.time
-      });
-    }
+    const messageTime = saved.time;
+    const messageId = String(saved._id);
 
-    if (sender.socketId) {
-      io.to(sender.socketId).emit("privateMessage", {
-        from: pm.from,
-        to: pm.to,
-        text: pm.text,
-        time: saved.time
-      });
-    }
+    // Recipient sees the translation, sender sees exactly what they typed.
+    emitToUser(pm.to, "privateMessage", {
+      id: messageId,
+      from: pm.from,
+      to: pm.to,
+      text: translated,
+      time: messageTime
+    });
+
+    emitToUser(pm.from, "privateMessage", {
+      id: messageId,
+      from: pm.from,
+      to: pm.to,
+      text: pm.text,
+      time: messageTime
+    });
 
     await forwardDMToDiscord(pm.from, receiver, translated || pm.text);
   });
@@ -3607,12 +3649,26 @@ socket.on("editPublicMessage", async (data) => {
 
 
   socket.on('disconnect', async () => {
-    const u = await User.findOneAndUpdate(
-      { socketId: socket.id },
-      { online: false, socketId: null }
-    );
+    // 'disconnect' fires after socket.io has already dropped this socket from
+    // its rooms, so anything still listed here is another session of the same
+    // user (a second tab, the desktop app, the phone). Only mark the user
+    // offline once their last session is gone, and move `socketId` — which the
+    // audio-call signalling still uses — onto a socket that is actually alive.
+    const survivor = socket.username
+      ? [...io.sockets.sockets.values()].find(s => s.username === socket.username)
+      : null;
 
-    if (u) {
+    const u = survivor
+      ? await User.findOneAndUpdate(
+        { username: socket.username },
+        { online: true, socketId: survivor.id }
+      )
+      : await User.findOneAndUpdate(
+        { socketId: socket.id },
+        { online: false, socketId: null }
+      );
+
+    if (u && !survivor) {
       const onlineUsers = await User.find({ online: true })
         .select('username display imageUrl extraPhotos info wins losses color language age height weight createdAt -_id')
         .lean();
@@ -3629,7 +3685,7 @@ socket.on("editPublicMessage", async (data) => {
 });
 
 const setupDiscordListener = require('./setupDiscordListener');
-setupDiscordListener(User, DM, translateText, io, sendDiscordDM, discordEvents);
+setupDiscordListener(User, DM, translateText, emitToUser, sendDiscordDM, discordEvents);
 
 // ---------- START ----------
 server.listen(PORT, "0.0.0.0", () => {

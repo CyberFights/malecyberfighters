@@ -184,6 +184,7 @@ function openPrivateWindow(targetUsername) {
     existing.style.display = "flex";
     bringPmToFront(existing);
     clearUnread(targetUsername);
+    markConversationRead(targetUsername);
     if (window.updateDMListSidebar) updateDMListSidebar();
     updateDMBadge();
     return;
@@ -279,6 +280,7 @@ function openPrivateWindow(targetUsername) {
     });
 
     clearUnread(targetUsername);
+    markConversationRead(targetUsername);
     renderPMHistory(targetUsername, []);
     const body = document.getElementById("pmBody_" + targetUsername);
     if (body) body._history = [];
@@ -362,6 +364,7 @@ pmWindow.querySelector(".pm-story").addEventListener("click", () => {
   });
 
   clearUnread(targetUsername);
+  markConversationRead(targetUsername);
   if (window.updateDMListSidebar) updateDMListSidebar();
   updateDMBadge();
 }
@@ -702,6 +705,18 @@ function showDMNotification(username){
   };
 }
 
+/* Tell the server a conversation is read, so the unread counts it sends on
+   connect match what this browser already shows. */
+function markConversationRead(partner) {
+  const s = getSession();
+  if (!s || !partner || partner === s.username) return;
+  try {
+    socket.emit("dmRead", { username: s.username, partner });
+  } catch (e) {
+    // Offline / not connected yet — the server keeps its old marker.
+  }
+}
+
 socket.on("privateMessage", pm => {
   const me = getSession();
   if (!me) return;
@@ -726,11 +741,45 @@ socket.on("privateMessage", pm => {
     const updated = [...existing, pm];
     body._history = updated;
     renderPMHistory(other, updated);
+    // It is on screen, so it counts as read — otherwise the server would
+    // report it as unread again on the next connect.
+    markConversationRead(other);
   } else if (pm.from !== me.username) {
     incrementUnread(other);
     if (window.updateDMListSidebar) updateDMListSidebar();
     updateDMBadge();
   }
+});
+
+/* ---------- UNREAD CAUGHT UP FROM THE SERVER ----------
+   The counter below only ever sees messages delivered over a live socket. A DM
+   bridged in from Discord while nobody was connected — or while this tab was
+   asleep — is stored on the server and would never badge. The server sends
+   those counts every time we (re)connect; take the larger of the two so a
+   message that was counted live is not counted twice. */
+socket.on("dmUnread", ({ counts } = {}) => {
+  if (!counts || typeof counts !== "object") return;
+
+  const me = getSession();
+  if (!me) return;
+
+  const map = typeof getUnreadMap === "function" ? getUnreadMap() : {};
+  let changed = false;
+
+  Object.keys(counts).forEach(from => {
+    if (!from || from === me.username) return;
+    const n = Number(counts[from]) || 0;
+    if (n > (Number(map[from]) || 0)) {
+      map[from] = n;
+      changed = true;
+    }
+  });
+
+  if (!changed) return;
+
+  if (typeof saveUnreadMap === "function") saveUnreadMap(map);
+  if (window.updateDMListSidebar) updateDMListSidebar();
+  updateDMBadge();
 });
 
 function updateDMBadge() {

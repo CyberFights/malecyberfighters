@@ -130,6 +130,11 @@ async function doLogin(){
 function logout(){
   clearSession();
   localStorage.removeItem('currentUser');
+  // The unread badge lives in localStorage, which is per browser rather than
+  // per account. Drop it so the next person to sign in here does not inherit
+  // somebody else's DM count.
+  if (typeof saveUnreadMap === 'function') saveUnreadMap({});
+  if (window.updateDMBadge) window.updateDMBadge();
   if (window.updateUIForSession) updateUIForSession();
   if (window.updateProfileCard) updateProfileCard(null);
   if (window.updateDMListSidebar) updateDMListSidebar();
