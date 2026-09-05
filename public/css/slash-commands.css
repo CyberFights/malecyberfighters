@@ -11,6 +11,9 @@
   display: none;
   max-height: 300px;
   overflow-y: auto;
+  /* Don't chain scrolling past the list edge to the chat popup behind it:
+     a chained scroll would fire on the wrong element and dismiss the list. */
+  overscroll-behavior: contain;
   background: rgba(10, 16, 28, 0.97);
   /* Darker neon exterior frame, matching the popup shells in the main
      stylesheets. Rings spread outward only — the popup contents are

@@ -775,7 +775,7 @@ function mobileImgSrc(value) {
       return;
     }
 
-    // Slash commands (/roll, /move, /help, ...) intercept the text bar;
+    // Slash commands (/move, /help, ...) intercept the text bar;
     // see slash-commands.js (powered by the Hp dice-match endpoints).
     if (window.SlashCommands && window.SlashCommands.tryHandle(text, {
       kind: "public",
@@ -2053,7 +2053,7 @@ function mobileImgSrc(value) {
     const text = input.value.trim();
     if (!text) return;
 
-    // Slash commands (/roll, /create-game, /move, ...) intercept the text
+    // Slash commands (/create-game, /move, ...) intercept the text
     // bar; see slash-commands.js (powered by the Hp dice-match endpoints).
     if (window.SlashCommands && window.SlashCommands.tryHandle(text, {
       kind: "room",
@@ -3104,7 +3104,7 @@ function sendPM(targetUsername) {
   const text = input.value.trim();
   if (!text) return;
 
-  // Slash commands (/roll, /create-game, /move, ...) intercept the text
+  // Slash commands (/create-game, /move, ...) intercept the text
   // bar; see slash-commands.js (powered by the Hp dice-match endpoints).
   if (window.SlashCommands && window.SlashCommands.tryHandle(text, {
     kind: "dm",
