@@ -12,6 +12,10 @@
        /create-game  /join-game  /move  /game-state
        /end-game  /end-all-games        + /help
 
+     Move database (SlamDB, https://wrestling-moves-production.up.railway.app):
+       /get-move — look up a pro wrestling move (or get a random one),
+       resolved through our /api/get-move proxy.
+
    When the server is configured with HP_API_URL the commands are
    resolved through our /api/hp/* proxy against the real Hp service.
    Otherwise (or if the service is unreachable) an embedded local
@@ -870,6 +874,20 @@
     },
     'end-all-games': function (d, out) {
       return '🏁 Ended ' + d.endedGamesCount + ' active match(es).' + localTag(out);
+    },
+    // SlamDB move object → multi-line result card for /get-move.
+    'get-move': function (m) {
+      var parts = ['🤼 MOVE ▸ ' + (m.name || 'Unknown move') +
+        (m.category ? '  ·  ' + m.category : '') +
+        (m.difficulty ? ' · ' + m.difficulty : '')];
+      if (m.description) parts.push(String(m.description));
+      var meta = [];
+      if (m.origin) meta.push('Origin: ' + m.origin);
+      if (m.famousUsers && m.famousUsers.length) {
+        meta.push('Made famous by: ' + m.famousUsers.join(', '));
+      }
+      if (meta.length) parts.push(meta.join('  ·  '));
+      return parts.join('\n');
     }
   };
 
@@ -1711,12 +1729,30 @@
       }
     },
     {
+      name: 'get-move',
+      aliases: ['slamdb'],
+      usage: '/get-move [move name|random]',
+      desc: 'Look up a pro wrestling move in the SlamDB database (random if no name)',
+      run: function (args) {
+        var query = args.join(' ').trim();
+        var url = '/api/get-move' + (query ? '?move=' + encodeURIComponent(query) : '');
+        return fetch(url).then(function (res) {
+          return res.json().catch(function () { return null; }).then(function (data) {
+            if (!res.ok || !data || !data.move) {
+              throw new Error((data && data.error) || ('Move lookup failed (HTTP ' + res.status + ')'));
+            }
+            return { text: formatters['get-move'](data.move), share: true };
+          });
+        });
+      }
+    },
+    {
       name: 'help',
       aliases: ['commands'],
       usage: '/help',
       desc: 'List every slash command',
       run: function () {
-        var lines = ['⚔️ SLASH COMMANDS (powered by CyberFights/Hp):', ''];
+        var lines = ['⚔️ SLASH COMMANDS (Hp dice match + SlamDB move database):', ''];
         COMMANDS.forEach(function (c) {
           lines.push(c.usage + '  —  ' + c.desc);
         });
