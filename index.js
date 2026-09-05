@@ -185,6 +185,85 @@ app.post('/api/hp/:action', async (req, res) => {
   }
 });
 
+// ---------- WRESTLING MOVES API PROXY ----------
+// The /get-move slash command looks up moves in the SlamDB pro wrestling
+// move database (default: https://wrestling-moves-production.up.railway.app,
+// API docs: GET /api/moves, GET /api/moves?limit=&offset=&q= and
+// GET /api/moves/:slug). That API does not send CORS headers, so the
+// browser calls this proxy instead of the moves server directly.
+// MOVES_API_URL overrides the upstream base URL (tests / staging).
+const MOVES_API_URL = (process.env.MOVES_API_URL || 'https://wrestling-moves-production.up.railway.app').trim().replace(/\/+$/, '');
+const MOVES_PROXY_TIMEOUT_MS = 8 * 1000;
+
+// "Stone Cold Stunner" → "stone-cold-stunner" (SlamDB slugs).
+function movesSlugify(name) {
+  return String(name == null ? '' : name)
+    .toLowerCase()
+    .trim()
+    .replace(/['’]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function movesFetch(path) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MOVES_PROXY_TIMEOUT_MS);
+  return fetch(`${MOVES_API_URL}${path}`, { signal: controller.signal })
+    .then(upstream => {
+      clearTimeout(timer);
+      return upstream.json().catch(() => null)
+        .then(data => ({ status: upstream.status, data }));
+    }, err => {
+      clearTimeout(timer);
+      throw err;
+    });
+}
+
+// A random move: read the total count, then page to one random offset.
+async function movesRandomMove() {
+  const first = await movesFetch('/api/moves?limit=1');
+  const count = first.data && typeof first.data.count === 'number' ? first.data.count : 0;
+  if (first.status !== 200 || !count) return null;
+  const offset = Math.floor(Math.random() * count);
+  const picked = await movesFetch(`/api/moves?limit=1&offset=${offset}`);
+  const list = picked.data && picked.data.moves;
+  return (picked.status === 200 && Array.isArray(list) && list.length) ? list[0] : null;
+}
+
+// A named move: exact slug lookup first (the upstream get-move endpoint is
+// slug-only), then the API's ?q= search (first = best match).
+async function movesNamedMove(name) {
+  const slug = movesSlugify(name);
+  if (slug) {
+    const bySlug = await movesFetch(`/api/moves/${encodeURIComponent(slug)}`);
+    if (bySlug.status === 200 && bySlug.data && bySlug.data.move) return bySlug.data.move;
+  }
+  const bySearch = await movesFetch(`/api/moves?q=${encodeURIComponent(name)}`);
+  const list = bySearch.data && bySearch.data.moves;
+  if (bySearch.status === 200 && Array.isArray(list) && list.length) return list[0];
+  return null;
+}
+
+// GET /api/get-move?move=<name|slug>  → { move } (exact slug, then search)
+// GET /api/get-move | ?move=random    → { move } (a random move)
+app.get('/api/get-move', async (req, res) => {
+  const query = String(req.query.move || '').trim();
+  try {
+    const move = (!query || query.toLowerCase() === 'random')
+      ? await movesRandomMove()
+      : await movesNamedMove(query);
+    if (!move) {
+      return res.status(404).json({
+        error: query ? `No move found for "${query}".` : 'No moves available.'
+      });
+    }
+    return res.json({ move });
+  } catch (err) {
+    console.error('Moves proxy error:', err?.message || err);
+    return res.status(502).json({ error: 'Wrestling moves service unreachable.' });
+  }
+});
+
 // ---------- EMBEDDED HP DICE ENGINE ----------
 // In-process fallback for /api/hp/* when HP_API_URL is not set. The match
 // commands (/create-game, /join-game, /move, /game-state, /end-game,
