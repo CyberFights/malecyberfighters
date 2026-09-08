@@ -415,6 +415,19 @@
       }
     },
     {
+      id: 'how-to-wrestle',
+      title: 'How to cyber wrestle (beginner\u2019s guide)',
+      keywords: ['how to cyber wrestle', 'how do i cyber wrestle', 'cyber wrestle', 'cyber wrestling', 'how do i wrestle', 'how to wrestle', 'how do i fight', 'how to fight', 'beginner', 'beginners guide', 'beginner guide', 'new here', 'new to this', 'first match', 'first time', 'roleplay', 'role play', 'how does this work', 'how it works', 'getting started', 'start wrestling', 'write a match', 'rp'],
+      answer: 'The Beginner\u2019s Guide walks through all of it: what cyber wrestling is, setting up your fighter, finding an opponent, agreeing the match, writing your moves, and the dice commands.\n' +
+        'The short version: say hi in the Arena, agree the match with your opponent (style, limits, how it ends), then take turns writing moves and selling theirs. Type /help in any chat for the match commands.',
+      action: {
+        label: 'Open the Beginner\u2019s Guide',
+        buttonId: 'btnGuide',
+        popupId: 'modalGuide',
+        done: 'Opening the Beginner\u2019s Guide for you.'
+      }
+    },
+    {
       id: 'dice-matches',
       title: 'Dice matches and moves',
       keywords: ['dice match', 'dice matches', 'chance match', 'match', 'fight', 'wrestle', 'move', 'slash command', 'commands', 'hp', 'stamina', 'health'],
@@ -561,6 +574,7 @@
 
   var QUICK_REPLIES = [
     { label: 'Open the Arena', text: 'open the arena' },
+    { label: 'How do I cyber wrestle?', text: 'how do I cyber wrestle?' },
     { label: 'How do I DM someone?', text: 'how do I send a direct message?' },
     { label: 'Create a room', text: 'create a room' },
     { label: 'How do I edit my profile?', text: 'how do I edit my profile?' },
@@ -755,7 +769,7 @@
     addMessage(
       'assistant',
       'I do not have an answer for "' + text + '" yet.\n' +
-        'I can help with the Arena, DMs, Rooms, Forums, the User Roster, story Archives, profiles, dice matches, calls, and the rules.\n' +
+        'I can help with the Arena, DMs, Rooms, Forums, the User Roster, story Archives, profiles, dice matches, calls, the rules, and the beginner\u2019s guide to cyber wrestling.\n' +
         'If it is a bug or something you want added, send it to the admins as a support report.',
       {
         label: 'Open a support report',
