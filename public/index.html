@@ -114,6 +114,7 @@
     <button id="btnRooms" class="ghost" type="button">Rooms</button>
     <button id="btnForums" class="ghost" type="button">Forums</button>
     <button id="openSupport" type="button">Support</button>
+    <button id="btnAssistance" class="ghost" type="button">Assistance</button>
   </div>
 
   <div id="legalLinks">
@@ -198,6 +199,7 @@
     <button id="btnRooms" class="ghost">Rooms</button>
     <button id="btnForums" class="ghost">Forums</button>
 <button id="openSupport">Support</button>
+<button id="btnAssistance">Assistance</button>
 
 
  
@@ -526,6 +528,33 @@
 
     <div class="pm-buttons">
       <button id="srSubmit">Submit Report</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ASSISTANCE POPUP (in-app support assistant) -->
+<div id="assistancePopup" class="popup" style="display:none" role="dialog" aria-modal="true" aria-labelledby="assistanceTitle">
+  <div class="support-mobile assistance-panel">
+
+    <div class="assistance-header">
+      <div>
+        <h2 id="assistanceTitle">Assistance</h2>
+        <p class="small muted">Ask how the site works — I can open the window for you.</p>
+      </div>
+      <button id="assistanceClose" class="ghost small-btn" type="button" aria-label="Close assistance">✕</button>
+    </div>
+
+    <!-- A random Jax portrait is chosen every time the window opens -->
+    <img id="assistanceImage" class="assistance-avatar" src="" alt="Jax, the Male Cyber Fighters support assistant">
+
+    <div id="assistanceMessages" class="assistance-messages" aria-live="polite"></div>
+
+    <div id="assistanceQuickReplies" class="assistance-quick-replies"></div>
+
+    <div class="assistance-input-bar">
+      <input id="assistanceInput" type="text" placeholder="Ask about the site…" autocomplete="off" aria-label="Ask the support assistant">
+      <button id="assistanceSend" type="button">Send</button>
     </div>
 
   </div>
@@ -1803,6 +1832,7 @@ Don't hesitate to contact us if you have any questions.
 
 <script src="/js/updates.js"></script>
 <script src="/js/home-cards.js"></script>
+<script src="/js/assistance.js?v=1"></script>
 <script src="/js/popup-dissolve.js"></script>
 <script src="/js/download.js"></script>
 <script src="/js/pwa-install.js"></script>

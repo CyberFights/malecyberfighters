@@ -3304,3 +3304,171 @@ h3{
 @media (prefers-reduced-motion: reduce) {
   #modalViewProfile .vp-avatar-frame::before { animation: none; }
 }
+
+/* ============================================================
+   ASSISTANCE POPUP
+   The support assistant window: a random Jax portrait above a
+   chat transcript, a row of quick questions and an input bar with
+   Send. The panel carries .support-mobile so it inherits the shared
+   glass/neon popup frame; everything below is chat specific.
+   ============================================================ */
+#assistancePopup {
+  align-items: flex-start;
+  justify-content: center;
+}
+
+#assistancePopup .assistance-panel {
+  width: 640px;
+  max-width: 96%;
+  margin: 3vh auto 0;
+  padding: 18px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.assistance-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(121, 210, 255, 0.42);
+}
+
+.assistance-header h2 {
+  margin: 0;
+  font-size: 24px;
+  text-align: left;
+  color: #fff;
+}
+
+#assistancePopup .assistance-header p {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+
+/* The portrait sits above the conversation, like a support agent's
+   picture on a help desk. */
+.assistance-avatar {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+  object-position: center 30%;
+  border-radius: 12px;
+  border: 1px solid rgba(121, 210, 255, 0.55);
+  background: rgba(4, 12, 26, 0.85);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 0 18px rgba(0, 145, 255, 0.3);
+}
+
+.assistance-messages {
+  flex: 1 1 auto;
+  min-height: 190px;
+  max-height: 44vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(3, 10, 22, 0.72);
+  border: 1px solid rgba(91, 198, 255, 0.22);
+}
+
+.assistance-msg {
+  max-width: 88%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.assistance-msg p {
+  margin: 0;
+}
+
+.assistance-msg p + p {
+  margin-top: 6px;
+}
+
+.assistance-msg.assistant {
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+  color: #e8f7ff;
+  background: linear-gradient(160deg, rgba(28, 62, 96, 0.95), rgba(9, 24, 44, 0.95));
+  border: 1px solid rgba(121, 210, 255, 0.42);
+}
+
+.assistance-msg.user {
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+  color: #03131c;
+  font-weight: 600;
+  background: linear-gradient(160deg, #14c2e6, #0a6d92);
+  border: 1px solid #45d9f5;
+}
+
+.assistance-msg.assistance-typing {
+  font-style: italic;
+  opacity: 0.75;
+}
+
+.assistance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.assistance-actions button {
+  font-size: 13px;
+}
+
+.assistance-quick-replies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.assistance-quick-replies:empty {
+  display: none;
+}
+
+.assistance-quick-replies button {
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.assistance-input-bar {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.assistance-input-bar input {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  #assistancePopup .assistance-panel {
+    width: 100%;
+    max-height: 94vh;
+    margin: 1vh auto 0;
+    padding: 14px;
+  }
+  .assistance-avatar {
+    height: 150px;
+  }
+  .assistance-messages {
+    max-height: 38vh;
+  }
+}
+
