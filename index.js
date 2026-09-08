@@ -850,7 +850,7 @@ app.get('/img', imageProxyLimiter, async (req, res) => {
       headers: {
         // Some CDNs reject requests without a browser-ish UA / Accept header.
         'Accept': 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8,*/*;q=0.5',
-        'User-Agent': 'Mozilla/5.0 (compatible; MaleCyberFighters/1.0; +https://malecyberfighters.com)'
+        'User-Agent': 'Mozilla/5.0 (compatible; MaleCyberFighters/1.0; +https://male-cyber-fighters.com)'
       }
     });
 
@@ -3418,7 +3418,7 @@ socket.on("editPublicMessage", async (data) => {
       emitToUser(pm.to, "privateMessage", clipPayload);
       emitToUser(pm.from, "privateMessage", clipPayload);
 
-      let appBaseUrl = APP_BASE_URL || "https://malecyberfighters.com";
+      let appBaseUrl = APP_BASE_URL || "https://male-cyber-fighters.com";
       await forwardDMToDiscord(pm.from, receiver, `[Video/GIF attachment: ${appBaseUrl}${saved.clipUrl}]`);
 
       return;
