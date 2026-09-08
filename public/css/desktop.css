@@ -1498,6 +1498,10 @@ button.download-btn:hover{
 #guideContent .guide-glossary dt { color:#7fd8ff; font-weight:700; margin-top:10px; }
 #guideContent .guide-glossary dd { margin:0; }
 #guideContent .guide-checklist li { margin:8px 0; }
+/* The guide's step lists, style lists and eight rules are long items —
+   they need breathing room between them. */
+#guideContent ul > li,
+#guideContent ol > li { margin:8px 0; }
 
 .badge,
 #dmBadge {
