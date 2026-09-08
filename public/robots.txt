@@ -1,0 +1,24 @@
+# Male Cyber Fighters — crawler directives
+# https://male-cyber-fighters.com/robots.txt
+
+User-agent: *
+# Public app shell and its assets are fine to crawl.
+Allow: /
+# JSON API, realtime socket and the remote-image proxy are not pages.
+Disallow: /api/
+Disallow: /socket.io/
+Disallow: /img
+# User-uploaded clips (random filenames, no landing page).
+Disallow: /clips/
+# Duplicate / internal copies of the app shell — the canonical page is "/".
+Disallow: /landing.html
+Disallow: /mobile.html
+Disallow: /mobile2.html
+Disallow: /offline.html
+Disallow: /reset-password.html
+# HTML fragments that are injected into modals, not standalone pages.
+Disallow: /legal/
+Disallow: /updates/
+Disallow: /sw.js
+
+Sitemap: https://male-cyber-fighters.com/sitemap.xml
