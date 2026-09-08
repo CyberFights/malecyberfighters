@@ -195,6 +195,7 @@
     <button id="btnForums" class="ghost" type="button">Forums</button>
     <button id="openSupport" type="button">Report</button>
     <button id="btnAssistance" class="ghost" type="button">Assistance</button>
+    <button id="btnGuide" class="ghost" type="button">Beginner's Guide</button>
   </div>
 
   <div id="legalLinks">
@@ -281,6 +282,7 @@
     <button id="btnForums" class="ghost">Forums</button>
 <button id="openSupport">Support</button>
 <button id="btnAssistance">Assistance</button>
+<button id="btnGuide" class="ghost">Beginner's Guide</button>
 
 
  
@@ -1243,6 +1245,19 @@ Moderator decisions are final. </p>
     <button id="closeRules" class="ghost">Close</button>
   </div>
 </div>
+
+<!-- BEGINNER'S GUIDE POPUP — the #guideBody markup from /guide is
+     injected into #guideContent by guide.js when the window opens,
+     so the in-app guide and the public page share one copy. -->
+<div id="modalGuide" class="modal-overlay" style="display:none" aria-hidden="true">
+  <div class="modal-box">
+    <h3>How to Cyber Wrestle — Beginner's Guide</h3>
+    <div id="guideContent" class="modal-scroll">
+      <p class="small muted">Loading…</p>
+    </div>
+    <button id="closeGuide" class="ghost">Close</button>
+  </div>
+</div>
 <!-- TERMS OF SERVICE POPUP -->
 <div id="modalTOS" class="modal-overlay" style="display:none">
   <div class="modal-box">
@@ -1569,6 +1584,7 @@ Moderator decisions are final. </p>
 <script src="/js/updates.js"></script>
 <script src="/js/home-cards.js"></script>
 <script src="/js/assistance.js?v=1"></script>
+<script src="/js/guide.js?v=1"></script>
 <script src="/js/popup-dissolve.js"></script>
 <script src="/js/download.js"></script>
 <script src="/js/pwa-install.js"></script>

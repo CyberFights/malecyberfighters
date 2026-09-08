@@ -16,6 +16,9 @@ Disallow: /mobile.html
 Disallow: /mobile2.html
 Disallow: /offline.html
 Disallow: /reset-password.html
+# The beginner's guide is served at /guide (canonical); /guide.html is the
+# same file as reached through the static file path.
+Disallow: /guide.html
 # HTML fragments that are injected into modals, not standalone pages.
 Disallow: /legal/
 Disallow: /updates/

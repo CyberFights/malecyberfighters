@@ -118,6 +118,23 @@ app.get('/', (req, res, next) => {
   });
 });
 
+// ---------- BEGINNER'S GUIDE ----------
+// The public, indexable "How to Cyber Wrestle" guide. The same page feeds the
+// in-app Beginner's Guide modal: public/js/guide.js fetches /guide and injects
+// the #guideBody markup into #guideContent, so the modal and the page share a
+// single copy of the content. (express.static also serves the file at
+// /guide.html; robots.txt points crawlers at this canonical /guide URL.)
+app.get('/guide', (req, res, next) => {
+  const guidePath = path.join(__dirname, 'public', 'guide.html');
+
+  fs.readFile(guidePath, 'utf8', (err, html) => {
+    if (err) return next(err);
+
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  });
+});
+
 // ---------- HP DICE-MATCH API PROXY ----------
 // The chat text bars support slash commands (/roll, /submit, /escape, ...)
 // backed by the Hp stamina-bar service (https://github.com/CyberFights/Hp).

@@ -1452,6 +1452,53 @@ button.download-btn:hover{
   color:#cde;
 }
 
+/* Beginner's Guide modal — #guideBody markup injected from /guide by
+   guide.js. The full page styling lives in guide.css; these are the
+   accents that keep the content readable inside the modal. */
+#guideContent h2 {
+  font-size:16px;
+  color:#eafaff;
+  border-bottom:1px solid rgba(160,200,255,0.2);
+  padding-bottom:4px;
+  margin:18px 0 8px;
+}
+#guideContent h3 {
+  font-size:14px;
+  color:#7fd8ff;
+  margin:14px 0 6px;
+}
+#guideContent code {
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12px;
+  background:rgba(127,216,255,0.12);
+  border:1px solid rgba(127,216,255,0.3);
+  border-radius:6px;
+  padding:1px 6px;
+  color:#bfefff;
+  white-space:nowrap;
+}
+#guideContent .guide-callout {
+  background:rgba(160,200,255,0.06);
+  border:1px solid rgba(160,200,255,0.25);
+  border-left:3px solid #6dffe7;
+  border-radius:8px;
+  padding:10px 14px;
+  margin:14px 0;
+}
+#guideContent .guide-example {
+  background:rgba(2,6,23,0.65);
+  border:1px solid rgba(160,200,255,0.18);
+  border-radius:10px;
+  padding:10px 14px;
+  margin:14px 0;
+}
+#guideContent .guide-example p { margin:6px 0; }
+#guideContent .guide-example .guide-bad { color:#ffd3e1; }
+#guideContent .guide-example .guide-good { color:#d9fff6; }
+#guideContent .guide-glossary dt { color:#7fd8ff; font-weight:700; margin-top:10px; }
+#guideContent .guide-glossary dd { margin:0; }
+#guideContent .guide-checklist li { margin:8px 0; }
+
 .badge,
 #dmBadge {
   /* Red for unread messages, matching .badge in mobile.css so phones and
