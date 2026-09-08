@@ -219,6 +219,97 @@ test('the assistant answers how-to-wrestle questions with the guide', async () =
   }
 });
 
+test('the guide body is one numbered tour with a nav link for every stop', () => {
+  const dom = new JSDOM(GUIDE_HTML);
+  const doc = dom.window.document;
+
+  const nav = Array.from(doc.querySelectorAll('.guide-nav a'));
+  assert.ok(nav.length >= 12, 'every section is reachable from the sticky nav');
+  nav.forEach(link => {
+    const hash = link.getAttribute('href');
+    assert.match(hash, /^#guide-/, `${link.textContent}: nav links point at guide anchors`);
+    assert.ok(doc.querySelector(`#guideBody ${hash}`), `${hash} exists inside the shared guide body`);
+  });
+
+  // Sections are numbered in order, and the numbers match their position —
+  // renumbering the guide means editing the headings, not the nav.
+  const headings = Array.from(doc.querySelectorAll('#guideBody > section > h2'));
+  assert.equal(headings.length, nav.length, 'one nav link per section');
+  headings.forEach((h2, i) => {
+    assert.ok(h2.textContent.trim().startsWith(`${i + 1}. `), `section ${i + 1} is numbered "${h2.textContent.trim()}"`);
+  });
+
+  // Cross-references inside the prose still land on real sections.
+  Array.from(doc.querySelectorAll('#guideBody a[href^="#"]')).forEach(a => {
+    assert.ok(doc.getElementById(a.getAttribute('href').slice(1)), `the guide links to ${a.getAttribute('href')}`);
+  });
+});
+
+test('the guide teaches the classic rules of cyber fighting, not just the app', () => {
+  const dom = new JSDOM(GUIDE_HTML);
+  const text = dom.window.document.getElementById('guideBody').textContent;
+
+  // A move is a movement plus one or two actions, and the turn ends with "yt".
+  assert.match(text, /one or two actions/i, 'a move is defined');
+  assert.match(text, /\byt\b/, 'the turn signal is taught');
+  assert.match(text, /block, an escape, a reversal|block, escape, reversal/i, 'defensive actions count as moves');
+
+  // Realism: condition, position, flexibility, and no godmodding.
+  ['physical condition', 'position', 'flexibility', 'sell', 'accept defeat'].forEach(term => {
+    assert.ok(text.toLowerCase().includes(term.toLowerCase()), `the rules cover "${term}"`);
+  });
+
+  // Both narration styles are welcome.
+  assert.match(text, /First person/, 'first person is explained');
+  assert.match(text, /third person/i, 'third person is explained');
+
+  // The eight rules are all there, numbered, and fun comes last.
+  const rules = dom.window.document.querySelectorAll('#guide-rules ol > li');
+  assert.equal(rules.length, 8, 'eight rules of the ring');
+  assert.match(rules[7].textContent, /fun/i, 'the last rule is the important one');
+
+  // Style vocabulary the scene expects you to know.
+  ['Pro wrestling', 'Sub wrestling', 'Accepted sub', 'NHB', 'Anything goes', 'Extreme',
+   'Death match', 'Fistfight', 'Boxing', 'Kickboxing', 'Catfight', 'Apartment wrestling',
+   'Sexfight', 'Multi-round', 'Image / GIF match'].forEach(style => {
+    assert.ok(text.includes(style), `the style list covers ${style}`);
+  });
+
+  // Win conditions, with the site's own engine named next to each.
+  ['three-count pin', 'I give', 'Knockout', 'asphyxiation'].forEach(term => {
+    assert.ok(text.toLowerCase().includes(term.toLowerCase()), `the finishes cover "${term}"`);
+  });
+  assert.match(text, /\/move pin/, 'the pin is tied to the dice command');
+  assert.match(text, /\/move escape/, 'escaping a hold is tied to the dice command');
+
+  // Everything that looks optional is consent-first.
+  assert.match(text, /opt-in/i, 'the erotic conventions are explicitly opt-in');
+  assert.match(text, /never a default|never something you inherit/i, 'adult content is never assumed');
+
+  // New terms are defined for the reader, not just named.
+  const glossary = dom.window.document.getElementById('guide-glossary');
+  const defined = Array.from(glossary.querySelectorAll('dt')).map(dt => dt.textContent.trim().toLowerCase());
+  ['yt', 'move / turn', 'nhb', 'accepted sub', 'catfight', 'pin / three-count', 'knockout (ko)'].forEach(term => {
+    assert.ok(defined.some(dt => dt.includes(term)), `the glossary defines "${term}"`);
+  });
+});
+
+test('the in-app modal carries the merged sections too', async () => {
+  const page = await startPage();
+  try {
+    page.desktopButton().click();
+    await tick(100);
+
+    const content = page.byId('guideContent');
+    assert.ok(content.querySelector('#guide-styles'), 'match styles come into the modal');
+    assert.ok(content.querySelector('#guide-rules'), 'the eight rules come into the modal');
+    assert.match(content.textContent, /Match styles/, 'the styles section is readable there');
+    assert.match(content.textContent, /eight rules/i, 'the rules section is readable there');
+  } finally {
+    await page.close();
+  }
+});
+
 test('the public page, the app and the server all point at the same guide', () => {
   // The public page is a real, indexable document.
   assert.match(GUIDE_HTML, /<link rel="canonical" href="https:\/\/male-cyber-fighters\.com\/guide"/);

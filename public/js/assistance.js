@@ -417,9 +417,9 @@
     {
       id: 'how-to-wrestle',
       title: 'How to cyber wrestle (beginner\u2019s guide)',
-      keywords: ['how to cyber wrestle', 'how do i cyber wrestle', 'cyber wrestle', 'cyber wrestling', 'how do i wrestle', 'how to wrestle', 'how do i fight', 'how to fight', 'beginner', 'beginners guide', 'beginner guide', 'new here', 'new to this', 'first match', 'first time', 'roleplay', 'role play', 'how does this work', 'how it works', 'getting started', 'start wrestling', 'write a match', 'rp'],
-      answer: 'The Beginner\u2019s Guide walks through all of it: what cyber wrestling is, setting up your fighter, finding an opponent, agreeing the match, writing your moves, and the dice commands.\n' +
-        'The short version: say hi in the Arena, agree the match with your opponent (style, limits, how it ends), then take turns writing moves and selling theirs. Type /help in any chat for the match commands.',
+      keywords: ['how to cyber wrestle', 'how do i cyber wrestle', 'cyber wrestle', 'cyber wrestling', 'how do i wrestle', 'how to wrestle', 'how do i fight', 'how to fight', 'beginner', 'beginners guide', 'beginner guide', 'new here', 'new to this', 'first match', 'first time', 'roleplay', 'role play', 'how does this work', 'how it works', 'getting started', 'start wrestling', 'write a match', 'rp', 'cyber fighting', 'rules of cyber fighting', 'eight rules', 'match styles', 'match style', 'no holds barred', 'nhb', 'pro wrestling', 'sub wrestling', 'accepted sub', 'catfight', 'apartment wrestling', 'kickboxing', 'death match', 'sexfight', 'erotic wrestling', 'first person', 'third person', 'yt', 'sell a move', 'selling', 'tap out', 'submission hold', 'gif match'],
+      answer: 'The Beginner\u2019s Guide walks through all of it: what cyber wrestling is, setting up your fighter, finding an opponent, agreeing the match, writing your moves, the match styles (pro, sub, NHB, catfight, erotic), the eight rules of the ring, and the dice commands.\n' +
+        'The short version: say hi in the Arena, agree the match with your opponent (style, limits, how it ends), then take turns \u2014 one movement and an action or two, sell theirs, end the line with "yt". Type /help in any chat for the match commands.',
       action: {
         label: 'Open the Beginner\u2019s Guide',
         buttonId: 'btnGuide',

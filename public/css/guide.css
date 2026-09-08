@@ -210,6 +210,18 @@ a { color: var(--accent); }
 
 .guide-main strong { color: #eefaff; }
 
+/* Numbered and bulleted runs (the setup steps, the match styles, the eight
+   rules) are long enough to need air between items. The quick-start
+   checklist brings its own spacing, so it stays out of it. */
+.guide-main ol > li,
+.guide-main ul > li {
+  margin-bottom: 6px;
+}
+
+.guide-main .guide-checklist li {
+  margin-bottom: 0;
+}
+
 .guide-callout {
   background: var(--glass);
   border: 1px solid var(--panel-border);
