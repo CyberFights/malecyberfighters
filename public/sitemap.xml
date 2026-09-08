@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Male Cyber Fighters sitemap.
+  The site is currently a single-page app, so the homepage is the only
+  indexable URL. Add entries here as server-rendered pages (rules, guides,
+  forum threads, stories) are introduced.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url>
+    <loc>https://male-cyber-fighters.com/</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://male-cyber-fighters.com/images/mcf-512.png</image:loc>
+      <image:title>Male Cyber Fighters logo</image:title>
+    </image:image>
+  </url>
+</urlset>
