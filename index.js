@@ -3523,8 +3523,11 @@ socket.on('publicMessage', async (msg) => {
     await Promise.all(
       onlineUsers.map(async u => {
         if (!u.socketId) return; // Skip if no active socket
-        
-        const translated = await translateText(enriched.text, u.language || "en");
+
+        // The sender always sees exactly what they typed — never a translation
+        // of their own message back into their profile language.
+        const isSender = u.username === msg.from;
+        const translated = isSender ? enriched.text : await translateText(enriched.text, u.language || "en");
 
         io.to(u.socketId).emit("publicMessage", {
           ...enriched,
@@ -3557,7 +3560,9 @@ socket.on("editPublicMessage", async (data) => {
     const onlineUsers = await User.find({ online: true }).lean();
     await Promise.all(onlineUsers.map(async u => {
       if (!u.socketId) return;
-      const translated = await translateText(msg.text, u.language || "en");
+      // The author sees the edit exactly as they typed it.
+      const isAuthor = u.username === from;
+      const translated = isAuthor ? msg.text : await translateText(msg.text, u.language || "en");
       io.to(u.socketId).emit("publicMessageEdited", {
         _id: id,
         text: translated,
@@ -3833,6 +3838,21 @@ socket.on("editPublicMessage", async (data) => {
     }
 
     members.forEach(async member => {
+      const live = io.sockets.sockets.get(member.id) || member;
+      const memberUsername = live?.username || member?.username ||
+        (live?.handshake?.auth && live.handshake.auth.username) || null;
+
+      // The sender always sees exactly what they typed — never a translation
+      // of their own message back into their profile language.
+      if (memberUsername && memberUsername === socket.username) {
+        io.to(member.id).emit("roomMessage", {
+          ...enriched,
+          _id: created?._id,
+          text: enriched.text
+        });
+        return;
+      }
+
       const recipient = await User.findOne({ socketId: member.id }).lean();
       const translated = await translateText(enriched.text, recipient?.language || "en");
 
@@ -3861,7 +3881,9 @@ socket.on("editPublicMessage", async (data) => {
 
       const members = await User.find({ socketId: { $ne: null } }).lean();
       members.forEach(async u => {
-        const translated = await translateText(msg.text, u.language || "en");
+        // The author sees the edit exactly as they typed it.
+        const isAuthor = u.username === socket.username;
+        const translated = isAuthor ? msg.text : await translateText(msg.text, u.language || "en");
         io.to(u.socketId).emit("roomMessageEdited", {
           room: msg.room,
           _id: id,
