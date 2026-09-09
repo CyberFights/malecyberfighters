@@ -22,8 +22,8 @@ const TRAILING_PUNCTUATION = /[,.;:!?]+$/;
 const USAGE = "Send a DM as `@username message` — for example `@jane hey there`. " +
   "You have to name the recipient: messages are never forwarded to your last conversation automatically.";
 
-const setupDiscordListener = (User, DM, translateText, emitToUser, sendDiscordDM, discordEvents) => {
-  discordEvents.on('dm', async ({ discordId, text }) => {
+const setupDiscordListener = (User, DM, translateText, emitToUser, sendDiscordDM, discordEvents, rehostImageToImgBB) => {
+  discordEvents.on('dm', async ({ discordId, text, imageUrls }) => {
     try {
       const sender = await User.findOne({ discordId }).lean();
 
@@ -48,6 +48,8 @@ const setupDiscordListener = (User, DM, translateText, emitToUser, sendDiscordDM
         return;
       }
 
+      const images = Array.isArray(imageUrls) ? imageUrls.slice(0, 4) : [];
+
       const match = String(text || '').match(MENTION);
       if (!match) {
         await sendDiscordDM(discordId, USAGE);
@@ -62,7 +64,8 @@ const setupDiscordListener = (User, DM, translateText, emitToUser, sendDiscordDM
         return;
       }
 
-      if (!messageContent) {
+      // An image-only DM needs a recipient but no text body.
+      if (!messageContent && !images.length) {
         await sendDiscordDM(discordId, `What would you like to send to **${targetUsername}**? Type \`@${targetUsername} <message>\`.`);
         return;
       }
@@ -87,49 +90,103 @@ const setupDiscordListener = (User, DM, translateText, emitToUser, sendDiscordDM
         return;
       }
 
-      const translated = await translateText(messageContent, receiver.language || "en");
+      let deliveredText = false;
 
-      const saved = await DM.create({
-        from: sender.username,
-        to: receiver.username,
-        originalText: messageContent,
-        text: translated || messageContent
-      });
+      if (messageContent) {
+        const translated = await translateText(messageContent, receiver.language || "en");
 
-      // Deliver to every session the recipient has open rather than to the
-      // single `socketId` stored on their user document. That field points at
-      // whichever socket logged in last and is routinely stale — closed tab,
-      // asleep phone, desktop app in the background — which is exactly when a
-      // bridged Discord DM appeared to do nothing: it landed in the database
-      // but nothing live-updated and the badge never moved.
-      const reached = emitToUser(receiver.username, "privateMessage", {
-        id: String(saved._id),
-        from: sender.username,
-        to: receiver.username,
-        text: translated || messageContent,
-        time: saved.time
-      });
+        const saved = await DM.create({
+          from: sender.username,
+          to: receiver.username,
+          originalText: messageContent,
+          text: translated || messageContent
+        });
 
-      // The sender is usually signed in on the website as well; echo the
-      // message back so the DM they just sent from Discord appears in that
-      // conversation too.
-      emitToUser(sender.username, "privateMessage", {
-        id: String(saved._id),
-        from: sender.username,
-        to: receiver.username,
-        text: messageContent,
-        time: saved.time
-      });
+        // Deliver to every session the recipient has open rather than to the
+        // single `socketId` stored on their user document. That field points at
+        // whichever socket logged in last and is routinely stale — closed tab,
+        // asleep phone, desktop app in the background — which is exactly when a
+        // bridged Discord DM appeared to do nothing: it landed in the database
+        // but nothing live-updated and the badge never moved.
+        const reached = emitToUser(receiver.username, "privateMessage", {
+          id: String(saved._id),
+          from: sender.username,
+          to: receiver.username,
+          text: translated || messageContent,
+          time: saved.time
+        });
 
-      console.log(
-        `[Discord DM] ${sender.username} -> ${receiver.username}: ` +
-        (reached
-          ? `live to ${reached} socket(s)`
-          : "recipient offline — the unread badge picks it up on their next connect")
-      );
+        // The sender is usually signed in on the website as well; echo the
+        // message back so the DM they just sent from Discord appears in that
+        // conversation too.
+        emitToUser(sender.username, "privateMessage", {
+          id: String(saved._id),
+          from: sender.username,
+          to: receiver.username,
+          text: messageContent,
+          time: saved.time
+        });
+
+        console.log(
+          `[Discord DM] ${sender.username} -> ${receiver.username}: ` +
+          (reached
+            ? `live to ${reached} socket(s)`
+            : "recipient offline — the unread badge picks it up on their next connect")
+        );
+
+        deliveredText = true;
+      }
+
+      // Image attachments: Discord CDN URLs expire ~24h after issue, so re-host
+      // each one on ImgBB while it is still fetchable and store that durable URL.
+      // Anything that can't be re-hosted is dropped rather than persisted as a
+      // link that will 404 later.
+      let deliveredImages = 0;
+      for (const imageUrl of images) {
+        const rehosted = typeof rehostImageToImgBB === 'function'
+          ? await rehostImageToImgBB(imageUrl)
+          : { url: null, reason: 'no_rehost_helper' };
+
+        if (!rehosted.url) {
+          console.warn(
+            `[Discord DM] dropped attachment from ${sender.username}: ` +
+            `${rehosted.reason} (${imageUrl})`
+          );
+          continue;
+        }
+
+        const saved = await DM.create({
+          from: sender.username,
+          to: receiver.username,
+          imageUrl: rehosted.url,
+          text: null,
+          originalText: null
+        });
+
+        emitToUser(receiver.username, "privateMessage", {
+          id: String(saved._id),
+          from: sender.username,
+          to: receiver.username,
+          imageUrl: rehosted.url,
+          time: saved.time
+        });
+        emitToUser(sender.username, "privateMessage", {
+          id: String(saved._id),
+          from: sender.username,
+          to: receiver.username,
+          imageUrl: rehosted.url,
+          time: saved.time
+        });
+
+        deliveredImages++;
+      }
+
+      if (!deliveredText && !deliveredImages) {
+        await sendDiscordDM(discordId, `I couldn't deliver that to **${targetUsername}** — the attachment couldn't be copied. Try uploading the image on the website instead.`);
+        return;
+      }
 
       await sendDiscordDM(discordId, `*(Message sent to **${targetUsername}**)*`);
-
     } catch (err) {
       console.error("[Discord Listener] Error handling DM reply:", err);
     }

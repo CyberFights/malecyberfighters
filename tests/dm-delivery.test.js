@@ -56,7 +56,8 @@ async function startBridge() {
     async text => text,                                   // translateText
     delivery.emitToUser,
     async (discordId, message) => { discordReplies.push({ discordId, message }); },
-    discordEvents
+    discordEvents,
+    async url => ({ url: `https://i.ibb.co/rehosted-${encodeURIComponent(url)}`, reason: null })
   );
 
   const clients = [];
@@ -67,8 +68,8 @@ async function startBridge() {
     delivery,
     discordEvents,
     discordReplies,
-    fireDiscordDM(discordId, text) {
-      discordEvents.emit('dm', { discordId, text });
+    fireDiscordDM(discordId, text, imageUrls = []) {
+      discordEvents.emit('dm', { discordId, text, imageUrls });
     },
     async connect(username) {
       const socket = connectClient(url, { transports: ['websocket'] });
@@ -327,6 +328,47 @@ test('emitToUser reports how many sessions it reached', async () => {
     await bridge.connect('bob');
     assert.equal(bridge.delivery.emitToUser('bob', 'privateMessage', { text: 'hi' }), 2);
     assert.ok(await waitFor(() => first.received.length === 2));
+  } finally {
+    await bridge.close();
+  }
+});
+
+test('a Discord DM image attachment is re-hosted and delivered as an image DM', async () => {
+  const bridge = await startBridge();
+  try {
+    bridge.db.addUser({ username: 'alice', discordId: '111' });
+    bridge.db.addUser({ username: 'bob' });
+
+    const bob = await bridge.connect('bob');
+    const cdn = 'https://cdn.discordapp.com/attachments/1/2/photo.png?ex=dead&is=beef&hm=abc';
+    bridge.fireDiscordDM('111', '@bob', [cdn]);
+
+    assert.ok(await waitFor(() => bob.received.length === 1), 'recipient got no image DM');
+    assert.equal(bob.received[0].from, 'alice');
+    assert.equal(bob.received[0].imageUrl, `https://i.ibb.co/rehosted-${encodeURIComponent(cdn)}`);
+    assert.equal(bob.received[0].text, undefined, 'image DM carries no text');
+
+    const stored = bridge.db.dms.find(d => d.imageUrl);
+    assert.ok(stored, 'image DM was persisted with the re-hosted URL');
+    assert.equal(stored.imageUrl, `https://i.ibb.co/rehosted-${encodeURIComponent(cdn)}`);
+    assert.match(bridge.discordReplies[0].message, /Message sent to \*\*bob\*\*/);
+  } finally {
+    await bridge.close();
+  }
+});
+
+test('an image-only Discord DM without a recipient name is refused', async () => {
+  const bridge = await startBridge();
+  try {
+    bridge.db.addUser({ username: 'alice', discordId: '111' });
+    bridge.db.addUser({ username: 'bob' });
+
+    const cdn = 'https://cdn.discordapp.com/attachments/1/2/photo.png?ex=dead&is=beef&hm=abc';
+    bridge.fireDiscordDM('111', '', [cdn]);
+
+    assert.ok(await waitFor(() => bridge.discordReplies.length === 1));
+    assert.match(bridge.discordReplies[0].message, /@username message/);
+    assert.equal(bridge.db.dms.length, 0, 'nothing should be stored without a recipient');
   } finally {
     await bridge.close();
   }

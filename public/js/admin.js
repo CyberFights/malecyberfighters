@@ -59,15 +59,22 @@ window.loadAdminPanel = async function loadAdminPanel() {
 function showAdminTab(tab) {
   const usersView = document.getElementById('adminUsersView');
   const analyticsView = document.getElementById('adminAnalyticsView');
-  if (!usersView || !analyticsView) return;
+  const staleImagesView = document.getElementById('adminStaleImagesView');
+  if (!usersView || !analyticsView || !staleImagesView) return;
 
   if (tab === 'analytics') {
     usersView.style.display = 'none';
     analyticsView.style.display = 'block';
+    staleImagesView.style.display = 'none';
     if (window.loadAnalytics) window.loadAnalytics();
+  } else if (tab === 'stale-images') {
+    usersView.style.display = 'none';
+    analyticsView.style.display = 'none';
+    staleImagesView.style.display = 'block';
   } else {
     usersView.style.display = 'block';
     analyticsView.style.display = 'none';
+    staleImagesView.style.display = 'none';
   }
 }
 
@@ -79,6 +86,41 @@ document.addEventListener('click', async (e) => {
   }
   if (e.target.id === 'tabAnalytics') {
     showAdminTab('analytics');
+    return;
+  }
+  if (e.target.id === 'tabStaleImages') {
+    showAdminTab('stale-images');
+    return;
+  }
+
+  if (e.target.id === 'staleImagesPreview' || e.target.id === 'staleImagesRun') {
+    const dryRun = e.target.id === 'staleImagesPreview';
+    if (!window.adminSessionKey) return;
+    const summaryEl = document.getElementById('staleImagesSummary');
+    if (summaryEl) summaryEl.textContent = 'Scanning…';
+
+    try {
+      const res = await fetch(`/api/admin/sweep-stale-images?dryRun=${dryRun ? 1 : 0}`, {
+        method: 'POST',
+        headers: { 'x-admin-key': window.adminSessionKey }
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        if (summaryEl) summaryEl.textContent = 'Sweep failed: ' + (data.error || 'unknown error');
+        return;
+      }
+      const lines = [
+        `${data.dryRun ? 'DRY RUN — ' : ''}Scanned ${data.scanned}, re-hosted ${data.rehosted}, cleared ${data.cleared}, skipped ${data.skipped}, errors ${data.errors}`
+      ];
+      (data.items || []).slice(0, 200).forEach(it => {
+        lines.push(`${it.action}\t${it.collection}/${it.id}\t${it.reason || ''}\t${it.to || ''}`);
+      });
+      if ((data.items || []).length > 200) lines.push(`… and ${data.items.length - 200} more`);
+      if (summaryEl) summaryEl.textContent = lines.join('\n');
+    } catch (err) {
+      console.error('stale images sweep error', err);
+      if (summaryEl) summaryEl.textContent = 'Sweep request failed: ' + (err && err.message ? err.message : err);
+    }
     return;
   }
 

@@ -1451,6 +1451,95 @@ async function rehostImageToImgBB(rawUrl) {
   }
 }
 
+// True for a signed Discord CDN attachment URL. These are the links that lapse
+// ~24h after issue, so the stale-image sweep targets exactly this host rather
+// than rewriting every historical third-party URL.
+function isDiscordCdnUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    return url.protocol === 'https:' &&
+      (url.hostname === 'cdn.discordapp.com' || url.hostname === 'media.discordapp.net');
+  } catch (_) {
+    return false;
+  }
+}
+
+// One-off maintenance sweep for chat messages that still point at Discord CDN
+// links (which expire ~24h after issue). For each one it re-hosts a still-valid
+// image on ImgBB and clears a definitively-dead one. Transient failures (CDN
+// timeout, network error, missing ImgBB key) leave the record untouched so a
+// possibly-valid image is never dropped by mistake.
+async function sweepStaleDiscordImages({ dryRun = false, limit = 1000 } = {}) {
+  const summary = {
+    dryRun,
+    scanned: 0,
+    rehosted: 0,
+    cleared: 0,
+    skipped: 0,
+    errors: 0,
+    items: []
+  };
+
+  const collections = [
+    { model: PublicMessage, label: 'PublicMessage' },
+    { model: RoomMessage, label: 'RoomMessage' },
+    { model: DM, label: 'DM' }
+  ];
+
+  for (const { model, label } of collections) {
+    let docs;
+    try {
+      docs = await model
+        .find({ imageUrl: { $type: 'string', $ne: '' } })
+        .select('_id imageUrl')
+        .lean();
+    } catch (err) {
+      console.error(`sweep: failed to read ${label}`, err.message || err);
+      summary.errors++;
+      continue;
+    }
+
+    for (const doc of docs) {
+      if (summary.scanned >= limit) break;
+      if (!isDiscordCdnUrl(doc.imageUrl)) continue;
+      summary.scanned++;
+
+      const entry = { collection: label, id: String(doc._id), from: doc.imageUrl };
+      const rehosted = await rehostImageToImgBB(doc.imageUrl);
+
+      if (rehosted.url) {
+        summary.rehosted++;
+        entry.action = 'rehosted';
+        entry.to = rehosted.url;
+        if (!dryRun) {
+          await model.updateOne({ _id: doc._id }, { $set: { imageUrl: rehosted.url } }).catch(() => {});
+        }
+      } else if (
+        rehosted.reason === 'upstream_404' ||
+        rehosted.reason === 'upstream_410' ||
+        String(rehosted.reason || '').startsWith('bad_type_')
+      ) {
+        // Upstream says the file is gone (404/410) or is no longer an image —
+        // clear it so clients stop rendering a broken <img>.
+        summary.cleared++;
+        entry.action = 'cleared';
+        if (!dryRun) {
+          await model.updateOne({ _id: doc._id }, { $set: { imageUrl: null } }).catch(() => {});
+        }
+      } else {
+        // Timeout, network error, missing key, too large — leave as-is.
+        summary.skipped++;
+        entry.action = 'skipped';
+        entry.reason = rehosted.reason;
+      }
+
+      summary.items.push(entry);
+    }
+  }
+
+  return summary;
+}
+
 function getIp(req) {
   return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress;
 }
@@ -2129,6 +2218,22 @@ app.get("/api/admin/top-ips", requireAdmin, async (req, res) => {
     res.json({ ok: true, ips });
   } catch (err) {
     console.error("Admin top IPs error:", err);
+    res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
+// Sweep stale Discord CDN image URLs out of chat history. Discord attachment
+// links expire ~24h after issue; this re-hosts the ones still fetchable on
+// ImgBB and clears the definitively-dead ones. Pass ?dryRun=1 to preview.
+app.post("/api/admin/sweep-stale-images", requireAdmin, async (req, res) => {
+  const dryRun = req.query.dryRun === "1" || req.query.dryRun === "true";
+  const limit = Math.min(Number(req.query.limit) || 1000, 10000);
+
+  try {
+    const summary = await sweepStaleDiscordImages({ dryRun, limit });
+    res.json({ ok: true, ...summary });
+  } catch (err) {
+    console.error("Admin sweep stale images error:", err);
     res.status(500).json({ ok: false, error: "server_error" });
   }
 });
@@ -3816,7 +3921,7 @@ socket.on("editPublicMessage", async (data) => {
 });
 
 const setupDiscordListener = require('./setupDiscordListener');
-setupDiscordListener(User, DM, translateText, emitToUser, sendDiscordDM, discordEvents);
+setupDiscordListener(User, DM, translateText, emitToUser, sendDiscordDM, discordEvents, rehostImageToImgBB);
 
 // ---------- START ----------
 server.listen(PORT, "0.0.0.0", () => {

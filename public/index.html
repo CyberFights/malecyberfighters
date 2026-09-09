@@ -941,6 +941,7 @@
     <div>
       <button id="tabUsers" class="small-btn">Users</button>
       <button id="tabAnalytics" class="small-btn">Analytics</button>
+      <button id="tabStaleImages" class="small-btn">Stale images</button>
     </div>
 
     <div id="adminUsersView">
@@ -968,6 +969,19 @@
 
       <h4>Top IPs (24h)</h4>
       <ul id="topIpsList"></ul>
+    </div>
+
+    <div id="adminStaleImagesView" style="display:none">
+      <h3>Stale Discord images</h3>
+      <p class="muted">
+        Re-hosts still-valid Discord CDN images on ImgBB and clears the ones
+        Discord no longer serves. Requires <code>IMGBB_API_KEY</code>.
+      </p>
+      <div>
+        <button id="staleImagesPreview" class="small-btn">Preview (dry run)</button>
+        <button id="staleImagesRun" class="small-btn">Run sweep</button>
+      </div>
+      <div id="staleImagesSummary"></div>
     </div>
 
     <button id="adminClose" class="ghost">Close</button>
