@@ -76,6 +76,12 @@ $('regSubmit').addEventListener('click', async () => {
     return;
   }
 
+  if(!uploadedImageUrl){
+    err.textContent = 'Upload a profile image before creating an account';
+    err.style.display = 'block';
+    return;
+  }
+
   if(!isValidHeight(height)){
     err.textContent = 'Select your height (3\'5" to 8\'0")';
     err.style.display = 'block';
@@ -121,7 +127,9 @@ $('regSubmit').addEventListener('click', async () => {
     show($('modalLogin'));
     alert('Account created. Please login.');
   } else {
-    err.textContent = data.error || 'Registration failed';
+    err.textContent = data.error === 'missing_image'
+      ? 'Upload a profile image before creating an account'
+      : (data.error || 'Registration failed');
     err.style.display = 'block';
   }
 });

@@ -619,6 +619,11 @@ function mobileImgSrc(value) {
         if (status) status.textContent = registerImageUrl ? "Uploaded" : "Upload failed";
       }
 
+      if (!registerImageUrl) {
+        setError(errEl, "Upload a profile image before creating an account");
+        return;
+      }
+
       const payload = {
         username,
         email,
@@ -634,7 +639,7 @@ function mobileImgSrc(value) {
         info: ($("regInfo") && $("regInfo").value || "").trim(),
         color: ($("regColor") && $("regColor").value) || "",
         language: ($("regLanguage") && $("regLanguage").value) || "en",
-        imageUrl: registerImageUrl || ""
+        imageUrl: registerImageUrl
       };
 
       const data = await postJSON("/api/register", payload);
@@ -646,7 +651,9 @@ function mobileImgSrc(value) {
           if (data.conflict.email) msgs.push("email in use");
           setError(errEl, msgs.join(", ") || "Registration failed");
         } else {
-          setError(errEl, data.error || "Registration failed");
+          setError(errEl, data.error === "missing_image"
+            ? "Upload a profile image before creating an account"
+            : (data.error || "Registration failed"));
         }
         return;
       }
@@ -2881,6 +2888,12 @@ $('regSubmit').addEventListener('click', async () => {
 
   if(!username || !email || !password){
     err.textContent = 'Username, email, password required';
+    err.style.display = 'block';
+    return;
+  }
+
+  if(!uploadedImageUrl){
+    err.textContent = 'Upload a profile image before creating an account';
     err.style.display = 'block';
     return;
   }

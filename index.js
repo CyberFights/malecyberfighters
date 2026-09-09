@@ -2861,6 +2861,11 @@ app.post('/api/register', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'missing_fields' });
   }
 
+  if (!isImgBBUrl(imageUrl)) {
+    await logIp(req, { action: 'register_fail', username });
+    return res.status(400).json({ ok: false, error: 'missing_image' });
+  }
+
   // Physique is optional for older clients, but when it is supplied it must
   // fall inside the 3'5"–8'0" / 60–700 lbs menu ranges.
   let height;
@@ -2911,7 +2916,7 @@ app.post('/api/register', async (req, res) => {
       info: info || '',
       color: color || '',
       language: language || 'en',
-      imageUrl: imageUrl || ''
+      imageUrl
     });
 
     await user.save();
