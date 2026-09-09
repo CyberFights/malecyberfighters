@@ -23,10 +23,18 @@ if (DISCORD_BOT_TOKEN) {
   discordClient.on('messageCreate', message => {
     // Ignore bot messages and non-DM messages
     if (message.author.bot || message.guildId) return;
-    
+
+    // Resolve image attachments to their (expiring) CDN URLs so the website
+    // can re-host them on ImgBB rather than storing a link that 404s later.
+    const imageUrls = (message.attachments || [])
+      .filter(a => a && String(a.contentType || '').startsWith('image/'))
+      .map(a => a.url)
+      .filter(Boolean);
+
     discordEvents.emit('dm', {
       discordId: message.author.id,
-      text: message.content
+      text: message.content,
+      imageUrls
     });
   });
 

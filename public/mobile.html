@@ -695,6 +695,7 @@
     <div class="admin-tabs">
       <button id="tabUsers" class="small-btn" type="button">Users</button>
       <button id="tabAnalytics" class="small-btn secondary" type="button">Analytics</button>
+      <button id="tabStaleImages" class="small-btn secondary" type="button">Stale images</button>
     </div>
 
     <div id="adminUsersView">
@@ -719,6 +720,19 @@
 
     <div id="adminAnalyticsView" style="display:none">
       <p class="small muted">Analytics are only available in the desktop admin panel.</p>
+    </div>
+
+    <div id="adminStaleImagesView" style="display:none">
+      <h4>Stale Discord images</h4>
+      <p class="small muted">
+        Re-hosts still-valid Discord CDN images on ImgBB and clears the ones
+        Discord no longer serves. Requires <code>IMGBB_API_KEY</code>.
+      </p>
+      <div>
+        <button id="staleImagesPreview" class="small-btn" type="button">Preview (dry run)</button>
+        <button id="staleImagesRun" class="small-btn" type="button">Run sweep</button>
+      </div>
+      <div id="staleImagesSummary" style="white-space:pre-wrap;font-size:12px"></div>
     </div>
   </div>
 </div>

@@ -1626,6 +1626,25 @@ button.download-btn:hover{
   flex-direction:row-reverse;
 }
 
+/* Join/leave system notices shown inside room chats */
+.message-row.room-system {
+  justify-content:center;
+  align-items:center;
+  padding:2px 8px;
+}
+.room-system-msg {
+  max-width:92%;
+  padding:4px 12px;
+  border-radius:10px;
+  background:rgba(127,216,255,0.06);
+  color:var(--muted);
+  font-size:12.5px;
+  font-style:italic;
+  line-height:1.45;
+  text-align:center;
+  word-break:break-word;
+}
+
 .side-close-btn {
   background:transparent;
   border:1px solid rgba(180,220,255,0.2);

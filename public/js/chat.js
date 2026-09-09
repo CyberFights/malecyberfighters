@@ -1053,8 +1053,9 @@ socket.on('roomMessage', msg => {
   const s = getSession();
 
   if (msg.room !== currentRoom) {
-    // Don't badge our own outbound messages when room isn't focused
-    if (!s || msg.from !== s.username) {
+    // Don't badge our own outbound messages when room isn't focused, and never
+    // badge join/leave system notices.
+    if (msg.type !== 'system' && (!s || msg.from !== s.username)) {
       if (typeof incrementRoomUnread === 'function') incrementRoomUnread(msg.room);
       if (typeof updateRoomsSidebarBadges === 'function') updateRoomsSidebarBadges();
     }
@@ -1068,6 +1069,17 @@ socket.on('roomMessage', msg => {
 function appendRoomMessage(msg){
   const feed = $('roomFeed');
   if (!feed) return;
+
+  // Join/leave system notices render as a centered muted line instead of a
+  // chat bubble (no avatar, no author, no reply/edit actions).
+  if (msg.type === 'system') {
+    const div = document.createElement('div');
+    div.className = 'message-row room-system';
+    div.innerHTML = `<div class="room-system-msg">${escapeHtml(msg.text || '')}</div>`;
+    feed.appendChild(div);
+    feed.scrollTop = feed.scrollHeight;
+    return;
+  }
 
   const s = getSession();
   const isMine = isOwnMessage(msg);

@@ -1379,6 +1379,167 @@ async function uploadImageToImgBB(file) {
   };
 }
 
+// Re-hosts a remote image on ImgBB so a chat message never ends up depending
+// on a signed, short-lived CDN URL. Discord signs its attachment links with an
+// ~24h expiry (`is`/`ex` params); once they lapse the CDN 404s and the image is
+// gone for good, so we fetch the bytes while the URL is still valid and persist
+// the durable ImgBB URL instead.
+//
+// Returns { url, reason }. `url` is the ImgBB URL on success (or the original
+// URL when it is already hosted on ImgBB); it is null when the copy can't be
+// made and the caller should keep the original URL rather than drop the image.
+async function rehostImageToImgBB(rawUrl) {
+  const imgbbKey = process.env.IMGBB_API_KEY;
+  if (!imgbbKey) return { url: null, reason: 'no_imgbb_key' };
+
+  let url;
+  try {
+    url = new URL(String(rawUrl || '').trim());
+  } catch (_) {
+    return { url: null, reason: 'invalid_url' };
+  }
+
+  // Only remote HTTPS images are re-hosted. Local, data:/blob: and
+  // already-ImgBB URLs are returned untouched.
+  if (url.protocol !== 'https:') return { url: null, reason: 'not_https' };
+  if (isImgBBUrl(url.href)) return { url: url.href, reason: null };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), IMAGE_PROXY_TIMEOUT_MS);
+  if (typeof timeout.unref === 'function') timeout.unref();
+
+  try {
+    const res = await fetch(url.href, {
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: {
+        'Accept': 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8,*/*;q=0.5',
+        'User-Agent': 'Mozilla/5.0 (compatible; MaleCyberFighters/1.0; +https://male-cyber-fighters.com)'
+      }
+    });
+
+    const contentType = String(res.headers.get('content-type') || '')
+      .split(';')[0].trim().toLowerCase();
+    const contentLength = Number(res.headers.get('content-length') || 0);
+
+    if (!res.ok) {
+      if (res.body && typeof res.body.resume === 'function') res.body.resume();
+      return { url: null, reason: `upstream_${res.status}` };
+    }
+    if (!contentType.startsWith('image/')) {
+      if (res.body && typeof res.body.resume === 'function') res.body.resume();
+      return { url: null, reason: `bad_type_${contentType || 'none'}` };
+    }
+    if (contentLength && contentLength > MAX_PROXIED_IMAGE_SIZE) {
+      if (res.body && typeof res.body.resume === 'function') res.body.resume();
+      return { url: null, reason: 'too_large' };
+    }
+
+    const buf = await res.buffer();
+    if (!buf || !buf.length) return { url: null, reason: 'empty_body' };
+    if (buf.length > MAX_PROXIED_IMAGE_SIZE) return { url: null, reason: 'too_large' };
+
+    const uploaded = await uploadImageToImgBB({ buffer: buf, mimetype: contentType });
+    return { url: uploaded.imageUrl, reason: null };
+  } catch (err) {
+    const isAbortError = err && (
+      err.name === 'AbortError' || err.type === 'aborted' || err.code === 'ABORT_ERR'
+    );
+    return { url: null, reason: isAbortError ? 'timeout' : (err.message || 'error') };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// True for a signed Discord CDN attachment URL. These are the links that lapse
+// ~24h after issue, so the stale-image sweep targets exactly this host rather
+// than rewriting every historical third-party URL.
+function isDiscordCdnUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    return url.protocol === 'https:' &&
+      (url.hostname === 'cdn.discordapp.com' || url.hostname === 'media.discordapp.net');
+  } catch (_) {
+    return false;
+  }
+}
+
+// One-off maintenance sweep for chat messages that still point at Discord CDN
+// links (which expire ~24h after issue). For each one it re-hosts a still-valid
+// image on ImgBB and clears a definitively-dead one. Transient failures (CDN
+// timeout, network error, missing ImgBB key) leave the record untouched so a
+// possibly-valid image is never dropped by mistake.
+async function sweepStaleDiscordImages({ dryRun = false, limit = 1000 } = {}) {
+  const summary = {
+    dryRun,
+    scanned: 0,
+    rehosted: 0,
+    cleared: 0,
+    skipped: 0,
+    errors: 0,
+    items: []
+  };
+
+  const collections = [
+    { model: PublicMessage, label: 'PublicMessage' },
+    { model: RoomMessage, label: 'RoomMessage' },
+    { model: DM, label: 'DM' }
+  ];
+
+  for (const { model, label } of collections) {
+    let docs;
+    try {
+      docs = await model
+        .find({ imageUrl: { $type: 'string', $ne: '' } })
+        .select('_id imageUrl')
+        .lean();
+    } catch (err) {
+      console.error(`sweep: failed to read ${label}`, err.message || err);
+      summary.errors++;
+      continue;
+    }
+
+    for (const doc of docs) {
+      if (summary.scanned >= limit) break;
+      if (!isDiscordCdnUrl(doc.imageUrl)) continue;
+      summary.scanned++;
+
+      const entry = { collection: label, id: String(doc._id), from: doc.imageUrl };
+      const rehosted = await rehostImageToImgBB(doc.imageUrl);
+
+      if (rehosted.url) {
+        summary.rehosted++;
+        entry.action = 'rehosted';
+        entry.to = rehosted.url;
+        if (!dryRun) {
+          await model.updateOne({ _id: doc._id }, { $set: { imageUrl: rehosted.url } }).catch(() => {});
+        }
+      } else if (
+        rehosted.reason === 'upstream_404' ||
+        rehosted.reason === 'upstream_410' ||
+        String(rehosted.reason || '').startsWith('bad_type_')
+      ) {
+        // Upstream says the file is gone (404/410) or is no longer an image —
+        // clear it so clients stop rendering a broken <img>.
+        summary.cleared++;
+        entry.action = 'cleared';
+        if (!dryRun) {
+          await model.updateOne({ _id: doc._id }, { $set: { imageUrl: null } }).catch(() => {});
+        }
+      } else {
+        // Timeout, network error, missing key, too large — leave as-is.
+        summary.skipped++;
+        entry.action = 'skipped';
+        entry.reason = rehosted.reason;
+      }
+
+      summary.items.push(entry);
+    }
+  }
+
+  return summary;
+}
+
 function getIp(req) {
   return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress;
 }
@@ -1627,6 +1788,50 @@ async function updateRoomMembers(roomId) {
     io.to(roomId).emit("roomMembers", members);
   } catch (err) {
     console.error("updateRoomMembers error:", err);
+  }
+}
+
+// Whether any live socket of `username` is currently in `roomId`. Used to avoid
+// announcing a join/leave when the user already has (or still has) another
+// session in the room — a second tab, the phone, the desktop app.
+async function roomHasUser(roomId, username) {
+  if (!roomId || !username) return false;
+  try {
+    const sockets = await io.in(String(roomId)).fetchSockets();
+    for (const s of sockets) {
+      const live = io.sockets.sockets.get(s.id) || s;
+      const uname = live?.username || s?.username ||
+        (live?.handshake?.auth && live.handshake.auth.username) || null;
+      if (uname && String(uname) === String(username)) return true;
+    }
+  } catch (err) {
+    console.error("roomHasUser error:", err.message || err);
+  }
+  return false;
+}
+
+// Broadcast a system notice ("<name> has joined/left the room") into the room
+// feed. Live-only: nothing is persisted, so the notice reaches only the people
+// currently in the room and never shows up in scrollback/history. Never throws —
+// an announcement failure must not break the join/leave it accompanies.
+async function announceRoomSystemMessage(roomId, username, action) {
+  try {
+    const user = await User.findOne({ username }).lean();
+    const name = user?.display || user?.username || username;
+    const text = action === "join"
+      ? `${name} has joined the room`
+      : `${name} has left the room`;
+
+    io.to(roomId).emit("roomMessage", {
+      room: roomId,
+      from: "SYSTEM",
+      display: null,
+      text,
+      type: "system",
+      time: new Date()
+    });
+  } catch (err) {
+    console.error("announceRoomSystemMessage error:", err.message || err);
   }
 }
 
@@ -2057,6 +2262,22 @@ app.get("/api/admin/top-ips", requireAdmin, async (req, res) => {
     res.json({ ok: true, ips });
   } catch (err) {
     console.error("Admin top IPs error:", err);
+    res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
+// Sweep stale Discord CDN image URLs out of chat history. Discord attachment
+// links expire ~24h after issue; this re-hosts the ones still fetchable on
+// ImgBB and clears the definitively-dead ones. Pass ?dryRun=1 to preview.
+app.post("/api/admin/sweep-stale-images", requireAdmin, async (req, res) => {
+  const dryRun = req.query.dryRun === "1" || req.query.dryRun === "true";
+  const limit = Math.min(Number(req.query.limit) || 1000, 10000);
+
+  try {
+    const summary = await sweepStaleDiscordImages({ dryRun, limit });
+    res.json({ ok: true, ...summary });
+  } catch (err) {
+    console.error("Admin sweep stale images error:", err);
     res.status(500).json({ ok: false, error: "server_error" });
   }
 });
@@ -2906,11 +3127,27 @@ app.post("/api/chatMessage", async (req, res) => {
   try {
     const { username, message, timestamp, avatar } = req.body;
     const attachments = Array.isArray(req.body.attachments) ? req.body.attachments : [];
-    const imageUrl = req.body.imageUrl || req.body.image || req.body.image_url ||
+    let imageUrl = req.body.imageUrl || req.body.image || req.body.image_url ||
       attachments.find(a => a && (a.url || a.proxy_url) && String(a.content_type || a.contentType || "").startsWith("image/"))?.url ||
       attachments.find(a => a && (a.url || a.proxy_url))?.url ||
       attachments.find(a => a && (a.url || a.proxy_url))?.proxy_url ||
       null;
+
+    // Signed CDN links (Discord attachments) expire ~24h after issue. Re-host
+    // the image on ImgBB while it is still fetchable and persist that durable
+    // URL instead, so old messages don't turn into 404s later. If the copy
+    // can't be made the original URL is kept as a fallback.
+    if (imageUrl) {
+      const rehosted = await rehostImageToImgBB(imageUrl);
+      if (rehosted.url) {
+        imageUrl = rehosted.url;
+      } else {
+        console.warn('chat message image not re-hosted to ImgBB; keeping original URL', {
+          url: imageUrl,
+          reason: rehosted.reason
+        });
+      }
+    }
 
     if (!username || (!message && !imageUrl)) {
       return res.status(400).json({ error: "Username and message are required" });
@@ -3286,8 +3523,11 @@ socket.on('publicMessage', async (msg) => {
     await Promise.all(
       onlineUsers.map(async u => {
         if (!u.socketId) return; // Skip if no active socket
-        
-        const translated = await translateText(enriched.text, u.language || "en");
+
+        // The sender always sees exactly what they typed — never a translation
+        // of their own message back into their profile language.
+        const isSender = u.username === msg.from;
+        const translated = isSender ? enriched.text : await translateText(enriched.text, u.language || "en");
 
         io.to(u.socketId).emit("publicMessage", {
           ...enriched,
@@ -3320,7 +3560,9 @@ socket.on("editPublicMessage", async (data) => {
     const onlineUsers = await User.find({ online: true }).lean();
     await Promise.all(onlineUsers.map(async u => {
       if (!u.socketId) return;
-      const translated = await translateText(msg.text, u.language || "en");
+      // The author sees the edit exactly as they typed it.
+      const isAuthor = u.username === from;
+      const translated = isAuthor ? msg.text : await translateText(msg.text, u.language || "en");
       io.to(u.socketId).emit("publicMessageEdited", {
         _id: id,
         text: translated,
@@ -3499,9 +3741,18 @@ socket.on("editPublicMessage", async (data) => {
     if (previousRoom && previousRoom !== roomId) {
       socket.leave(previousRoom);
       socket.currentRoom = null;
+      // Announce the leave only when this was the user's last session in the
+      // room (another tab / the phone may still be in it).
+      if (!(await roomHasUser(previousRoom, socket.username))) {
+        announceRoomSystemMessage(previousRoom, socket.username, "leave");
+      }
       // Do not delay the new join while refreshing the old room.
       updateRoomMembers(previousRoom);
     }
+
+    // Announce the join only when the user was not already in the room from
+    // another session, so opening a second tab doesn't repeat the notice.
+    const alreadyInRoom = await roomHasUser(roomId, socket.username);
 
     socket.join(roomId);
     socket.currentRoom = roomId;
@@ -3510,6 +3761,10 @@ socket.on("editPublicMessage", async (data) => {
     io.to(socket.id).emit("roomHistory", { room: roomId, history });
 
     await updateRoomMembers(roomId);
+
+    if (!alreadyInRoom) {
+      announceRoomSystemMessage(roomId, socket.username, "join");
+    }
   });
 
   // Remove this socket from a room when its chat window closes.
@@ -3519,6 +3774,10 @@ socket.on("editPublicMessage", async (data) => {
 
     socket.leave(roomId);
     if (socket.currentRoom === roomId) socket.currentRoom = null;
+
+    if (!(await roomHasUser(roomId, socket.username))) {
+      announceRoomSystemMessage(roomId, socket.username, "leave");
+    }
     await updateRoomMembers(roomId);
   });
 
@@ -3579,6 +3838,21 @@ socket.on("editPublicMessage", async (data) => {
     }
 
     members.forEach(async member => {
+      const live = io.sockets.sockets.get(member.id) || member;
+      const memberUsername = live?.username || member?.username ||
+        (live?.handshake?.auth && live.handshake.auth.username) || null;
+
+      // The sender always sees exactly what they typed — never a translation
+      // of their own message back into their profile language.
+      if (memberUsername && memberUsername === socket.username) {
+        io.to(member.id).emit("roomMessage", {
+          ...enriched,
+          _id: created?._id,
+          text: enriched.text
+        });
+        return;
+      }
+
       const recipient = await User.findOne({ socketId: member.id }).lean();
       const translated = await translateText(enriched.text, recipient?.language || "en");
 
@@ -3607,7 +3881,9 @@ socket.on("editPublicMessage", async (data) => {
 
       const members = await User.find({ socketId: { $ne: null } }).lean();
       members.forEach(async u => {
-        const translated = await translateText(msg.text, u.language || "en");
+        // The author sees the edit exactly as they typed it.
+        const isAuthor = u.username === socket.username;
+        const translated = isAuthor ? msg.text : await translateText(msg.text, u.language || "en");
         io.to(u.socketId).emit("roomMessageEdited", {
           room: msg.room,
           _id: id,
@@ -3720,6 +3996,12 @@ socket.on("editPublicMessage", async (data) => {
     }
 
     if (socket.currentRoom) {
+      // Announce the leave only when no other session of this user remains in
+      // the room. (By the time 'disconnect' fires, this socket has already been
+      // removed from its rooms, so roomHasUser sees only the survivors.)
+      if (!(await roomHasUser(socket.currentRoom, socket.username))) {
+        announceRoomSystemMessage(socket.currentRoom, socket.username, "leave");
+      }
       updateRoomMembers(socket.currentRoom);
     }
 
@@ -3728,7 +4010,7 @@ socket.on("editPublicMessage", async (data) => {
 });
 
 const setupDiscordListener = require('./setupDiscordListener');
-setupDiscordListener(User, DM, translateText, emitToUser, sendDiscordDM, discordEvents);
+setupDiscordListener(User, DM, translateText, emitToUser, sendDiscordDM, discordEvents, rehostImageToImgBB);
 
 // ---------- START ----------
 server.listen(PORT, "0.0.0.0", () => {

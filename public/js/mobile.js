@@ -451,7 +451,7 @@ function mobileImgSrc(value) {
       const current = popup ? popup.dataset.room : null;
       if (!current || !msg || String(msg.room) !== String(current)) {
         const s = getSession();
-        if (msg && msg.room && (!s || msg.from !== s.username)) {
+        if (msg && msg.room && msg.type !== "system" && (!s || msg.from !== s.username)) {
           state.roomUnread[msg.room] = (state.roomUnread[msg.room] || 0) + 1;
           renderRoomsSidebar();
         }
@@ -1980,6 +1980,17 @@ function mobileImgSrc(value) {
   function appendRoomMessage(msg) {
     const feed = $("roomFeed");
     if (!feed || !msg) return;
+
+    // Join/leave system notices render as a centered muted line instead of a
+    // chat bubble (no avatar, no author).
+    if (msg.type === "system") {
+      const div = document.createElement("div");
+      div.className = "message-row room-system";
+      div.innerHTML = `<div class="room-system-msg">${escapeHtml(msg.text || "")}</div>`;
+      feed.appendChild(div);
+      feed.scrollTop = feed.scrollHeight;
+      return;
+    }
 
     const s = getSession();
     const isMe = !!(s && msg.from === s.username);
