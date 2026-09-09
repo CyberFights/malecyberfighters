@@ -1379,6 +1379,78 @@ async function uploadImageToImgBB(file) {
   };
 }
 
+// Re-hosts a remote image on ImgBB so a chat message never ends up depending
+// on a signed, short-lived CDN URL. Discord signs its attachment links with an
+// ~24h expiry (`is`/`ex` params); once they lapse the CDN 404s and the image is
+// gone for good, so we fetch the bytes while the URL is still valid and persist
+// the durable ImgBB URL instead.
+//
+// Returns { url, reason }. `url` is the ImgBB URL on success (or the original
+// URL when it is already hosted on ImgBB); it is null when the copy can't be
+// made and the caller should keep the original URL rather than drop the image.
+async function rehostImageToImgBB(rawUrl) {
+  const imgbbKey = process.env.IMGBB_API_KEY;
+  if (!imgbbKey) return { url: null, reason: 'no_imgbb_key' };
+
+  let url;
+  try {
+    url = new URL(String(rawUrl || '').trim());
+  } catch (_) {
+    return { url: null, reason: 'invalid_url' };
+  }
+
+  // Only remote HTTPS images are re-hosted. Local, data:/blob: and
+  // already-ImgBB URLs are returned untouched.
+  if (url.protocol !== 'https:') return { url: null, reason: 'not_https' };
+  if (isImgBBUrl(url.href)) return { url: url.href, reason: null };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), IMAGE_PROXY_TIMEOUT_MS);
+  if (typeof timeout.unref === 'function') timeout.unref();
+
+  try {
+    const res = await fetch(url.href, {
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: {
+        'Accept': 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8,*/*;q=0.5',
+        'User-Agent': 'Mozilla/5.0 (compatible; MaleCyberFighters/1.0; +https://male-cyber-fighters.com)'
+      }
+    });
+
+    const contentType = String(res.headers.get('content-type') || '')
+      .split(';')[0].trim().toLowerCase();
+    const contentLength = Number(res.headers.get('content-length') || 0);
+
+    if (!res.ok) {
+      if (res.body && typeof res.body.resume === 'function') res.body.resume();
+      return { url: null, reason: `upstream_${res.status}` };
+    }
+    if (!contentType.startsWith('image/')) {
+      if (res.body && typeof res.body.resume === 'function') res.body.resume();
+      return { url: null, reason: `bad_type_${contentType || 'none'}` };
+    }
+    if (contentLength && contentLength > MAX_PROXIED_IMAGE_SIZE) {
+      if (res.body && typeof res.body.resume === 'function') res.body.resume();
+      return { url: null, reason: 'too_large' };
+    }
+
+    const buf = await res.buffer();
+    if (!buf || !buf.length) return { url: null, reason: 'empty_body' };
+    if (buf.length > MAX_PROXIED_IMAGE_SIZE) return { url: null, reason: 'too_large' };
+
+    const uploaded = await uploadImageToImgBB({ buffer: buf, mimetype: contentType });
+    return { url: uploaded.imageUrl, reason: null };
+  } catch (err) {
+    const isAbortError = err && (
+      err.name === 'AbortError' || err.type === 'aborted' || err.code === 'ABORT_ERR'
+    );
+    return { url: null, reason: isAbortError ? 'timeout' : (err.message || 'error') };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function getIp(req) {
   return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress;
 }
@@ -2906,11 +2978,27 @@ app.post("/api/chatMessage", async (req, res) => {
   try {
     const { username, message, timestamp, avatar } = req.body;
     const attachments = Array.isArray(req.body.attachments) ? req.body.attachments : [];
-    const imageUrl = req.body.imageUrl || req.body.image || req.body.image_url ||
+    let imageUrl = req.body.imageUrl || req.body.image || req.body.image_url ||
       attachments.find(a => a && (a.url || a.proxy_url) && String(a.content_type || a.contentType || "").startsWith("image/"))?.url ||
       attachments.find(a => a && (a.url || a.proxy_url))?.url ||
       attachments.find(a => a && (a.url || a.proxy_url))?.proxy_url ||
       null;
+
+    // Signed CDN links (Discord attachments) expire ~24h after issue. Re-host
+    // the image on ImgBB while it is still fetchable and persist that durable
+    // URL instead, so old messages don't turn into 404s later. If the copy
+    // can't be made the original URL is kept as a fallback.
+    if (imageUrl) {
+      const rehosted = await rehostImageToImgBB(imageUrl);
+      if (rehosted.url) {
+        imageUrl = rehosted.url;
+      } else {
+        console.warn('chat message image not re-hosted to ImgBB; keeping original URL', {
+          url: imageUrl,
+          reason: rehosted.reason
+        });
+      }
+    }
 
     if (!username || (!message && !imageUrl)) {
       return res.status(400).json({ error: "Username and message are required" });
