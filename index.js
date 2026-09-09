@@ -1102,8 +1102,6 @@ const roomMessageSchema = new mongoose.Schema({
   // short video / GIF attached to the message (served from /clips)
   clipUrl: String,
   clipType: String, // "video" | "gif"
-  // "normal" for chat messages, "system" for join/leave announcements
-  type: { type: String, default: "normal" },
   edited: { type: Boolean, default: false },
   replyTo: { type: Object, default: null },
   time: { type: Date, default: Date.now }
@@ -1812,9 +1810,10 @@ async function roomHasUser(roomId, username) {
   return false;
 }
 
-// Persist + broadcast a system notice ("<name> has joined/left the room") into
-// the room feed. Never throws — an announcement failure must not break the
-// join/leave it accompanies.
+// Broadcast a system notice ("<name> has joined/left the room") into the room
+// feed. Live-only: nothing is persisted, so the notice reaches only the people
+// currently in the room and never shows up in scrollback/history. Never throws —
+// an announcement failure must not break the join/leave it accompanies.
 async function announceRoomSystemMessage(roomId, username, action) {
   try {
     const user = await User.findOne({ username }).lean();
@@ -1823,23 +1822,13 @@ async function announceRoomSystemMessage(roomId, username, action) {
       ? `${name} has joined the room`
       : `${name} has left the room`;
 
-    const saved = await RoomMessage.create({
-      room: roomId,
-      from: "SYSTEM",
-      display: null,
-      text,
-      type: "system",
-      time: new Date()
-    });
-
     io.to(roomId).emit("roomMessage", {
       room: roomId,
       from: "SYSTEM",
       display: null,
       text,
       type: "system",
-      _id: saved?._id,
-      time: saved?.time || new Date()
+      time: new Date()
     });
   } catch (err) {
     console.error("announceRoomSystemMessage error:", err.message || err);
