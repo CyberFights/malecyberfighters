@@ -580,6 +580,21 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
 .message-row.me { flex-direction: row-reverse; }
 .message-row.me .message { border-color: rgba(124, 58, 237, .55); }
 
+/* Join/leave system notices shown inside room chats */
+.message-row.room-system { justify-content: center; align-items: center; padding: 2px 8px; }
+.room-system-msg {
+  max-width: 92%;
+  padding: 4px 12px;
+  border-radius: 10px;
+  background: rgba(127, 216, 255, .06);
+  color: #7b8ca5;
+  font-size: 12.5px;
+  font-style: italic;
+  line-height: 1.45;
+  text-align: center;
+  word-break: break-word;
+}
+
 .message-avatar { flex: 0 0 auto; }
 
 .avatar-fallback {

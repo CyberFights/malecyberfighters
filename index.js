@@ -1102,6 +1102,8 @@ const roomMessageSchema = new mongoose.Schema({
   // short video / GIF attached to the message (served from /clips)
   clipUrl: String,
   clipType: String, // "video" | "gif"
+  // "normal" for chat messages, "system" for join/leave announcements
+  type: { type: String, default: "normal" },
   edited: { type: Boolean, default: false },
   replyTo: { type: Object, default: null },
   time: { type: Date, default: Date.now }
@@ -1788,6 +1790,59 @@ async function updateRoomMembers(roomId) {
     io.to(roomId).emit("roomMembers", members);
   } catch (err) {
     console.error("updateRoomMembers error:", err);
+  }
+}
+
+// Whether any live socket of `username` is currently in `roomId`. Used to avoid
+// announcing a join/leave when the user already has (or still has) another
+// session in the room — a second tab, the phone, the desktop app.
+async function roomHasUser(roomId, username) {
+  if (!roomId || !username) return false;
+  try {
+    const sockets = await io.in(String(roomId)).fetchSockets();
+    for (const s of sockets) {
+      const live = io.sockets.sockets.get(s.id) || s;
+      const uname = live?.username || s?.username ||
+        (live?.handshake?.auth && live.handshake.auth.username) || null;
+      if (uname && String(uname) === String(username)) return true;
+    }
+  } catch (err) {
+    console.error("roomHasUser error:", err.message || err);
+  }
+  return false;
+}
+
+// Persist + broadcast a system notice ("<name> has joined/left the room") into
+// the room feed. Never throws — an announcement failure must not break the
+// join/leave it accompanies.
+async function announceRoomSystemMessage(roomId, username, action) {
+  try {
+    const user = await User.findOne({ username }).lean();
+    const name = user?.display || user?.username || username;
+    const text = action === "join"
+      ? `${name} has joined the room`
+      : `${name} has left the room`;
+
+    const saved = await RoomMessage.create({
+      room: roomId,
+      from: "SYSTEM",
+      display: null,
+      text,
+      type: "system",
+      time: new Date()
+    });
+
+    io.to(roomId).emit("roomMessage", {
+      room: roomId,
+      from: "SYSTEM",
+      display: null,
+      text,
+      type: "system",
+      _id: saved?._id,
+      time: saved?.time || new Date()
+    });
+  } catch (err) {
+    console.error("announceRoomSystemMessage error:", err.message || err);
   }
 }
 
@@ -3692,9 +3747,18 @@ socket.on("editPublicMessage", async (data) => {
     if (previousRoom && previousRoom !== roomId) {
       socket.leave(previousRoom);
       socket.currentRoom = null;
+      // Announce the leave only when this was the user's last session in the
+      // room (another tab / the phone may still be in it).
+      if (!(await roomHasUser(previousRoom, socket.username))) {
+        announceRoomSystemMessage(previousRoom, socket.username, "leave");
+      }
       // Do not delay the new join while refreshing the old room.
       updateRoomMembers(previousRoom);
     }
+
+    // Announce the join only when the user was not already in the room from
+    // another session, so opening a second tab doesn't repeat the notice.
+    const alreadyInRoom = await roomHasUser(roomId, socket.username);
 
     socket.join(roomId);
     socket.currentRoom = roomId;
@@ -3703,6 +3767,10 @@ socket.on("editPublicMessage", async (data) => {
     io.to(socket.id).emit("roomHistory", { room: roomId, history });
 
     await updateRoomMembers(roomId);
+
+    if (!alreadyInRoom) {
+      announceRoomSystemMessage(roomId, socket.username, "join");
+    }
   });
 
   // Remove this socket from a room when its chat window closes.
@@ -3712,6 +3780,10 @@ socket.on("editPublicMessage", async (data) => {
 
     socket.leave(roomId);
     if (socket.currentRoom === roomId) socket.currentRoom = null;
+
+    if (!(await roomHasUser(roomId, socket.username))) {
+      announceRoomSystemMessage(roomId, socket.username, "leave");
+    }
     await updateRoomMembers(roomId);
   });
 
@@ -3913,6 +3985,12 @@ socket.on("editPublicMessage", async (data) => {
     }
 
     if (socket.currentRoom) {
+      // Announce the leave only when no other session of this user remains in
+      // the room. (By the time 'disconnect' fires, this socket has already been
+      // removed from its rooms, so roomHasUser sees only the survivors.)
+      if (!(await roomHasUser(socket.currentRoom, socket.username))) {
+        announceRoomSystemMessage(socket.currentRoom, socket.username, "leave");
+      }
       updateRoomMembers(socket.currentRoom);
     }
 
