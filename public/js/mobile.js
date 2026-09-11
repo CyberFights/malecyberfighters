@@ -106,6 +106,31 @@ function mobileImgSrc(value) {
     return [...new Set(safeUrls)];
   }
 
+  /*
+     Extra profile photos open in their own popup window instead of a new
+     browser tab. Passing window features (width/height) is what makes
+     browsers open a real popup window — window.open without features
+     behaves exactly like a target="_blank" link and opens a tab.
+     (Phone browsers have no separate windows, so they still show a tab.)
+  */
+  function openProfilePhotoPopup(url) {
+    const screen = window.screen || {};
+    const width = Math.max(320, Math.min(760, Math.round((screen.width || 1024) * 0.6)));
+    const height = Math.max(400, Math.min(960, Math.round((screen.height || 800) * 0.8)));
+    const left = Math.max(0, Math.round(((screen.width || width) - width) / 2));
+    const top = Math.max(0, Math.round(((screen.height || height) - height) / 4));
+
+    window.open(url, "_blank", [
+      "popup=yes",
+      `width=${width}`,
+      `height=${height}`,
+      `left=${left}`,
+      `top=${top}`,
+      "noopener",
+      "noreferrer"
+    ].join(","));
+  }
+
   function renderProfilePhotoGallery(container, photos, emptyText = "No extra photos yet") {
     if (!container) return;
     container.replaceChildren();
@@ -126,6 +151,16 @@ function mobileImgSrc(value) {
       link.target = "_blank";
       link.rel = "noopener noreferrer";
       link.setAttribute("aria-label", `Open profile photo ${index + 1}`);
+
+      /* A plain click opens the photo in its own popup window. The tile stays
+         a real link so middle-click, modified clicks and the context menu keep
+         the browser's normal open-in-new-tab behaviour. */
+      link.addEventListener("click", event => {
+        if (event.defaultPrevented) return;
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        openProfilePhotoPopup(url);
+      });
 
       const image = document.createElement("img");
       image.src = mobileImgSrc(url);

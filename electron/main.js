@@ -12,6 +12,32 @@ const APP_URL = 'https://malecyberfighters-production.up.railway.app/';
 
 let mainWindow = null;
 
+/*
+ * Popup window-open requests — window.open() calls that ask for a sized
+ * window, such as the profile photo popups — become real child popup
+ * windows, matching how the site behaves in a browser. Anything else (plain
+ * target="_blank" links) is not a popup request and returns null here.
+ */
+function popupBrowserWindowOptions(features) {
+  if (!features) return null;
+
+  const read = name => {
+    const match = new RegExp(`(?:^|,)\\s*${name}\\s*=\\s*(\\d+)`).exec(String(features));
+    return match ? Number(match[1]) : null;
+  };
+
+  const width = read('width');
+  const height = read('height');
+  if (!width || !height) return null;
+
+  const options = { width, height, useContentSize: true, minWidth: 240, minHeight: 240 };
+  const left = read('left');
+  const top = read('top');
+  if (left != null) options.x = left;
+  if (top != null) options.y = top;
+  return options;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1320,
@@ -32,9 +58,30 @@ function createWindow() {
   mainWindow.loadURL(APP_URL);
 
   // Keep the app in its own window: popups and any navigation away from the
-  // app open in the user's default browser instead of the app window.
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('http://') || url.startsWith('https://')) {
+  // app open in the user's default browser instead of the app window. Sized
+  // popup requests (profile photos) are the exception — they get their own
+  // child window so they float above the app like popups do on the website.
+  mainWindow.webContents.setWindowOpenHandler(({ url, features }) => {
+    const isHttpUrl = url.startsWith('http://') || url.startsWith('https://');
+    const popup = isHttpUrl ? popupBrowserWindowOptions(features) : null;
+
+    if (popup) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          ...popup,
+          autoHideMenuBar: true,
+          backgroundColor: '#020617',
+          webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true
+          }
+        }
+      };
+    }
+
+    if (isHttpUrl) {
       shell.openExternal(url);
     }
     return { action: 'deny' };
