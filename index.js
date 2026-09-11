@@ -16,6 +16,13 @@ const cors = require("cors");
 const { sendMail, mailerConfigured, MAIL_FROM, escapeHtml } = require('./mailer');
 const { sendDiscordDM, discordEvents } = require('./discordBot');
 const { createDmDelivery } = require('./dmDelivery');
+const {
+  buildWebhookPayload,
+  publicBaseUrlFromSocket,
+  resolveWebhookAvatarUrl,
+  avatarInitial,
+  renderInitialsAvatarPng
+} = require('./discordWebhook');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -944,6 +951,52 @@ app.get('/img', imageProxyLimiter, async (req, res) => {
   }
 });
 
+// ---------- GENERATED FALLBACK AVATARS ----------
+// The Discord webhook uses these as the avatar for senders who have not
+// uploaded a photo, so their messages in the Discord channel still carry the
+// same identity as in the website chat: their initial on their profile
+// color. Rendered on the fly as a small PNG (no image library involved), so
+// it is also usable by any client that wants the same fallback look.
+const avatarLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+app.get('/avatar/:username', avatarLimiter, async (req, res) => {
+  try {
+    let username;
+    try {
+      username = decodeURIComponent(req.params.username || '');
+    } catch (_) {
+      return res.status(400).json({ ok: false, error: 'invalid_username' });
+    }
+    username = username.replace(/\.png$/i, '').trim().slice(0, 64);
+    if (!username) return res.status(400).json({ ok: false, error: 'missing_username' });
+
+    const user = await User.findOne({ username })
+      .select('username display color')
+      .lean();
+
+    const png = renderInitialsAvatarPng(
+      avatarInitial(user?.display, user?.username || username),
+      user?.color
+    );
+
+    res.set({
+      'Content-Type': 'image/png',
+      'Content-Length': String(png.length),
+      'Cache-Control': 'public, max-age=86400',
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer'
+    });
+    res.send(png);
+  } catch (err) {
+    console.error('avatar render error', err.message || err);
+    res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
 const publicDir = path.join(__dirname, 'public');
 const noCacheStatic = {
   setHeaders(res) {
@@ -1599,11 +1652,9 @@ async function translateText(text, targetLang) {
 async function sendDiscordWebhookMessage(username, message, avatarUrl) {
   if (!DISCORD_WEBHOOK_URL) return;
 
-  const payload = {
-    username: username || "Chat Message",
-    content: message,
-    avatar_url: avatarUrl || ""
-  };
+  // avatar_url only goes in when there is one to send — an empty string can
+  // be rejected by Discord and would mask the webhook's default avatar.
+  const payload = buildWebhookPayload(username, message, avatarUrl);
 
   try {
     const response = await fetch(DISCORD_WEBHOOK_URL, {
@@ -3510,10 +3561,27 @@ socket.on('publicMessage', async (msg) => {
     const avatarUrl = sender?.imageUrl || null;
 
     // ⭐ Send Discord webhook
+    // Discord only shows an avatar when its servers can fetch the image at
+    // send time — raw third-party links (and senders with no photo at all)
+    // silently fall back to the default gray avatar. Serve the avatar from
+    // this site instead: uploaded photos through the /img proxy, and a
+    // generated initials-on-profile-color PNG for photoless senders, so the
+    // Discord channel matches the website's chat.
+    const baseUrl = publicBaseUrlFromSocket(socket, APP_BASE_URL);
     await sendDiscordWebhookMessage(
       msg.display || msg.from,
       msg.text,
-      avatarUrl
+      resolveWebhookAvatarUrl({
+        username: msg.from,
+        sender,
+        baseUrl,
+        proxyImage: url => {
+          const target = parseProxyTarget(url);
+          return target
+            ? `${baseUrl}/img?u=${encodeURIComponent(target.href)}`
+            : null;
+        }
+      })
     );
 
     // ⭐ Fetch fresh online users right before emitting
