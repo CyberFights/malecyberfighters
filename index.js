@@ -16,6 +16,7 @@ const cors = require("cors");
 const { sendMail, mailerConfigured, MAIL_FROM, escapeHtml } = require('./mailer');
 const { sendDiscordDM, discordEvents } = require('./discordBot');
 const { createDmDelivery } = require('./dmDelivery');
+const { createStoryRouter } = require('./storyRoutes');
 const {
   buildWebhookPayload,
   publicBaseUrlFromSocket,
@@ -114,6 +115,68 @@ app.get('/', (req, res, next) => {
       /<link\s+rel=["']stylesheet["']\s+href=["'][^"']*\/css\/[^"']+["']\s*>/i,
       `<link rel="stylesheet" href="/css/${cssFile}?v=9">`
     );
+
+    res.set({
+      'Content-Type': 'text/html; charset=utf-8',
+      'Accept-CH': 'Sec-CH-UA-Mobile',
+      'Vary': 'User-Agent, Sec-CH-UA-Mobile'
+    });
+
+    res.send(page);
+  });
+});
+
+// ---------- STORY PERMALINKS ----------
+// /story/<id> boots the app and lets public/js/story-ui.js open the story from
+// the URL. Published stories get real social-preview tags so a link pasted
+// into Discord shows the title and the opening lines; anything still awaiting
+// approval is served the plain shell (and stays noindex, like every story page
+// — these are member-written stories, not site content we invite crawlers to).
+app.get('/story/:id', async (req, res, next) => {
+  const cssFile = isMobileClient(req) ? 'mobile.css' : 'desktop.css';
+  const indexPath = path.join(__dirname, 'public', 'index.html');
+
+  const { id } = req.params;
+  if (!mongoose.isValidObjectId(id)) return res.redirect('/');
+
+  let story = null;
+  try {
+    // Only ask the database when it is actually connected: otherwise the query
+    // buffers for five seconds before failing, and a link would crawl while the
+    // database is away. The plain shell is served either way — the app fetches
+    // the story itself once it is running.
+    if (mongoose.connection.readyState === 1) {
+      story = await Story.findOne({ _id: id, approved: true, declined: { $ne: true } })
+        .select('title story owner partner approvedAt')
+        .lean();
+    }
+  } catch (err) {
+    console.error('Story permalink error:', err.message || err);
+  }
+
+  fs.readFile(indexPath, 'utf8', (err, html) => {
+    if (err) return next(err);
+
+    const title = story
+      ? `${story.title || 'Untitled story'} — ${story.owner} & ${story.partner}`
+      : 'Male Cyber Fighters';
+
+    const description = story
+      ? String(story.story || '').replace(/\s+/g, ' ').trim().slice(0, 180)
+      : 'A story written on Male Cyber Fighters.';
+
+    const page = html
+      .replace(
+        /<link\s+rel=["']stylesheet["']\s+href=["'][^"']*\/css\/[^"']+["']\s*>/i,
+        `<link rel="stylesheet" href="/css/${cssFile}?v=9">`
+      )
+      .replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`)
+      .replace(/<head>/i, '<head>\n<meta name="robots" content="noindex, follow">')
+      .replace(/(<meta\s+property=["']og:title["']\s+content=["'])[^"']*(["']>)/i, `$1${escapeHtml(title)}$2`)
+      .replace(/(<meta\s+property=["']og:description["']\s+content=["'])[^"']*(["']>)/i, `$1${escapeHtml(description)}$2`)
+      .replace(/(<meta\s+property=["']og:url["']\s+content=["'])[^"']*(["']>)/i, `$1/story/${id}$2`)
+      .replace(/(<meta\s+name=["']twitter:title["']\s+content=["'])[^"']*(["']>)/i, `$1${escapeHtml(title)}$2`)
+      .replace(/(<meta\s+name=["']twitter:description["']\s+content=["'])[^"']*(["']>)/i, `$1${escapeHtml(description)}$2`);
 
     res.set({
       'Content-Type': 'text/html; charset=utf-8',
@@ -1245,6 +1308,19 @@ const storySchema = new mongoose.Schema({
   approvalPartner: { type: Boolean, default: false },
 
   approved: { type: Boolean, default: false },
+  // Set the moment a story first becomes public (used for "published" dates).
+  approvedAt: { type: Date },
+
+  // Refusals. A declined story is never public and never pending: the author
+  // sees it on their profile with the reason, and can revise and resubmit.
+  declined: { type: Boolean, default: false },
+  declinedBy: { type: String, default: "" },
+  declineReason: { type: String, default: "" },
+
+  // Bumped on every edit. Editing an approved story re-opens approval, so the
+  // partner can see how many times the text changed since they approved it.
+  revision: { type: Number, default: 0 },
+  updatedAt: { type: Date },
 
   createdAt: { type: Date, default: Date.now }
 });
@@ -1886,99 +1962,24 @@ async function announceRoomSystemMessage(roomId, username, action) {
   }
 }
 
-app.post("/api/story/save", async (req, res) => {
-  const { owner, partner, story, title } = req.body;
-  // Optional clip attached to the story — must point at our own /clips route.
-  const clipUrl = isLocalClipUrl(req.body.clipUrl) ? req.body.clipUrl : null;
+/* ---------- Story authoring -------------------------------------------------
+   Stories are written by one member about a conversation they had with another,
+   then approved by the second before they go public. The routes live in
+   storyRoutes.js (so they can be tested without a database) and the rules they
+   apply live in storyService.js.
 
-  const saved = await Story.create({
-    owner,
-    partner,
-    title: title || "",
-    story,
-    clipUrl,
-    clipType: clipUrl ? (req.body.clipType === "gif" ? "gif" : "video") : null,
-    approvalOwner: true,
-    approvalPartner: false,
-    approved: false
-  });
-
-  const storyTitle = saved.title || "Untitled story";
-  const partnerUser = await User.findOne({ username: partner }).lean();
-
-  // If partner is online → real-time popup
-  if (partnerUser?.socketId) {
-    io.to(partnerUser.socketId).emit("storyApprovalRequest", {
-      storyId: saved._id,
-      from: owner,
-      title: saved.title
-    });
-  } else {
-    // If partner is offline → send DM notification
-    let dmText = `${owner} created a story involving your messages: "${storyTitle}". Please approve it.`;
-    await DM.create({
-      from: "SYSTEM",
-      to: partner,
-      text: dmText,
-      type: "storyApproval",
-      storyId: saved._id,
-      time: new Date()
-    });
-    const partnerUserDoc = await User.findOne({ username: partner }).lean();
-    await forwardDMToDiscord("SYSTEM", partnerUserDoc, dmText);
-  }
-
-  res.json({ ok: true, storyId: saved._id });
-});
-
-
-app.post("/api/story/approve", async (req, res) => {
-  const { storyId } = req.body;
-
-  const story = await Story.findById(storyId);
-  if (!story) return res.json({ ok: false });
-
-  story.approvalPartner = true;
-
-  if (story.approvalOwner && story.approvalPartner) {
-    story.approved = true;
-  }
-
-  await story.save();
-
-  res.json({ ok: true, approved: story.approved, title: story.title });
-});
-
-app.get("/api/story/pending", async (req, res) => {
-  const { username } = req.query;
-
-  // Pending stories for both sides: the owner (approvalOwner) who created
-  // the story and the partner (approvalPartner) who still has to approve it.
-  const stories = await Story.find({
-    $or: [{ owner: username }, { partner: username }],
-    approved: false
-  }).sort({ createdAt: -1 }).lean();
-
-  res.json({ ok: true, stories });
-});
-
-app.post("/api/story/resend", async (req, res) => {
-  const { storyId } = req.body;
-
-  const story = await Story.findById(storyId);
-  if (!story) return res.json({ ok: false });
-
-  const partnerUser = await User.findOne({ username: story.partner }).lean();
-  if (partnerUser?.socketId) {
-    io.to(partnerUser.socketId).emit("storyApprovalRequest", {
-      storyId,
-      from: story.owner,
-      title: story.title
-    });
-  }
-
-  res.json({ ok: true });
-});
+   The two notification helpers are passed as thunks because emitToUser comes
+   from the DM delivery setup further down this file.
+--------------------------------------------------------------------------- */
+app.use("/api/story", createStoryRouter({
+  Story,
+  User,
+  DM,
+  mongoose,
+  isLocalClipUrl,
+  emitToUser: (...args) => emitToUser(...args),
+  forwardDMToDiscord: (...args) => forwardDMToDiscord(...args)
+}));
 
 app.post("/api/relationship/request", async (req, res) => {
   const { requester, target, type } = req.body;
@@ -2333,43 +2334,16 @@ app.post("/api/admin/sweep-stale-images", requireAdmin, async (req, res) => {
   }
 });
 
-app.post("/api/story/load", async (req, res) => {
-  const { a, b, fromDate } = req.body;
-
-  const messages = await DM.find({
-    $or: [
-      { from: a, to: b },
-      { from: b, to: a }
-    ],
-    time: { $gte: new Date(fromDate) }
-  }).sort({ time: 1 }).lean();
-
-  res.json({ ok: true, messages });
-});
-
-
-app.get("/api/story/list", async (req, res) => {
-  const { username } = req.query;
-
-  // Approved stories are saved to both profiles: the owner (approvalOwner)
-  // and the partner (approvalPartner) each see the story on their profile.
-  const stories = await Story.find({
-    $or: [{ owner: username }, { partner: username }],
-    approved: true
-  }).sort({ createdAt: -1 }).lean();
-
-  res.json({ ok: true, stories });
-});
-
-// Public archives: every approved story from every member
-app.get("/api/story/archives", async (req, res) => {
-  const stories = await Story.find({ approved: true })
-    .sort({ createdAt: -1 })
-    .lean();
-
-  res.json({ ok: true, stories });
-});
-
+/**
+ * Load the conversation a story will be written from.
+ *
+ * This returns real private messages, so it only answers somebody who is one
+ * of the two people in the conversation — it used to hand any caller the full
+ * DM history between any two usernames. The window is bounded at both ends and
+ * capped, because the editor only ever shows a pickable list.
+ */
+/* Story routes (load / list / archives / one story by id) are mounted from
+   storyRoutes.js at /api/story above. */
 
 app.post("/api/check-availability", async (req, res) => {
   try {

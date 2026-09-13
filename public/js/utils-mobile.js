@@ -135,107 +135,37 @@ window.updateProfileCard = function(user) {
 };
 
 /* Story viewer popup -----------------------------------------------------
-   Replaces the old alert(s.story): shows the story title in an elegant
-   script font and the story text in a regular font, with a close button.
+   The viewer lives in public/js/story-ui.js (shared with the desktop client),
+   so the mobile bundle only delegates to it.
 ------------------------------------------------------------------------ */
-function openStoryViewer(title, storyText) {
-  // Load the elegant script font once (falls back to system script fonts)
-  if (!document.getElementById("storyViewerFont")) {
-    const link = document.createElement("link");
-    link.id = "storyViewerFont";
-    link.rel = "stylesheet";
-    link.href = "https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap";
-    document.head.appendChild(link);
-  }
-
-  // Only one viewer at a time
-  document.getElementById("storyViewerPopup")?.remove();
-
-  const overlay = document.createElement("div");
-  overlay.id = "storyViewerPopup";
-  overlay.style.cssText =
-    "position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;" +
-    "align-items:center;justify-content:center;z-index:10000;padding:20px;" +
-    "box-sizing:border-box;backdrop-filter:blur(4px);";
-
-  const box = document.createElement("div");
-  box.style.cssText =
-    "background:#111;border:1px solid rgba(0,150,255,0.4);border-radius:12px;" +
-    "box-shadow:0 0 25px rgba(0,150,255,0.4);color:#fff;padding:34px 30px;" +
-    "width:640px;max-width:95%;max-height:85vh;overflow-y:hidden;" +
-    "display:flex;flex-direction:column;text-align:center;";
-
-  const titleEl = document.createElement("div");
-  titleEl.textContent = title || "Untitled story";
-  titleEl.style.cssText =
-    'font-family:"Great Vibes","Brush Script MT","Segoe Script","Lucida Handwriting",cursive;' +
-    "font-size:44px;line-height:1.25;color:#00aaff;margin-bottom:20px;word-break:break-word;";
-
-  const textEl = document.createElement("div");
-  textEl.textContent = storyText || "";
-  textEl.style.cssText =
-    "font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;" +
-    "color:#f5f5f5;white-space:pre-wrap;word-break:break-word;text-align:left;";
-
-  const closeBtn = document.createElement("button");
-  closeBtn.type = "button";
-  closeBtn.className = "small-btn ghost";
-  closeBtn.textContent = "Close";
-  closeBtn.style.cssText = "margin:24px auto 0;";
-
-  box.appendChild(titleEl);
-  box.appendChild(textEl);
-  box.appendChild(closeBtn);
-  overlay.appendChild(box);
-  document.body.appendChild(overlay);
-
-  const close = () => {
-    document.removeEventListener("keydown", onKey);
-    overlay.remove();
-  };
-  const onKey = e => { if (e.key === "Escape") close(); };
-
-  closeBtn.onclick = close;
-  overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
-  document.addEventListener("keydown", onKey);
+function openStoryViewer(title, storyText, clipUrl, clipType) {
+  if (window.StoryUI) return window.StoryUI.openViewer(title, storyText, clipUrl, clipType);
+  alert(`${title || "Story"}\n\n${storyText || ""}`);
 }
 
-// View-profile helpers (used by chat-mobile.js openUserProfile)
 async function loadStories(username) {
   const res = await fetch("/api/story/list?username=" + encodeURIComponent(username));
   const data = await res.json();
 
   const box = document.getElementById("profileStories");
   if (!box) return;
-
   box.innerHTML = "";
 
-  if (!data.stories || !data.stories.length) {
-    box.innerHTML = "<div class='small muted'>No approved stories yet</div>";
+  const stories = (data && data.stories) || [];
+
+  if (!window.StoryUI) {
+    box.innerHTML = stories.length
+      ? stories.map(s => `<div class="small">${escapeHtml(s.title || "Untitled story")}</div>`).join("")
+      : "<div class='small muted'>No approved stories yet</div>";
     return;
   }
 
-  data.stories.forEach(s => {
-    // Stories are saved to both the owner's and the partner's profile
-    const other = s.owner === username ? s.partner : s.owner;
-    const title = s.title || `Story with ${other}`;
-    const div = document.createElement("div");
-    div.className = "story-item";
-    div.innerHTML = `
-      <div><strong>${escapeHtml(title)}</strong></div>
-      <div class="small">${escapeHtml(other)} — ${new Date(s.createdAt).toLocaleDateString()}</div>
-    `;
-    div.onclick = () => openStoryViewer(title, s.story);
-    box.appendChild(div);
+  window.StoryUI.setReadingList(stories);
+  window.StoryUI.renderStoryList(box, stories, {
+    username,
+    emptyText: "No approved stories yet",
+    onChange: () => loadStories(username)
   });
-}
-
-async function loadPendingStories(username) {
-  // MOBILE: no dedicated pending stories section in mobile.html
-  // Function preserved for API compatibility with index.js
-  const res = await fetch("/api/story/pending?username=" + encodeURIComponent(username));
-  const data = await res.json();
-  return (data.stories || []);
 }
 
 async function loadRelationships(username) {

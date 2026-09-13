@@ -392,78 +392,32 @@ $('rosterNext')?.addEventListener('click', () => {
 /* ============================================================
    STORY ARCHIVES — every approved story from every member
 ============================================================ */
-let archivesPage = 1;
-const archivesPerPage = 12;
-window.allArchiveStories = [];
-
+/**
+ * Story archives.
+ *
+ * Searching and paging happen on the server now (public/js/story-ui.js drives
+ * the same modal on desktop and mobile): the old version downloaded every
+ * published story and then filtered by username in the browser, so it could
+ * not find a story by its title or by anything written in it, and grew without
+ * bound as the archives filled up.
+ */
 function renderArchivesPopup() {
-  const list = $('archivesList');
-  if (!list) return;
-
-  const searchEl = $('archivesSearch');
-  const search = (searchEl?.value || '').toLowerCase().trim();
-  const pageLabel = $('archivesPageNumber');
-
-  list.innerHTML = '';
-
-  // SEARCH FILTER: match the owner's or the partner's username
-  const filtered = (window.allArchiveStories || []).filter(s => {
-    if (!search) return true;
-    return (
-      (s.owner || '').toLowerCase().includes(search) ||
-      (s.partner || '').toLowerCase().includes(search)
-    );
-  });
-
-  // PAGINATION
-  const total = filtered.length;
-  const totalPages = Math.max(1, Math.ceil(total / archivesPerPage));
-
-  if (archivesPage > totalPages) archivesPage = totalPages;
-
-  const start = (archivesPage - 1) * archivesPerPage;
-  const pageItems = filtered.slice(start, start + archivesPerPage);
-
-  if (!pageItems.length) {
-    list.innerHTML = '<div class="small muted" style="padding:12px">No approved stories found</div>';
-  }
-
-  // RENDER STORIES
-  pageItems.forEach(s => {
-    const title = s.title || `Story between ${s.owner} & ${s.partner}`;
-    const div = document.createElement('div');
-    div.className = 'roster-user user-row';
-    div.style.cursor = 'pointer';
-    div.innerHTML = `
-      <div style="flex:1">
-        <div class="roster-name" style="font-weight:700">${escapeHtml(title)}</div>
-        <div class="roster-username small">@${escapeHtml(s.owner || '')} &amp; @${escapeHtml(s.partner || '')}</div>
-      </div>
-      <div class="small muted">${escapeHtml(new Date(s.createdAt).toLocaleDateString())}</div>
-    `;
-
-    div.addEventListener('click', () => openStoryViewer(title, s.story, s.clipUrl, s.clipType));
-    list.appendChild(div);
-  });
-
-  if (pageLabel) pageLabel.textContent = `Page ${archivesPage} / ${totalPages}`;
+  return openArchivesModal();
 }
 
 async function openArchivesModal() {
   const modal = $('modalArchives');
   if (modal) modal.style.display = 'flex';
 
-  try {
-    const res = await fetch('/api/story/archives');
-    const data = await res.json();
-    if (data.ok) {
-      window.allArchiveStories = data.stories || [];
-      archivesPage = 1;
-      renderArchivesPopup();
-    }
-  } catch (err) {
-    console.error('Failed to load story archives', err);
+  if (!window.StoryUI) {
+    const list = $('archivesList');
+    if (list) list.innerHTML = '<div class="small muted" style="padding:12px">The archives are still loading — try again.</div>';
+    return;
   }
+
+  await window.StoryUI.openArchives({
+    username: (typeof getSession === 'function' && getSession() ? getSession().username : null)
+  });
 }
 
 // OPEN ARCHIVES POPUP
@@ -474,25 +428,6 @@ $('archivesClose')?.addEventListener('click', () => {
   if ($('modalArchives')) $('modalArchives').style.display = 'none';
 });
 
-// SEARCH BY USER
-$('archivesSearch')?.addEventListener('input', () => {
-  archivesPage = 1;
-  renderArchivesPopup();
-});
-
-// PAGINATION BUTTONS
-$('archivesPrev')?.addEventListener('click', () => {
-  if (archivesPage > 1) {
-    archivesPage--;
-    renderArchivesPopup();
-  }
-});
-
-$('archivesNext')?.addEventListener('click', () => {
-  archivesPage++;
-  renderArchivesPopup();
-});
-
 async function loadStories(username) {
   const res = await fetch("/api/story/list?username=" + encodeURIComponent(username));
   const data = await res.json();
@@ -501,12 +436,28 @@ async function loadStories(username) {
   if (!box) return;
   box.innerHTML = "<h3>Stories</h3>";
 
-  if (!data.stories || !data.stories.length) {
+  const stories = (data && data.stories) || [];
+
+  // The shared list renders the reading rows and, for your own stories, the
+  // Edit / Delete / Share actions (utils.js loadSelfStories does the same).
+  if (window.StoryUI) {
+    window.StoryUI.setReadingList(stories);
+    const holder = document.createElement("div");
+    box.appendChild(holder);
+    window.StoryUI.renderStoryList(holder, stories, {
+      username: (typeof getSession === "function" && getSession() ? getSession().username : username),
+      emptyText: "No approved stories",
+      onChange: () => loadStories(username)
+    });
+    return;
+  }
+
+  if (!stories.length) {
     box.innerHTML += "<div class='small muted'>No approved stories</div>";
     return;
   }
 
-  data.stories.forEach(s => {
+  stories.forEach(s => {
     // Stories are saved to both the owner's and the partner's profile
     const other = s.owner === username ? s.partner : s.owner;
     const title = s.title || `Story with ${other}`;

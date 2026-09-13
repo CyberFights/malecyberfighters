@@ -2525,24 +2525,8 @@ Moderator decisions are final. </p>
   </div>
 </div>
 
-<div id="storyPopup" class="modal">
-  <div class="modal-content">
-    <h2>Create Story</h2>
-
-    <label>Story title:</label>
-    <input type="text" id="storyTitle" placeholder="Enter a title for your story" maxlength="120">
-
-    <label>Select start date:</label>
-    <input type="date" id="storyDate">
-
-    <button id="storyLoadBtn" class="small-btn">Load Messages</button>
-
-    <textarea id="storyEditor" placeholder="Your story will appear here..." style="height:300px;margin-top:20px;"></textarea>
-
-    <button id="storySaveBtn" class="small-btn">Save Story</button>
-    <button id="storyCloseBtn" class="small-btn ghost">Close</button>
-  </div>
-</div>
+<!-- STORY EDITOR — the shell only; public/js/story-ui.js builds the contents. -->
+<div id="storyPopup" class="modal" style="display:none"></div>
 
 <!-- JS FILES -->
 <script src="/js/idle-logout.js"></script>
@@ -2551,6 +2535,7 @@ Moderator decisions are final. </p>
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/physique.js"></script>
 <script src="/js/utils.js"></script>
+<script src="/js/story-ui.js?v=1"></script>
 <script src="/js/emoji-picker.js"></script>
 <script src="/js/socket.js"></script>
 <script src="/js/slash-commands.js?v=1"></script>

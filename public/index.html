@@ -679,13 +679,28 @@
 
     <h3 style="margin:0 0 12px 0">Story Archives</h3>
 
-    <!-- SEARCH BAR -->
+    <!-- SEARCH BAR — searches titles, story text and both usernames -->
     <input
       id="archivesSearch"
       type="text"
-      placeholder="Search by user..."
+      placeholder="Search stories, members or words in the text..."
       style="width:100%;margin-bottom:12px"
     >
+
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+      <label class="small muted" for="archivesSort">Sort</label>
+      <select id="archivesSort" style="width:auto">
+        <option value="recent">Newest first</option>
+        <option value="oldest">Oldest first</option>
+        <option value="title">Title</option>
+        <option value="author">Author</option>
+      </select>
+
+      <label class="small muted" for="archivesMine" style="display:flex;gap:6px;align-items:center">
+        <input id="archivesMine" type="checkbox" style="width:auto">
+        Only my stories
+      </label>
+    </div>
 
     <!-- STORY LIST -->
     <div id="archivesList" class="roster-list"></div>
@@ -1541,35 +1556,10 @@ Moderator decisions are final. </p>
   </div>
 </div>
 
-<div id="storyPopup" class="modal">
-  <div class="modal-content">
-    <h2>Create Story</h2>
-
-    <label>Story title:</label>
-    <input type="text" id="storyTitle" placeholder="Enter a title for your story" maxlength="120">
-
-    <label>Select start date:</label>
-    <input type="date" id="storyDate">
-
-    <button id="storyLoadBtn" class="small-btn">Load Messages</button>
-
-    <textarea id="storyEditor" placeholder="Your story will appear here..." style="height:300px;margin-top:20px;"></textarea>
-
-    <div style="margin-top:16px">
-      <div style="font-weight:700;margin-bottom:8px">🎬 Attach a clip <span class="small muted">(optional — plays when the story is viewed)</span></div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <input type="file" id="storyClipInput" accept="image/gif,video/mp4,video/webm" style="display:none">
-        <button id="storyClipBtn" class="small-btn ghost" type="button">Choose GIF / short video</button>
-        <button id="storyClipClearBtn" class="small-btn ghost" type="button" style="display:none">Remove</button>
-        <span id="storyClipStatus" class="small muted"></span>
-      </div>
-      <div id="storyClipPreview" style="margin-top:10px"></div>
-    </div>
-
-    <button id="storySaveBtn" class="small-btn">Save Story</button>
-    <button id="storyCloseBtn" class="small-btn ghost">Close</button>
-  </div>
-</div>
+<!-- STORY EDITOR — the shell only. public/js/story-ui.js builds the title,
+     message picker, body editor, clip row and actions, so the desktop and
+     mobile editors are the same code. -->
+<div id="storyPopup" class="modal" style="display:none"></div>
 
 <!-- JS FILES -->
 <script src="/js/idle-logout.js"></script>
@@ -1578,6 +1568,7 @@ Moderator decisions are final. </p>
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/physique.js"></script>
 <script src="/js/utils.js"></script>
+<script src="/js/story-ui.js?v=1"></script>
 <script src="/js/emoji-picker.js"></script>
 <script src="/js/socket.js"></script>
 <script src="/js/slash-commands.js?v=2"></script>

@@ -655,29 +655,14 @@
 <!-- ============================================================
      STORY BUILDER
      ============================================================ -->
-<div id="storyPopup" class="modal">
+<!-- STORY EDITOR — the shell only. public/js/story-ui.js builds the contents,
+     shared with the desktop client. -->
+<div id="storyPopup" class="modal" style="display:none"></div>
+
+<div id="storyPopupLegacy" class="modal" style="display:none">
   <div class="modal-box">
-    <h3>Create Story</h3>
-
-    <div class="field">
-      <label for="storyTitle">Story title</label>
-      <input id="storyTitle" type="text" placeholder="Enter a title for your story" maxlength="120">
-    </div>
-
-    <div class="field">
-      <label for="storyDate">Select start date</label>
-      <input id="storyDate" type="date">
-    </div>
-
-    <button id="storyLoadBtn" class="small-btn" type="button" style="margin-top:10px">Load Messages</button>
-
-    <div class="field">
-      <textarea id="storyEditor" rows="12" placeholder="Your story will appear here..."></textarea>
-    </div>
-
     <div class="modal-buttons">
-      <button id="storyCloseBtn" class="ghost" type="button">Close</button>
-      <button id="storySaveBtn" type="button">Save Story</button>
+      <button type="button" class="ghost">Close</button>
     </div>
   </div>
 </div>
@@ -916,6 +901,7 @@ Moderator decisions are final. </p>
 <script src="/js/emoji-picker.js"></script>
 <script src="/js/physique.js"></script>
 <script src="/js/mobile.js"></script>
+<script src="/js/story-ui.js?v=1"></script>
 <script src="/js/pwa-install.js"></script>
 <script src="/js/account.js"></script>
 <script src="/js/popup-dissolve.js"></script>

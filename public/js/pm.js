@@ -440,12 +440,15 @@ function renderPMHistory(targetUsername, messages) {
 
     if (m.type === "storyApproval") {
       div.className = "message system";
+      const pendingId = m.storyId || "";
       div.innerHTML = `
         <div class="system-msg">
           ${escapeHtml(m.text || "")}
-          <button class="small-btn approveStoryBtn" data-id="${m.storyId || ""}">
-            Approve
-          </button>
+          ${pendingId
+            ? `<button class="small-btn approveStoryBtn" data-id="${pendingId}">Approve</button>
+               <button class="small-btn ghost declineStoryBtn" data-id="${pendingId}">Decline</button>
+               <button class="small-btn ghost readStoryBtn" data-id="${pendingId}">Read</button>`
+            : ""}
         </div>
       `;
     }
@@ -511,143 +514,65 @@ document.addEventListener("click", async (e) => {
   }
 });
 
+// Approve / decline / read straight from the system DM in the conversation.
 document.addEventListener("click", async (e) => {
-  if (e.target.classList.contains("approveStoryBtn")) {
-    const storyId = e.target.dataset.id;
+  const button = e.target.closest && e.target.closest("button");
+  if (!button) return;
 
-    const res = await fetch("/api/story/approve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ storyId })
-    });
+  const username = getSession() && getSession().username;
+  const storyId = button.dataset.id;
+  if (!storyId) return;
 
-    const data = await res.json();
-    if (data.ok) {
-      alert("Story approved");
-      e.target.parentElement.innerHTML = "Approved";
+  if (button.classList.contains("approveStoryBtn")) {
+    if (!window.StoryUI) return;
+    button.disabled = true;
+    if (await window.StoryUI.approveStory(storyId, username)) {
+      button.parentElement.innerHTML = "Approved";
+    } else {
+      button.disabled = false;
     }
+    return;
+  }
+
+  if (button.classList.contains("declineStoryBtn")) {
+    if (!window.StoryUI) return;
+    button.disabled = true;
+    if (await window.StoryUI.declineStory(storyId, username)) {
+      button.parentElement.innerHTML = "Declined — the author can revise it";
+    } else {
+      button.disabled = false;
+    }
+    return;
+  }
+
+  if (button.classList.contains("readStoryBtn")) {
+    if (!window.StoryUI) return;
+    const story = await window.StoryUI.fetchStory(storyId, username);
+    if (story) window.StoryUI.openViewer(story);
+    else window.StoryUI.toast("Could not open that story", "error");
   }
 });
 
-function openStoryPopup(targetUsername) {
-  const popup = document.getElementById("storyPopup");
-  popup.style.display = "flex";
+/**
+ * Open the story editor for a conversation.
+ *
+ * The editor itself lives in public/js/story-ui.js (shared with the mobile
+ * client): it keeps drafts, warns before losing unsaved work, can build the
+ * story from hand-picked messages, and re-opens approval when an already
+ * approved story is edited.
+ */
+function openStoryPopup(targetUsername, story) {
+  if (!window.StoryUI) {
+    alert("The story editor is still loading — try again in a moment.");
+    return;
+  }
 
-  document.getElementById("storyEditor").value = "";
-  document.getElementById("storyDate").value = "";
-  const titleInput = document.getElementById("storyTitle");
-  if (titleInput) titleInput.value = "";
-
-  /* ---------- Optional clip attached to the story ---------- */
-  let storyClip = null; // { url, type, name }
-
-  const storyClipInput = document.getElementById("storyClipInput");
-  const storyClipBtn = document.getElementById("storyClipBtn");
-  const storyClipClearBtn = document.getElementById("storyClipClearBtn");
-  const storyClipStatus = document.getElementById("storyClipStatus");
-  const storyClipPreview = document.getElementById("storyClipPreview");
-
-  const resetStoryClip = () => {
-    storyClip = null;
-    if (storyClipPreview) storyClipPreview.innerHTML = "";
-    if (storyClipStatus) storyClipStatus.textContent = "";
-    if (storyClipClearBtn) storyClipClearBtn.style.display = "none";
-    if (storyClipInput) storyClipInput.value = "";
-  };
-  resetStoryClip();
-
-  if (storyClipBtn) storyClipBtn.onclick = () => storyClipInput?.click();
-
-  if (storyClipInput) storyClipInput.onchange = async e => {
-    const file = e.target.files[0];
-    e.target.value = "";
-    if (!file) return;
-
-    if (!isClipFile(file)) {
-      if (storyClipStatus) storyClipStatus.textContent = "Unsupported file — use a GIF, MP4 or WebM";
-      return;
-    }
-
-    if (storyClipStatus) storyClipStatus.textContent = "Uploading clip…";
-    if (storyClipBtn) storyClipBtn.disabled = true;
-
-    const data = await uploadClipToServer(file);
-    if (storyClipBtn) storyClipBtn.disabled = false;
-
-    if (!data.ok) {
-      if (storyClipStatus) storyClipStatus.textContent = data.error === "file_too_large"
-        ? "Clip is too large (max 25 MB for GIFs, 50 MB for videos)"
-        : "Clip upload failed";
-      return;
-    }
-
-    storyClip = { url: data.clipUrl, type: data.clipType, name: file.name };
-    if (storyClipStatus) storyClipStatus.textContent = `✓ ${file.name}`;
-    if (storyClipClearBtn) storyClipClearBtn.style.display = "inline-block";
-    if (storyClipPreview) {
-      storyClipPreview.innerHTML = "";
-      storyClipPreview.appendChild(createClipElement(data.clipUrl, data.clipType));
-    }
-  };
-
-  if (storyClipClearBtn) storyClipClearBtn.onclick = resetStoryClip;
-
-  document.getElementById("storyLoadBtn").onclick = async () => {
-    const date = document.getElementById("storyDate").value;
-    if (!date) return alert("Choose a date first");
-
-    const res = await fetch("/api/story/load", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        a: getSession().username,
-        b: targetUsername,
-        fromDate: date
-      })
-    });
-
-    const data = await res.json();
-    if (!data.ok) return alert("Failed to load messages");
-
-    const text = data.messages
-      .map(m => `[${new Date(m.time).toLocaleString()}] ${m.from}: ${m.text || (m.clipUrl ? "(clip)" : "(image)")}`)
-      .join("\n");
-
-    document.getElementById("storyEditor").value = text;
-  };
-
-  document.getElementById("storySaveBtn").onclick = async () => {
-    const title = titleInput ? titleInput.value.trim() : "";
-    if (!title) return alert("Please enter a story title");
-
-    const storyText = document.getElementById("storyEditor").value.trim();
-    if (!storyText) return alert("Story is empty");
-
-    const res = await fetch("/api/story/save", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        owner: getSession().username,
-        partner: targetUsername,
-        title,
-        story: storyText,
-        clipUrl: storyClip ? storyClip.url : null,
-        clipType: storyClip ? storyClip.type : null
-      })
-    });
-
-    const data = await res.json();
-    if (!data.ok) return alert("Failed to save story");
-
-    alert("Story saved!");
-    popup.style.display = "none";
-    resetStoryClip();
-  };
-
-  document.getElementById("storyCloseBtn").onclick = () => {
-    popup.style.display = "none";
-    resetStoryClip();
-  };
+  window.StoryUI.openEditor({
+    partner: targetUsername,
+    story: story || null,
+    onSaved: () => { if (typeof loadSelfStories === "function") loadSelfStories(getSession().username); },
+    onDeleted: () => { if (typeof loadSelfStories === "function") loadSelfStories(getSession().username); }
+  });
 }
 
 /* ============================================================
@@ -817,10 +742,17 @@ socket.on("stopTypingDM", ({ from }) => {
 
 /* DM sidebar provided by utils.js */
 
+// Approval requests pop up live, but they also land in the conversation as a
+// system DM, so a request that arrives while the member is away is still there
+// with its own Approve / Decline buttons (see renderPMHistory below).
 socket.on("storyApprovalRequest", data => {
+  if (window.StoryUI) {
+    window.StoryUI.showApprovalPopup(data);
+    return;
+  }
+
   const { storyId, from, title } = data;
   const safeTitle = title ? escapeHtml(title) : "";
-
   const popup = document.createElement("div");
   popup.className = "modal";
   popup.innerHTML = `
@@ -834,11 +766,13 @@ socket.on("storyApprovalRequest", data => {
   document.body.appendChild(popup);
 
   document.getElementById("approveStoryBtn").onclick = async () => {
-    await fetch("/api/story/approve", {
+    const res = await fetch("/api/story/approve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ storyId })
+      body: JSON.stringify({ storyId, username: getSession().username })
     });
+    const result = await res.json();
+    if (!result.ok) return alert("Could not approve the story");
     alert(`Story${title ? ` "${title}"` : ""} approved. It is now saved on both profiles.`);
     popup.remove();
   };
@@ -846,6 +780,14 @@ socket.on("storyApprovalRequest", data => {
   document.getElementById("denyStoryBtn").onclick = () => {
     popup.remove();
   };
+});
+
+// Published / declined / deleted notices keep the open profile lists honest.
+socket.on("storyStatusChanged", () => {
+  const s = getSession();
+  if (!s) return;
+  if (typeof loadSelfStories === "function") loadSelfStories(s.username);
+  if (typeof loadSelfPendingStories === "function") loadSelfPendingStories(s.username);
 });
 
 socket.on("relationshipApprovalRequest", data => {
