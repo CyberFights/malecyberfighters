@@ -3457,7 +3457,7 @@ io.on("connection", async (socket) => {
     // Join this user's delivery room so DMs reach every session they have
     // open, not just the one socketId happens to point at.
     socket.join(userRoom(user.username));
-  // Same guard as above: a rejecting await in an async socket handler is an
+   // Same guard as above: a rejecting await in an async socket handler is an
     // unhandled rejection, which ends the process rather than just this login.
     let u;
     try {
@@ -3481,9 +3481,6 @@ io.on("connection", async (socket) => {
     } catch (err) {
       console.error('presence broadcast error:', err.message || err);
     }
-
-    io.emit('presence', onlineUsers);
-
     // Catch up on DMs that arrived while this user had no live socket (bridged
     // in from Discord, laptop asleep, app backgrounded). They are in the
     // database but never reached the client's own unread counter, so without
