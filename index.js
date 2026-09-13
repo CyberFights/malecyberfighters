@@ -3434,15 +3434,22 @@ function canAccessRoom(room, username) {
 io.on("connection", async (socket) => {
   console.log("socket connected", socket.id);
 
-  const rooms = await Room.find().lean();
-  socket.emit("roomsList", rooms);
+  // Every await in this handler needs its own guard. The handler is async, so a
+  // rejection that escapes it is an unhandled rejection — and on Node 15+ that
+  // ends the process. An unreachable database therefore used to turn one
+  // browser connecting into a full outage: the site stopped serving every other
+  // member too, and (in testing) the preview died seconds after the page opened.
+  try {
+    socket.emit("roomsList", await Room.find().lean());
+  } catch (err) {
+    console.error('initial room list error:', err.message || err);
+  }
 
   try {
     socket.emit('forumsList', await getForumsWithReplyCounts());
   } catch (err) {
     console.error('initial forum list error:', err);
   }
-
   socket.on('login', async (user) => {
     if (!user || !user.username) return;
 
@@ -3450,17 +3457,30 @@ io.on("connection", async (socket) => {
     // Join this user's delivery room so DMs reach every session they have
     // open, not just the one socketId happens to point at.
     socket.join(userRoom(user.username));
-
-    const u = await User.findOneAndUpdate(
-      { username: user.username },
-      { online: true, socketId: socket.id },
-      { new: true }
-    );
+  // Same guard as above: a rejecting await in an async socket handler is an
+    // unhandled rejection, which ends the process rather than just this login.
+    let u;
+    try {
+      u = await User.findOneAndUpdate(
+        { username: user.username },
+        { online: true, socketId: socket.id },
+        { new: true }
+      );
+    } catch (err) {
+      console.error('socket login error:', err.message || err);
+      return;
+    }
     if (!u) return;
 
-    const onlineUsers = await User.find({ online: true })
-      .select('username display imageUrl extraPhotos info wins losses color language age height weight createdAt -_id')
-      .lean();
+    try {
+      const onlineUsers = await User.find({ online: true })
+        .select('username display imageUrl extraPhotos info wins losses color language age height weight createdAt -_id')
+        .lean();
+
+      io.emit('presence', onlineUsers);
+    } catch (err) {
+      console.error('presence broadcast error:', err.message || err);
+    }
 
     io.emit('presence', onlineUsers);
 
