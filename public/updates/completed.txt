@@ -32,3 +32,8 @@
 - added forums
 - added public story list
 - fixed mobile UI
+- story editor: build a story from hand-picked DM messages, with character names, dialogue or log format
+- story editor: drafts are saved in the browser, unsaved work is never lost, and Preview shows the finished story
+- story editor: light formatting (bold, italic, quotes, chapters, scene breaks) and a text-size control when reading
+- stories can be edited, withdrawn or declined with a reason — editing an approved story asks for approval again
+- stories have shareable links, can be exported as text, and can be searched in the Archives by title, text or member

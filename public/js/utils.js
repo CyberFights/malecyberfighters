@@ -570,81 +570,18 @@ function createClipElement(clipUrl, clipType) {
 window.createClipElement = createClipElement;
 
 /* Story viewer popup -----------------------------------------------------
-   Replaces the old alert(s.story): shows the story title in an elegant
-   script font, an optional clip (GIF / short video), and the story text in
-   a regular font, with a close button.
+   The viewer itself lives in public/js/story-ui.js, which every client loads:
+   it renders the light story markup, scrolls long stories (the old box had
+   overflow-y:hidden, so anything longer than the screen was unreachable),
+   pages between stories, and can copy a permalink or export the text.
 ------------------------------------------------------------------------ */
 function openStoryViewer(title, storyText, clipUrl, clipType) {
-  // Load the elegant script font once (falls back to system script fonts)
-  if (!document.getElementById("storyViewerFont")) {
-    const link = document.createElement("link");
-    link.id = "storyViewerFont";
-    link.rel = "stylesheet";
-    link.href = "https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap";
-    document.head.appendChild(link);
-  }
+  if (window.StoryUI) return window.StoryUI.openViewer(title, storyText, clipUrl, clipType);
 
-  // Only one viewer at a time
-  document.getElementById("storyViewerPopup")?.remove();
-
-  const overlay = document.createElement("div");
-  overlay.id = "storyViewerPopup";
-  overlay.style.cssText =
-    "position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;" +
-    "align-items:center;justify-content:center;z-index:10000;padding:20px;" +
-    "box-sizing:border-box;backdrop-filter:blur(4px);";
-
-  const box = document.createElement("div");
-  box.style.cssText =
-    "background:#111;border:1px solid rgba(0,150,255,0.4);border-radius:12px;" +
-    "box-shadow:0 0 25px rgba(0,150,255,0.4);color:#fff;padding:34px 30px;" +
-    "width:640px;max-width:95%;max-height:85vh;overflow-y:hidden;" +
-    "display:flex;flex-direction:column;text-align:center;";
-
-  const titleEl = document.createElement("div");
-  titleEl.textContent = title || "Untitled story";
-  titleEl.style.cssText =
-    'font-family:"Great Vibes","Brush Script MT","Segoe Script","Lucida Handwriting",cursive;' +
-    "font-size:44px;line-height:1.25;color:#00aaff;margin-bottom:20px;word-break:break-word;";
-
-  // Optional clip attached to the story (GIF or short video)
-  let clipEl = null;
-  if (clipUrl) {
-    clipEl = createClipElement(clipUrl, clipType);
-    clipEl.style.cssText =
-      "max-width:100%;max-height:38vh;border-radius:10px;margin:0 auto 18px;" +
-      "display:block;background:#000;";
-  }
-
-  const textEl = document.createElement("div");
-  textEl.textContent = storyText || "";
-  textEl.style.cssText =
-    "font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;" +
-    "color:#f5f5f5;white-space:pre-wrap;word-break:break-word;text-align:left;";
-
-  const closeBtn = document.createElement("button");
-  closeBtn.type = "button";
-  closeBtn.className = "small-btn ghost";
-  closeBtn.textContent = "Close";
-  closeBtn.style.cssText = "margin:24px auto 0;";
-
-  box.appendChild(titleEl);
-  if (clipEl) box.appendChild(clipEl);
-  box.appendChild(textEl);
-  box.appendChild(closeBtn);
-  overlay.appendChild(box);
-  document.body.appendChild(overlay);
-
-  const close = () => {
-    document.removeEventListener("keydown", onKey);
-    overlay.remove();
-  };
-  const onKey = e => { if (e.key === "Escape") close(); };
-
-  closeBtn.onclick = close;
-  overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
-  document.addEventListener("keydown", onKey);
+  // Last-resort fallback if story-ui.js did not load.
+  alert(`${title || "Story"}\n\n${storyText || ""}`);
 }
+window.openStoryViewer = openStoryViewer;
 
 async function loadSelfStories(username) {
   const res = await fetch("/api/story/list?username=" + encodeURIComponent(username));
@@ -655,23 +592,24 @@ async function loadSelfStories(username) {
 
   box.innerHTML = "<h3>Stories</h3>";
 
-  if (!data.stories || !data.stories.length) {
-    box.innerHTML += "<div class='small muted'>No approved stories yet</div>";
+  const stories = (data && data.stories) || [];
+  const holder = document.createElement("div");
+  box.appendChild(holder);
+
+  if (!window.StoryUI) {
+    holder.innerHTML = stories.length
+      ? stories.map(s => `<div class="small">${escapeHtml(s.title || "Untitled story")}</div>`).join("")
+      : "<div class='small muted'>No approved stories yet</div>";
     return;
   }
 
-  data.stories.forEach(s => {
-    // Approved stories are saved to both profiles (owner and partner)
-    const other = s.owner === username ? s.partner : s.owner;
-    const title = s.title || `Story with ${other}`;
-    const div = document.createElement("div");
-    div.className = "story-item";
-    div.innerHTML = `
-      <div><strong>${escapeHtml(title)}</strong></div>
-      <div class="small">${escapeHtml(other)} — ${new Date(s.createdAt).toLocaleDateString()}</div>
-    `;
-    div.onclick = () => openStoryViewer(title, s.story, s.clipUrl, s.clipType);
-    box.appendChild(div);
+  // Rows carry the actions the viewer is allowed: your own stories can be
+  // opened, linked, edited (which re-opens approval) or deleted.
+  window.StoryUI.setReadingList(stories);
+  window.StoryUI.renderStoryList(holder, stories, {
+    username,
+    emptyText: "No approved stories yet",
+    onChange: () => loadSelfStories(username)
   });
 }
 
@@ -684,62 +622,29 @@ async function loadSelfPendingStories(username) {
 
   box.innerHTML = "<h3>Pending Approval</h3>";
 
-  if (!data.stories || !data.stories.length) {
-    box.innerHTML += "<div class='small muted'>No pending stories</div>";
+  const stories = (data && data.stories) || [];
+  const declined = (data && data.declined) || [];
+  const holder = document.createElement("div");
+  box.appendChild(holder);
+
+  if (!window.StoryUI) {
+    holder.innerHTML = stories.length
+      ? stories.map(s => `<div class="small">${escapeHtml(s.title || "Untitled story")}</div>`).join("")
+      : "<div class='small muted'>No pending stories</div>";
     return;
   }
 
-  data.stories.forEach(s => {
-    // Pending stories appear on both profiles: the owner (approvalOwner)
-    // can resend the request, the partner (approvalPartner) can approve it.
-    const isOwner = s.owner === username;
-    const other = isOwner ? s.partner : s.owner;
-    const title = s.title || `Story with ${other}`;
-    const div = document.createElement("div");
-    div.className = "story-item pending";
-    div.innerHTML = `
-      <div><strong>${escapeHtml(title)}</strong></div>
-      <div class="small">${escapeHtml(other)} — ${new Date(s.createdAt).toLocaleDateString()}</div>
-      ${isOwner
-        ? `<div class="tiny muted">Waiting for ${escapeHtml(s.partner)} to approve…</div>
-           <button class="small-btn resendApproval" data-id="${s._id}">Resend Request</button>`
-        : `<div class="tiny muted">${escapeHtml(s.owner)} is waiting for your approval…</div>
-           <button class="small-btn approvePendingStory" data-id="${s._id}" data-title="${escapeHtml(title)}">Approve</button>`}
-    `;
-    box.appendChild(div);
-  });
-
-  box.querySelectorAll(".resendApproval").forEach(btn => {
-    btn.onclick = async () => {
-      const storyId = btn.dataset.id;
-      const res = await fetch("/api/story/resend", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ storyId })
-      });
-      const result = await res.json();
-      if (result.ok) alert("Approval request resent");
-    };
-  });
-
-  box.querySelectorAll(".approvePendingStory").forEach(btn => {
-    btn.onclick = async () => {
-      const storyId = btn.dataset.id;
-      const title = btn.dataset.title;
-      const res = await fetch("/api/story/approve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ storyId })
-      });
-      const result = await res.json();
-      if (result.ok) {
-        alert(`Story${title ? ` "${title}"` : ""} approved. It is now saved on both profiles.`);
-        loadSelfPendingStories(username);
-        loadSelfStories(username);
-      } else {
-        alert("Could not approve the story");
-      }
-    };
+  // Waiting stories offer Approve / Decline to the partner and Resend / Edit /
+  // Withdraw to the author; refused stories stay visible to their author with
+  // the reason and a "Revise & resubmit" button.
+  window.StoryUI.renderPendingList(holder, {
+    username,
+    stories,
+    declined,
+    onChange: () => {
+      loadSelfPendingStories(username);
+      loadSelfStories(username);
+    }
   });
 }
 
@@ -753,28 +658,23 @@ async function loadStories(username) {
 
   box.innerHTML = "";
 
-  if (!data.stories || !data.stories.length) {
-    box.innerHTML = "<div class='small muted'>No approved stories yet</div>";
+  const stories = (data && data.stories) || [];
+  const holder = document.createElement("div");
+  box.appendChild(holder);
+
+  if (!window.StoryUI) {
+    holder.innerHTML = stories.length
+      ? stories.map(s => `<div class="small">${escapeHtml(s.title || "Untitled story")}</div>`).join("")
+      : "<div class='small muted'>No approved stories yet</div>";
     return;
   }
 
-  data.stories.forEach(s => {
-    // Stories are saved to both the owner's and the partner's profile
-    const other = s.owner === username ? s.partner : s.owner;
-    const title = s.title || `Story with ${other}`;
-    const div = document.createElement("div");
-    div.className = "story-item";
-    div.innerHTML = `
-      <div><strong>${escapeHtml(title)}</strong></div>
-      <div class="small">${escapeHtml(other)} — ${new Date(s.createdAt).toLocaleDateString()}</div>
-    `;
-    div.onclick = () => openStoryViewer(title, s.story, s.clipUrl, s.clipType);
-    box.appendChild(div);
+  window.StoryUI.setReadingList(stories);
+  window.StoryUI.renderStoryList(holder, stories, {
+    username,
+    emptyText: "No approved stories yet",
+    onChange: () => loadStories(username)
   });
-}
-
-async function loadPendingStories(username) {
-  return loadSelfPendingStories(username);
 }
 
 async function loadRelationships(username) {
@@ -861,7 +761,8 @@ async function loadRelationshipTimeline(username) {
 
 // Expose helpers globally
 window.loadStories = loadStories;
-window.loadPendingStories = loadPendingStories;
+// Kept for callers written against the old profile API.
+window.loadPendingStories = loadSelfPendingStories;
 window.loadRelationships = loadRelationships;
 window.loadPendingRelationships = loadPendingRelationships;
 window.loadRelationshipTimeline = loadRelationshipTimeline;

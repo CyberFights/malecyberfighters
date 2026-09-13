@@ -516,16 +516,29 @@ function mobileImgSrc(value) {
     });
 
     /* approvals -------------------------------------------------------- */
-    socket.on("storyApprovalRequest", async ({ storyId, from, title }) => {
-      if (!storyId) return;
-      const titleText = title ? `: "${title}"` : "";
-      if (!confirm(`${from} created a story involving your messages${titleText}. Approve it?`)) return;
-      try {
-        await postJSON("/api/story/approve", { storyId });
-        alert(`Story${title ? ` "${title}"` : ""} approved. It is now saved on both profiles.`);
-      } catch (e) {
-        alert("Could not approve the story right now.");
+    // The shared approval popup (public/js/story-ui.js) offers Read / Approve /
+    // Decline / Later and sends the member's real answer. This page used to
+    // register a second handler for the same event, so one request produced two
+    // popups, and the "deny" path never reached the server at all.
+    socket.on("storyApprovalRequest", data => {
+      if (!data || !data.storyId) return;
+
+      if (window.StoryUI) {
+        window.StoryUI.showApprovalPopup(data);
+        return;
       }
+
+      const { storyId, from, title } = data;
+      const titleText = title ? `: "${title}"` : "";
+      if (!confirm(`${from} wrote a story involving your messages${titleText}. Approve it?`)) return;
+      postJSON("/api/story/approve", { storyId, username: (getSession() || {}).username })
+        .catch(() => alert("Could not approve the story right now."));
+    });
+
+    // Published / declined / deleted notices keep the open lists honest.
+    socket.on("storyStatusChanged", () => {
+      const me = getSession();
+      if (me) loadProfileStories(me.username);
     });
 
     socket.on("relationshipApprovalRequest", async ({ relationshipId, from, type }) => {
@@ -1033,102 +1046,40 @@ function mobileImgSrc(value) {
   }
 
   /* Story viewer popup ---------------------------------------------------
-     Shows the story title in an elegant script font and the story text in
-     a regular font, with a close button. Replaces the old alert().
+     public/js/story-ui.js owns the viewer (shared with the desktop client):
+     light story markup, a scrollable body, Prev/Next between the stories in
+     the list, permalink sharing and export.
   ---------------------------------------------------------------------- */
-  function openStoryViewer(title, storyText) {
-    // Load the elegant script font once (falls back to system script fonts)
-    if (!document.getElementById("storyViewerFont")) {
-      const link = document.createElement("link");
-      link.id = "storyViewerFont";
-      link.rel = "stylesheet";
-      link.href = "https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap";
-      document.head.appendChild(link);
-    }
-
-    // Only one viewer at a time
-    $("storyViewerPopup")?.remove();
-
-    const overlay = document.createElement("div");
-    overlay.id = "storyViewerPopup";
-    overlay.style.cssText =
-      "position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;" +
-      "align-items:center;justify-content:center;z-index:10000;padding:20px;" +
-      "box-sizing:border-box;backdrop-filter:blur(4px);";
-
-    const box = document.createElement("div");
-    box.style.cssText =
-      "background:#111;border:1px solid rgba(0,150,255,0.4);border-radius:12px;" +
-      "box-shadow:0 0 25px rgba(0,150,255,0.4);color:#fff;padding:34px 30px;" +
-      "width:640px;max-width:95%;max-height:85vh;overflow-y:hidden;" +
-      "display:flex;flex-direction:column;text-align:center;";
-
-    const titleEl = document.createElement("div");
-    titleEl.textContent = title || "Untitled story";
-    titleEl.style.cssText =
-      'font-family:"Great Vibes","Brush Script MT","Segoe Script","Lucida Handwriting",cursive;' +
-      "font-size:44px;line-height:1.25;color:#00aaff;margin-bottom:20px;word-break:break-word;";
-
-    const textEl = document.createElement("div");
-    textEl.textContent = storyText || "";
-    textEl.style.cssText =
-      "font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.7;" +
-      "color:#f5f5f5;white-space:pre-wrap;word-break:break-word;text-align:left;";
-
-    const closeBtn = document.createElement("button");
-    closeBtn.type = "button";
-    closeBtn.className = "small-btn ghost";
-    closeBtn.textContent = "Close";
-    closeBtn.style.cssText = "margin:24px auto 0;";
-
-    box.appendChild(titleEl);
-    box.appendChild(textEl);
-    box.appendChild(closeBtn);
-    overlay.appendChild(box);
-    document.body.appendChild(overlay);
-
-    const close = () => {
-      document.removeEventListener("keydown", onKey);
-      overlay.remove();
-    };
-    const onKey = e => { if (e.key === "Escape") close(); };
-
-    closeBtn.onclick = close;
-    overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
-    document.addEventListener("keydown", onKey);
+  function openStoryViewer(title, storyText, clipUrl, clipType) {
+    if (window.StoryUI) return window.StoryUI.openViewer(title, storyText, clipUrl, clipType);
+    alert(`${title || "Story"}\n\n${storyText || ""}`);
   }
 
   async function loadProfileStories(username) {
     const el = $("profileStories");
     if (!el) return;
     el.innerHTML = '<div class="small muted">Loading…</div>';
+
     try {
       const data = await getJSON("/api/story/list?username=" + encodeURIComponent(username));
       const stories = (data && data.stories) || [];
-      if (!stories.length) {
-        el.innerHTML = '<div class="small muted">No stories yet.</div>';
+      el.innerHTML = "";
+
+      if (!window.StoryUI) {
+        el.innerHTML = stories.length
+          ? stories.map(s => `<div class="small">${escapeHtml(s.title || "Untitled story")}</div>`).join("")
+          : '<div class="small muted">No stories yet.</div>';
         return;
       }
-      el.innerHTML = stories.map((s, i) => {
-        const other = s.owner === username ? s.partner : s.owner;
-        const title = s.title || `Story with @${other}`;
-        return `
-        <div class="timeline-item story-view-item" data-i="${i}" style="cursor:pointer">
-          <div class="timeline-date"><strong>${escapeHtml(title)}</strong></div>
-          <div class="timeline-date">${escapeHtml(new Date(s.createdAt).toLocaleDateString())} • with @${escapeHtml(other)}</div>
-          <div class="timeline-desc">${escapeHtml(String(s.story).slice(0, 400))}</div>
-        </div>
-        `;
-      }).join("");
 
-      // Tap a story to open it in the elegant viewer popup
-      el.querySelectorAll(".story-view-item").forEach(item => {
-        item.addEventListener("click", () => {
-          const s = stories[Number(item.dataset.i)];
-          if (!s) return;
-          const other = s.owner === username ? s.partner : s.owner;
-          openStoryViewer(s.title || `Story with @${other}`, s.story);
-        });
+      // Rows carry Read / Link, plus Edit and Delete for your own stories
+      // (editing an approved story sends it back for approval).
+      const me = getSession();
+      window.StoryUI.setReadingList(stories);
+      window.StoryUI.renderStoryList(el, stories, {
+        username: me ? me.username : username,
+        emptyText: "No stories yet.",
+        onChange: () => loadProfileStories(username)
       });
     } catch (e) {
       el.innerHTML = '<div class="small muted">Could not load stories.</div>';
@@ -1185,6 +1136,13 @@ function mobileImgSrc(value) {
   async function loadPendingStories(username) {
     const data = await getJSON("/api/story/pending?username=" + encodeURIComponent(username));
     return (data && data.stories) || [];
+  }
+
+  // Stories that were refused, so a caller can show the reason and offer a
+  // revision the way the desktop profile does.
+  async function loadDeclinedStories(username) {
+    const data = await getJSON("/api/story/pending?username=" + encodeURIComponent(username));
+    return (data && data.declined) || [];
   }
 
   async function resendStoryApproval(storyId) {
@@ -1733,11 +1691,13 @@ function mobileImgSrc(value) {
 
       let content = "";
       if (msg.type === "storyApproval") {
-        const sid = msg.storyId || msg._id || "";
+        const sid = escapeHtml(msg.storyId || msg._id || "");
       content = `
         <div class="system-msg">
           <div>${escapeHtml(msg.text || "")}</div>
-            <button type="button" class="small-btn approveStoryBtn" data-id="${escapeHtml(sid)}">Approve</button>
+            <button type="button" class="small-btn approveStoryBtn" data-id="${sid}">Approve</button>
+            <button type="button" class="small-btn ghost declineStoryBtn" data-id="${sid}">Decline</button>
+            <button type="button" class="small-btn ghost readStoryBtn" data-id="${sid}">Read</button>
         </div>
       `;
       } else if (msg.type === "relationshipApproval") {
@@ -1763,24 +1723,6 @@ function mobileImgSrc(value) {
         ${content}
       </div>
     `;
-
-    const storyBtn = row.querySelector(".approveStoryBtn");
-    if (storyBtn) {
-      storyBtn.addEventListener("click", async () => {
-        const storyId = storyBtn.dataset.id;
-        if (!storyId) return;
-        try {
-          const res = await postJSON("/api/story/approve", { storyId });
-          if (res && res.ok) {
-            storyBtn.parentElement.innerHTML = '<div class="tiny muted">Story approved</div>';
-          } else {
-            alert("Could not approve story.");
-          }
-        } catch (e) {
-          alert("Could not approve story.");
-        }
-      });
-    }
 
     const relBtn = row.querySelector(".approveRelBtn");
     if (relBtn) {
@@ -1862,49 +1804,21 @@ function mobileImgSrc(value) {
   /* ---------------------------------------------------------------------
      Story builder (opened from a DM)
      --------------------------------------------------------------------- */
-  function openStoryPopup(partner) {
+  function openStoryPopup(partner, story) {
     const s = getSession();
     if (!s || !partner) return;
 
-    const editor = $("storyEditor");
-    const dateInput = $("storyDate");
-    const titleInput = $("storyTitle");
-    if (editor) editor.value = "";
-    if (dateInput) dateInput.value = "";
-    if (titleInput) titleInput.value = "";
+    if (window.StoryUI) {
+      return window.StoryUI.openEditor({
+        partner,
+        username: s.username,
+        story: story || null,
+        onSaved: () => loadProfileStories(s.username),
+        onDeleted: () => loadProfileStories(s.username)
+      });
+    }
 
-    showId("storyPopup");
-
-    const loadBtn = $("storyLoadBtn");
-    if (loadBtn) loadBtn.onclick = async () => {
-      const fromDate = dateInput && dateInput.value;
-      if (!fromDate) return alert("Choose a start date first.");
-      try {
-        const data = await postJSON("/api/story/load", { a: s.username, b: partner, fromDate });
-        if (!data.ok) return alert("Failed to load messages.");
-        editor.value = (data.messages || [])
-          .map(m => `[${new Date(m.time).toLocaleString()}] ${m.from}: ${m.text || "(image)"}`)
-          .join("\n");
-      } catch (e) {
-        alert("Failed to load messages.");
-      }
-    };
-
-    const saveBtn = $("storySaveBtn");
-    if (saveBtn) saveBtn.onclick = async () => {
-      const title = (titleInput && titleInput.value || "").trim();
-      if (!title) return alert("Please enter a story title.");
-      const story = (editor && editor.value || "").trim();
-      if (!story) return alert("The story is empty.");
-      try {
-        const data = await postJSON("/api/story/save", { owner: s.username, partner, title, story });
-        if (!data.ok) return alert("Failed to save the story.");
-        alert("Story saved. Waiting for approval.");
-        hideId("storyPopup");
-      } catch (e) {
-        alert("Failed to save the story.");
-      }
-    };
+    alert("The story editor is still loading — try again in a moment.");
   }
 
   /* ---------------------------------------------------------------------
@@ -2556,7 +2470,6 @@ function mobileImgSrc(value) {
     on($("closeRules"), "click", () => hideId("modalRules"));
 
     /* story popup */
-    on($("storyCloseBtn"), "click", () => hideId("storyPopup"));
 
     /* admin */
     on($("btnAdmin"), "click", openAdminPanel);
@@ -3208,6 +3121,8 @@ function renderDMMessages(targetUsername, messages) {
         <div class="system-msg">
           ${escapeHtml(m.text || "")}
           <button class="small-btn approveStoryBtn" data-id="${m.storyId || ""}">Approve</button>
+          <button class="small-btn ghost declineStoryBtn" data-id="${m.storyId || ""}">Decline</button>
+          <button class="small-btn ghost readStoryBtn" data-id="${m.storyId || ""}">Read</button>
         </div>
       `;
     } else if (m.type === "relationshipApproval") {
@@ -3271,21 +3186,43 @@ document.addEventListener("click", async (e) => {
   }
 });
 
+// Approve / decline / read from a system message in any conversation. All of
+// it goes through the shared helpers, so the answer is attributed to the
+// signed-in member and a refusal actually reaches the author.
 document.addEventListener("click", async (e) => {
-  if (e.target.classList.contains("approveStoryBtn")) {
-    const storyId = e.target.dataset.id;
+  const button = e.target.closest && e.target.closest("button");
+  if (!button) return;
 
-    const res = await fetch("/api/story/approve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ storyId })
-    });
+  const storyId = button.dataset.id;
+  if (!storyId || !window.StoryUI) return;
 
-    const data = await res.json();
-    if (data.ok) {
-      alert("Story approved");
-      e.target.parentElement.innerHTML = "Approved";
+  const me = getSession();
+  const username = me && me.username;
+
+  if (button.classList.contains("approveStoryBtn")) {
+    button.disabled = true;
+    if (await window.StoryUI.approveStory(storyId, username)) {
+      button.parentElement.innerHTML = '<div class="tiny muted">Story approved</div>';
+    } else {
+      button.disabled = false;
     }
+    return;
+  }
+
+  if (button.classList.contains("declineStoryBtn")) {
+    button.disabled = true;
+    if (await window.StoryUI.declineStory(storyId, username)) {
+      button.parentElement.innerHTML = '<div class="tiny muted">Declined — the author can revise it</div>';
+    } else {
+      button.disabled = false;
+    }
+    return;
+  }
+
+  if (button.classList.contains("readStoryBtn")) {
+    const story = await window.StoryUI.fetchStory(storyId, username);
+    if (story) window.StoryUI.openViewer(story);
+    else window.StoryUI.toast("Could not open that story", "error");
   }
 });
 
@@ -3353,6 +3290,8 @@ function appendSingleDMMessage(pm, me) {
       <div class="system-msg">
         ${escapeHtml(pm.text || "")}
         <button class="small-btn approveStoryBtn" data-id="${pm.storyId || ""}">Approve</button>
+        <button class="small-btn ghost declineStoryBtn" data-id="${pm.storyId || ""}">Decline</button>
+        <button class="small-btn ghost readStoryBtn" data-id="${pm.storyId || ""}">Read</button>
       </div>
     `;
   } else if (pm.type === "relationshipApproval") {
@@ -3520,39 +3459,11 @@ document.getElementById("dmImageInput")?.addEventListener("change", e => {
    STORY / RELATIONSHIP APPROVAL POPUPS
 ============================================================ */
 
-socket.on("storyApprovalRequest", data => {
-  const { storyId, from, title } = data;
-  const safeTitle = title ? escapeHtml(title) : "";
-
-  const popup = document.createElement("div");
-  popup.className = "modal";
-  popup.innerHTML = `
-    <div class="modal-box">
-      <div class="modal-header">
-        <h3>Story Approval Request</h3>
-      </div>
-      <p>${from} created a story involving your messages${title ? `: <strong>"${safeTitle}"</strong>` : ""}.</p>
-      <div class="modal-buttons">
-        <button id="approveStoryBtn" class="small-btn" type="button">Approve</button>
-        <button id="denyStoryBtn" class="ghost small-btn" type="button">Deny</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(popup);
-
-  document.getElementById("approveStoryBtn").onclick = async () => {
-    await fetch("/api/story/approve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ storyId })
-    });
-    popup.remove();
-  };
-
-  document.getElementById("denyStoryBtn").onclick = () => {
-    popup.remove();
-  };
-});
+// Approve / decline notices are handled by the shared popup in
+// public/js/story-ui.js (see the socket handlers above). This page used to
+// register a second handler for the same event, so a single request produced
+// two popups and the "Deny" button only closed the window without telling the
+// server anything.
 
 socket.on("relationshipApprovalRequest", data => {
   const { relationshipId, from, type } = data;
