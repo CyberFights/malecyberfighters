@@ -31,6 +31,19 @@
   const FONT_KEY = "mcf.story.fontScale";
   const SCRIPT_FONT = '"Great Vibes","Brush Script MT","Segoe Script","Lucida Handwriting",cursive';
   const BODY_FONT = 'Arial,Helvetica,sans-serif';
+  // The script face is served from our own /fonts route (SIL OFL, licensed in
+  // public/fonts). It used to be @imported from fonts.googleapis.com, which the
+  // site's Content-Security-Policy blocks on both style-src and font-src — so
+  // every story title silently fell back to a system cursive font, and the
+  // stylesheet request was refused in the console.
+  const SCRIPT_FONT_FACE = `
+    @font-face{
+      font-family:"Great Vibes";
+      font-style:normal;
+      font-weight:400;
+      font-display:swap;
+      src:url("/fonts/great-vibes.woff2") format("woff2");
+    }`;
 
   /* ============================================================
      SMALL HELPERS
@@ -365,7 +378,7 @@
     if (document.getElementById("mcfStoryStyles")) return;
 
     const style = node("style", { id: "mcfStoryStyles" });
-    style.textContent = `
+    style.textContent = SCRIPT_FONT_FACE + `
       .mcf-story-backdrop{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
         padding:16px;z-index:10050;background:rgba(0,0,0,.72);backdrop-filter:blur(4px);box-sizing:border-box}
       .mcf-story-panel{background:#111;border:1px solid rgba(0,150,255,.4);border-radius:14px;color:#fff;
@@ -901,8 +914,8 @@
     styleSelect.appendChild(node("option", { value: "script", text: "Script — **Name:** dialogue" }));
     styleSelect.appendChild(node("option", { value: "log", text: "Log — [time] Name: message" }));
 
-    const timestampsToggle = node("input", { type: "checkbox" });
-    const sceneToggle = node("input", { type: "checkbox" });
+    const timestampsToggle = node("input", { type: "checkbox", "data-mcf": "timestamps" });
+    const sceneToggle = node("input", { type: "checkbox", "data-mcf": "scene-breaks" });
     sceneToggle.checked = true;
 
     const aliasMe = node("input", { class: "mcf-story-input", type: "text", placeholder: `Character name for @${username}` });
@@ -913,10 +926,10 @@
     const loadBtn = node("button", { class: "mcf-story-btn", type: "button", text: "Load messages", "data-mcf": "load-messages" });
     const picker = node("div", { class: "mcf-story-picker", "data-mcf": "picker", style: "display:none" });
 
-    const selectedMessages = () => state.messages.filter((m, i) => {
-      const box = messageList.querySelector(`input[data-i="${i}"]`);
-      return box && box.checked;
-    });
+    // Which messages are ticked lives here rather than in the DOM, so filtering
+    // or re-running a search never loses a selection.
+    const picked = new Set();
+    const selectedMessages = () => state.messages.filter((m, i) => picked.has(i));
 
     const visibleMessages = () => {
       const term = pickerSearch.value.trim().toLowerCase();
@@ -948,6 +961,11 @@
       rows.forEach(({ m, index }) => {
         const box = node("input", { type: "checkbox" });
         box.dataset.i = String(index);
+        box.checked = picked.has(index);
+        box.onchange = () => {
+          if (box.checked) picked.add(index);
+          else picked.delete(index);
+        };
         const row = node("label", { class: "mcf-story-msg", "data-mcf": "message" }, [
           box,
           node("span", { class: "when", text: formatTime(m.time) }),
@@ -983,6 +1001,7 @@
         }
 
         state.messages = data.messages || [];
+        picked.clear();
         state.loadedRange = { from: fromDate.value, to: toDate.value || null };
         renderMessages();
         toast(`Loaded ${plural(state.messages.length, "message")}${data.truncated ? " (most recent)" : ""}`, "info");
@@ -991,6 +1010,13 @@
         loadBtn.textContent = "Load messages";
       }
     };
+
+    loadBtn.onclick = loadMessages;
+
+    // Both filters redraw the list; the ticks survive because they live in
+    // `picked`, not in the checkboxes.
+    pickerSearch.oninput = renderMessages;
+    speaker.onchange = renderMessages;
 
     const aliasesFromInputs = () => {
       const aliases = {};
@@ -1053,19 +1079,26 @@
 
     const pickerActions = node("div", { class: "mcf-story-row", style: "margin-top:10px" }, [
       node("button", { class: "mcf-story-btn primary", type: "button", text: "Add to story", "data-mcf": "insert" }),
-      node("button", { class: "mcf-story-btn", type: "button", text: "Replace story" }),
-      node("button", { class: "mcf-story-btn ghost", type: "button", text: "Select all" }),
-      node("button", { class: "mcf-story-btn ghost", type: "button", text: "Select none" }),
-      node("button", { class: "mcf-story-btn ghost", type: "button", text: "Invert" }),
+      node("button", { class: "mcf-story-btn", type: "button", text: "Replace story", "data-mcf": "replace" }),
+      node("button", { class: "mcf-story-btn ghost", type: "button", text: "Select all", "data-mcf": "select-all" }),
+      node("button", { class: "mcf-story-btn ghost", type: "button", text: "Select none", "data-mcf": "select-none" }),
+      node("button", { class: "mcf-story-btn ghost", type: "button", text: "Invert", "data-mcf": "invert" }),
       renameInStory
     ]);
 
     const [addToStory, replaceStory, selectAll, selectNone, invert] = pickerActions.querySelectorAll("button");
     addToStory.onclick = () => insertSelected("append");
     replaceStory.onclick = () => insertSelected("replace");
-    selectAll.onclick = () => messageList.querySelectorAll("input").forEach(box => { box.checked = true; });
-    selectNone.onclick = () => messageList.querySelectorAll("input").forEach(box => { box.checked = false; });
-    invert.onclick = () => messageList.querySelectorAll("input").forEach(box => { box.checked = !box.checked; });
+    const eachVisible = fn => messageList.querySelectorAll("input").forEach(box => {
+      const index = Number(box.dataset.i);
+      box.checked = fn(box.checked);
+      if (box.checked) picked.add(index);
+      else picked.delete(index);
+    });
+
+    selectAll.onclick = () => eachVisible(() => true);
+    selectNone.onclick = () => eachVisible(() => false);
+    invert.onclick = () => eachVisible(checked => !checked);
 
     const toggle = (label, input) => node("label", { class: "mcf-story-meta" }, [input, node("span", { text: label })]);
 

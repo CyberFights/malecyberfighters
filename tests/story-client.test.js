@@ -43,9 +43,27 @@ function loadPage({ username = 'alice', html = '' } = {}) {
 
 const find = (root, selector) => root.querySelector(`[data-mcf="${selector}"]`);
 
+/** Tick a message row the way a member clicking it would. */
+const tickRow = (win, row, checked = true) => {
+  const box = row.querySelector('input');
+  box.checked = checked;
+  box.dispatchEvent(new win.Event('change'));
+};
+
 /* ============================================================
    STORY TEXT
 ============================================================ */
+
+test('the script title font is served locally, because the CSP blocks remote fonts', () => {
+  const { win, doc, StoryUI } = loadPage();
+  StoryUI.openViewer({ title: 'Rooftop', story: 'x' });
+
+  const css = doc.getElementById('mcfStoryStyles').textContent;
+  assert.match(css, /@font-face\{[\s\S]*font-family:"Great Vibes"/);
+  assert.match(css, /src:url\("\/fonts\/great-vibes\.woff2"\)/);
+  assert.doesNotMatch(css, /fonts\.googleapis\.com|fonts\.gstatic\.com/);
+  assert.equal(win.document.querySelector('link[href*="googleapis"]'), null, 'no remote stylesheet is requested');
+});
 
 test('story text is escaped, so a story cannot inject markup', () => {
   const { StoryUI } = loadPage();
@@ -165,6 +183,120 @@ test('the editor opens blank for a new story and saves it against the partner', 
     owner: 'alice',
     partner: 'bob'
   });
+});
+
+test('messages are loaded, picked and written into the story', async () => {
+  const { win, doc, StoryUI } = loadPage();
+  win.responder = url => (url === '/api/story/load'
+    ? {
+        ok: true,
+        messages: [
+          { from: 'bob', to: 'alice', text: 'You still up for Saturday?', time: '2026-08-23T22:10:00Z' },
+          { from: 'alice', to: 'bob', text: 'Depends. Indoor or the usual car park?', time: '2026-08-23T22:12:00Z' },
+          { from: 'bob', to: 'alice', text: 'The roof on Campbell.', time: '2026-08-23T22:13:00Z' }
+        ]
+      }
+    : { ok: true });
+
+  StoryUI.openEditor({ partner: 'bob' });
+
+  // The picker starts closed.
+  assert.equal(find(doc, 'picker').style.display, 'none');
+  find(doc, 'toggle-picker').click();
+  assert.equal(find(doc, 'picker').style.display, 'block');
+
+  // Loading asks for the window the member chose, for their own conversation.
+  find(doc, 'picker').querySelector('input[type="date"]').value = '2026-08-01';
+  find(doc, 'load-messages').click();
+  await tick();
+
+  const call = win.calls.at(-1);
+  assert.equal(call.url, '/api/story/load');
+  assert.deepEqual(call.body, {
+    a: 'alice', b: 'bob', requester: 'alice', fromDate: '2026-08-01'
+  });
+  assert.equal('toDate' in call.body, false, 'an open-ended window sends no end date');
+
+  const rows = find(doc, 'messages').querySelectorAll('[data-mcf="message"]');
+  assert.equal(rows.length, 3, 'every message is pickable');
+
+  // Tick two of them and add them as dialogue.
+  tickRow(win, rows[0]);
+  tickRow(win, rows[1]);
+  find(doc, 'insert').click();
+
+  // A blank line separates a change of speaker by default...
+  assert.equal(find(doc, 'body').value,
+    '**bob:** You still up for Saturday?\n\n**alice:** Depends. Indoor or the usual car park?');
+
+  // ...and turning that off gives a compact exchange.
+  find(doc, 'body').value = '';
+  find(doc, 'scene-breaks').checked = false;
+  find(doc, 'replace').click();
+  assert.equal(find(doc, 'body').value,
+    '**bob:** You still up for Saturday?\n**alice:** Depends. Indoor or the usual car park?');
+
+  // Adding again does not wipe what is already written.
+  tickRow(win, rows[2]);
+  find(doc, 'insert').click();
+  assert.match(find(doc, 'body').value, /You still up for Saturday\?[\s\S]*\*\*bob:\*\* The roof on Campbell\./);
+  assert.match(find(doc, 'body').value, /roof on Campbell/, 'the new line was appended, not swapped in');
+
+  // Replacing a draft that already has text asks first, then carries on.
+  let asked = false;
+  win.confirm = () => { asked = true; return true; };
+
+  // Timestamps can be switched on for a story that reads as a log.
+  find(doc, 'timestamps').checked = true;
+  find(doc, 'replace').click();
+  assert.equal(asked, true, 'replacing written text is confirmed');
+  assert.match(find(doc, 'body').value, /^> \d{1,2}:\d{2}/, 'each line carries its time');
+});
+
+test('the picker can filter by speaker and text, and replace the draft on request', async () => {
+  const { win, doc, StoryUI } = loadPage();
+  win.responder = () => ({
+    ok: true,
+    messages: [
+      { from: 'bob', to: 'alice', text: 'roof on Campbell', time: '2026-08-23T22:13:00Z' },
+      { from: 'alice', to: 'bob', text: 'it rained all week', time: '2026-08-23T22:15:00Z' }
+    ]
+  });
+
+  StoryUI.openEditor({ partner: 'bob' });
+  find(doc, 'toggle-picker').click();
+  find(doc, 'picker').querySelector('input[type="date"]').value = '2026-08-01';
+  find(doc, 'load-messages').click();
+  await tick();
+
+  const list = find(doc, 'messages');
+  const speaker = find(doc, 'picker').querySelector('select');
+
+  speaker.value = 'them';
+  speaker.dispatchEvent(new win.Event('change'));
+  assert.equal(list.querySelectorAll('[data-mcf="message"]').length, 1, 'only @bob\'s lines');
+
+  // Ticking a line and then searching must not lose the tick.
+  tickRow(win, list.querySelectorAll('[data-mcf="message"]')[0]);
+  const search = find(doc, 'picker').querySelector('input[type="search"]');
+  search.value = 'campbell';
+  search.dispatchEvent(new win.Event('input'));
+  assert.equal(list.querySelectorAll('[data-mcf="message"]').length, 1, 'only matching lines');
+  search.value = '';
+  search.dispatchEvent(new win.Event('input'));
+  assert.equal(list.querySelectorAll('input')[0].checked, true, 'the tick survived the filter');
+
+  speaker.value = 'all';
+  speaker.dispatchEvent(new win.Event('change'));
+  find(doc, 'select-all').click();
+  assert.equal([...list.querySelectorAll('input')].every(box => box.checked), true, 'Select all ticks every line');
+  find(doc, 'body').value = 'Something I already wrote.';
+  win.confirm = () => true;
+  find(doc, 'insert').click();
+
+  find(doc, 'replace').click();
+  assert.doesNotMatch(find(doc, 'body').value, /Something I already wrote/);
+  assert.match(find(doc, 'body').value, /roof on Campbell/);
 });
 
 test('an empty story is refused before it reaches the server', async () => {
