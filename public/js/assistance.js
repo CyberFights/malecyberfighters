@@ -56,6 +56,21 @@
     }
   }
 
+  function isAdminSafe() {
+    try {
+      var sess = getSessionSafe();
+      if (!sess) return false;
+      var name = sess.username || sess.user || '';
+      return name === 'Administrator';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function isAdminTopic(topic) {
+    return !!(topic && topic.requiresAdmin);
+  }
+
   /* ---------------------------------------------------------
      CONTROL LOOKUP
      index.html keeps a hidden mobile block (#mainUI) alongside the
@@ -1316,11 +1331,12 @@
       title: 'Admin panel overview',
       keywords: ['admin', 'admin panel', 'administrator', 'moderator', 'admin login'],
       answer: 'The Admin Panel only appears for the Administrator account (username exactly "Administrator") — button btnAdmin hidden unless isAdministratorUser true via updateAdminButtonVisibility. It is protected by ADMIN_KEY env var via x-admin-key header (requireAdmin middleware returns 403 admin_denied if missing). Modal modalAdmin with tabs Users, Analytics, Stale images (tabUsers, tabAnalytics, tabStaleImages). Users view: search adminSearch, table adminTable columns Username, Email, Role, Height, Weight, Online, Banned, Actions (Ban toggle, Reset password prompt, Delete user confirm). Analytics view: statsSummary (totalUsers, onlineUsers, bannedUsers, totalLogs, last24h logins24h fails24h regs24h) via GET /api/admin/stats, Top IPs 24h via GET /api/admin/top-ips aggregate. Stale images view: description, Preview dry run button staleImagesPreview and Run sweep staleImagesRun, summary staleImagesSummary via POST /api/admin/sweep-stale-images?dryRun=1&limit=1000. Close via adminClose. Mobile version admin-mobile.js similar.',
+      requiresAdmin: true,
       action: {
-        label: 'Open a support report',
-        buttonId: 'openSupport',
-        popupId: 'supportPopup',
-        done: 'Admin panel is only for Administrator — send a support report instead.'
+        label: 'Open Admin Panel',
+        buttonId: 'btnAdmin',
+        popupId: 'modalAdmin',
+        done: 'Opening the Admin Panel for you.'
       }
     },
     {
@@ -1328,11 +1344,13 @@
       title: 'Admin analytics',
       keywords: ['analytics', 'stats', 'top ips', 'logins', 'registrations', 'admin stats', 'user count'],
       answer: 'Admin → Analytics tab shows: total users count, online users count, banned users count, total IpLog count, last 24h: logins (login_success), fails (login_fail/login_error/login_banned), regs (register). Fetched via GET /api/admin/stats with requireAdmin. Below that Top IPs 24h list from GET /api/admin/top-ips aggregate match createdAt >= since 24h, group by ip, sort count desc limit 10. IpLog schema {ip, username, action, userAgent, createdAt} logged via logIp helper using x-forwarded-for first or socket remoteAddress.',
+      requiresAdmin: true,
       action: {
-        label: 'Open a support report',
-        buttonId: 'openSupport',
-        popupId: 'supportPopup',
-        done: 'Analytics is in Admin panel — here is support instead.'
+        label: 'Open Admin Analytics',
+        buttonId: 'btnAdmin',
+        popupId: 'modalAdmin',
+        then: 'tabAnalytics',
+        done: 'Opening Admin → Analytics for you.'
       }
     },
     {
@@ -1340,11 +1358,13 @@
       title: 'Stale Discord images sweep',
       keywords: ['stale images', 'discord images expired', 'rehost images', 'imgbb rehost', 'clear broken images', 'sweep images'],
       answer: 'Discord attachment URLs expire ~24h after issue (signed is/ex params) and become 404. Admin → Stale images tab has Preview (dry run) and Run sweep buttons. Calls POST /api/admin/sweep-stale-images?dryRun=1&limit=1000 with requireAdmin. Server sweepStaleDiscordImages scans PublicMessage, RoomMessage, DM where imageUrl is string non-empty and isDiscordCdnUrl (host cdn.discordapp.com or media.discordapp.net). For each, calls rehostImageToImgBB which fetches image (15 sec timeout) with Accept image/* and UA, checks status ok and content-type image/* and size max 12 MB, then uploadImageToImgBB via base64 to ImgBB API. If rehosted.url exists → rehosted (update to ImgBB URL). Else if reason upstream_404/410 or bad_type → cleared (set imageUrl null) so broken <img> not rendered. Else skipped (timeout, no key, too large) leaves untouched to avoid dropping possibly-valid image. Summary returns scanned, rehosted, cleared, skipped, errors, items array with collection/id/from/to/action/reason. Requires IMGBB_API_KEY env var, else reason no_imgbb_key and skipped.',
+      requiresAdmin: true,
       action: {
-        label: 'Open a support report',
-        buttonId: 'openSupport',
-        popupId: 'supportPopup',
-        done: 'Stale images sweep is admin-only — opening support instead.'
+        label: 'Open Stale Images Sweep',
+        buttonId: 'btnAdmin',
+        popupId: 'modalAdmin',
+        then: 'tabStaleImages',
+        done: 'Opening Admin → Stale images for you.'
       }
     },
 
@@ -1545,6 +1565,15 @@
   function performAction(action) {
     if (!action) return false;
 
+    // Never open admin-only windows for non-admins, even if someone crafts
+    // a topic or quick-reply that points at them.
+    if (action && (action.buttonId === 'btnAdmin' || action.popupId === 'modalAdmin')) {
+      if (!isAdminSafe()) {
+        answerRestrictedAdmin();
+        return false;
+      }
+    }
+
     var target = action.popupId ? byId(action.popupId) : null;
     var hasButton = controlsFor(action.buttonId).length > 0;
     if (!hasButton && !target) return false;
@@ -1591,6 +1620,21 @@
   }
 
   function answerTopic(topic, text) {
+    if (isAdminTopic(topic) && !isAdminSafe()) {
+      addMessage(
+        'assistant',
+        'That area is for the site administrator only.\n' +
+          'If you need help with something an admin handles — a ban, a report, a bug, or a feature request — send it through Support and the admins will pick it up.',
+        {
+          label: 'Open a support report',
+          buttonId: 'openSupport',
+          popupId: 'supportPopup',
+          done: 'Opening the support report form for you.'
+        }
+      );
+      return;
+    }
+
     var action = topic.action || null;
 
     if (action && topic.requiresLogin && !getSessionSafe()) {
@@ -1603,6 +1647,21 @@
       return;
     }
 
+    if (isAdminTopic(topic) && !isAdminSafe()) {
+      addMessage(
+        'assistant',
+        'That area is for the site administrator only.\n' +
+          'If you need help with something an admin handles, use Support.',
+        {
+          label: 'Open a support report',
+          buttonId: 'openSupport',
+          popupId: 'supportPopup',
+          done: 'Opening the support report form for you.'
+        }
+      );
+      return;
+    }
+
     if (action && shouldOpenDirectly(text)) {
       addMessage('assistant', action.done || topic.answer);
       performAction(action);
@@ -1610,6 +1669,20 @@
     }
 
     addMessage('assistant', topic.answer, action);
+  }
+
+  function answerRestrictedAdmin() {
+    addMessage(
+      'assistant',
+      'That area is for the site administrator only.\n' +
+        'If you need help with something an admin handles — a ban, a report, a bug, or a feature request — send it through Support and the admins will pick it up.',
+      {
+        label: 'Open a support report',
+        buttonId: 'openSupport',
+        popupId: 'supportPopup',
+        done: 'Opening the support report form for you.'
+      }
+    );
   }
 
   function answerUnknown(text) {
@@ -1763,6 +1836,15 @@
   function performAction(action) {
     if (!action) return false;
 
+    // Never open admin-only windows for non-admins, even if someone crafts
+    // a topic or quick-reply that points at them.
+    if (action && (action.buttonId === 'btnAdmin' || action.popupId === 'modalAdmin')) {
+      if (!isAdminSafe()) {
+        answerRestrictedAdmin();
+        return false;
+      }
+    }
+
     var target = action.popupId ? byId(action.popupId) : null;
     var hasButton = controlsFor(action.buttonId).length > 0;
     if (!hasButton && !target) return false;
@@ -1809,6 +1891,21 @@
   }
 
   function answerTopic(topic, text) {
+    if (isAdminTopic(topic) && !isAdminSafe()) {
+      addMessage(
+        'assistant',
+        'That area is for the site administrator only.\n' +
+          'If you need help with something an admin handles — a ban, a report, a bug, or a feature request — send it through Support and the admins will pick it up.',
+        {
+          label: 'Open a support report',
+          buttonId: 'openSupport',
+          popupId: 'supportPopup',
+          done: 'Opening the support report form for you.'
+        }
+      );
+      return;
+    }
+
     var action = topic.action || null;
 
     if (action && topic.requiresLogin && !getSessionSafe()) {
@@ -1821,6 +1918,21 @@
       return;
     }
 
+    if (isAdminTopic(topic) && !isAdminSafe()) {
+      addMessage(
+        'assistant',
+        'That area is for the site administrator only.\n' +
+          'If you need help with something an admin handles, use Support.',
+        {
+          label: 'Open a support report',
+          buttonId: 'openSupport',
+          popupId: 'supportPopup',
+          done: 'Opening the support report form for you.'
+        }
+      );
+      return;
+    }
+
     if (action && shouldOpenDirectly(text)) {
       addMessage('assistant', action.done || topic.answer);
       performAction(action);
@@ -1828,6 +1940,20 @@
     }
 
     addMessage('assistant', topic.answer, action);
+  }
+
+  function answerRestrictedAdmin() {
+    addMessage(
+      'assistant',
+      'That area is for the site administrator only.\n' +
+        'If you need help with something an admin handles — a ban, a report, a bug, or a feature request — send it through Support and the admins will pick it up.',
+      {
+        label: 'Open a support report',
+        buttonId: 'openSupport',
+        popupId: 'supportPopup',
+        done: 'Opening the support report form for you.'
+      }
+    );
   }
 
   function answerUnknown(text) {
@@ -1862,7 +1988,11 @@
       hideTyping();
       var match = matchTopic(text);
       if (match) {
-        answerTopic(match.topic, text);
+        if (isAdminTopic(match.topic) && !isAdminSafe()) {
+          answerRestrictedAdmin();
+        } else {
+          answerTopic(match.topic, text);
+        }
       } else {
         answerUnknown(text);
       }
