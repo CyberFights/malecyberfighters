@@ -121,7 +121,10 @@
   /* ---------------------------------------------------------
      TOPICS
      keywords   phrases matched against the question (word/phrase
-                boundaries, so "room" will not match "bedroom")
+                boundaries, so "room" will not match "bedroom").
+                Articles and simple plurals are tolerated inside a
+                phrase, so "create a story" and "create stories" both
+                reach the "create story" keyword
      answer     plain text, one paragraph per line
      action     { label, buttonId, popupId, then, done }
                   buttonId  control to click (does the real work)
@@ -785,7 +788,7 @@
     {
       id: 'create-story',
       title: 'Creating a story from a conversation',
-      keywords: ['create story', 'make a story', 'write a story', 'new story', 'story creation', 'save a story', 'story from dm'],
+      keywords: ['create story', 'make a story', 'write a story', 'start story', 'begin story', 'new story', 'story creation', 'save a story', 'story from dm', 'stories'],
       answer: 'Stories are built from a chat you already had.\n' +
         'In a DM window press "Story" (pm-story or dmStory button), or in a room window similarly. Story editor opens (storyPopup shell reused, class mcf-story-backdrop). Give it a title and a start date, then press "Load Messages" to pull that conversation into the editor via POST /api/story/load {a, b, requester, fromDate, toDate} which checks requester is participant and returns messages bounded and capped.\n' +
         'Editor lets you pick messages, format, attach clip, preview, and Save. Stories are reviewed by partner before they appear in public Archives.',
@@ -886,7 +889,7 @@
     {
       id: 'story-viewer',
       title: 'Reading stories — the viewer',
-      keywords: ['read story', 'story viewer', 'view story', 'open story', 'story reading', 'story display'],
+      keywords: ['read story', 'read a story', 'story viewer', 'view story', 'open story', 'story reading', 'story display'],
       answer: 'Story viewer (StoryUI.openViewer) opens in backdrop mcf-story-backdrop id storyViewerPopup, panel mcf-story-viewer width 720px max 92vh flex column, head with title in Great Vibes script font 40px (font-face served from /fonts/great-vibes.woff2, not Google, due to CSP), byline meta @owner with @partner, date, revision chip, declined chip, close X top-right absolute. Tools bar: A- smaller, A+ larger (fontSize stored in localStorage mcf.story.fontScale 0.8–1.8 step 0.1, applied as 15px * scale), Prev/Next buttons disabled when readingList length <=1 or at ends, Copy link, Export, Print. Scroll area mcf-story-scroll overflow-y auto with rendered body via renderStoryBody (paragraphs, quotes, headings, lists, breaks, clip preview max-height 38vh centered). Footer shows Story N of M and Close primary button. Keyboard: Escape closes, ArrowLeft/Right steps when canStep. Prev/Next via readingList set by setReadingList.',
       action: {
         label: 'Open the Archives',
@@ -1466,285 +1469,80 @@
       ' ';
   }
 
-  function scoreTopic(topic, haystack) {
-    var score = 0;
-    topic.keywords.forEach(function (keyword) {
-      var needle = ' ' + keyword.toLowerCase() + ' ';
-      if (haystack.indexOf(needle) === -1) return;
-      // Longer phrases are a stronger signal than single words.
-      score += keyword.indexOf(' ') === -1 ? 2 : 3 + keyword.split(' ').length;
-    });
-    return score;
+  /* Articles that people (and the quick questions) drop between the words
+     of a keyword: "create a story" asks the same thing as "create story".
+     Without this the assistant could not answer its own quick question
+     "How do I create a story?" — it fell through to the fallback. */
+  var FILLER_WORDS = { a: true, an: true, the: true };
+
+  /**
+   * Are these the same word for matching purposes? People write "story"
+   * and "stories", "room" and "rooms", so allow the simple plurals.
+   */
+  function sameWord(a, b) {
+    if (a === b) return true;
+    if (!a || !b) return false;
+
+    var shorter = a.length <= b.length ? a : b;
+    var longer = a.length <= b.length ? b : a;
+    if (shorter.length < 2) return false;
+
+    if (shorter + 's' === longer) return true;                  // room / rooms
+    if (shorter + 'es' === longer) return true;                 // match / matches
+    if (/ies$/.test(longer) && shorter === longer.slice(0, -3) + 'y') return true; // story / stories
+
+    return false;
   }
 
-  function matchTopic(text) {
-    var haystack = normalise(text);
-    var best = null;
-    TOPICS.forEach(function (topic) {
-      var score = scoreTopic(topic, haystack);
-      if (score > 0 && (!best || score > best.score)) {
-        best = { topic: topic, score: score };
+  /**
+   * Does the keyword appear in the question, allowing articles between its
+   * words? Word order is kept and nothing else may sit between them, so
+   * "create report" still does not match "create a story".
+   */
+  function containsKeyword(haystackWords, keyword) {
+    var needle = keyword.toLowerCase().split(' ');
+
+    for (var start = 0; start < haystackWords.length; start++) {
+      if (!sameWord(haystackWords[start], needle[0])) continue;
+
+      var at = start + 1;
+      var next = 1;
+      while (next < needle.length) {
+        var word = haystackWords[at];
+        if (word === undefined) break;
+        if (FILLER_WORDS[word]) { at++; continue; }
+        if (!sameWord(word, needle[next])) break;
+        next++;
+        at++;
       }
-    });
-    return best;
-  }
 
-  /* "open the arena" opens it. "how do I open the arena?" explains it
-     and offers a button, so the user is never pushed somewhere they
-     only asked about. */
-  function shouldOpenDirectly(text) {
-    var haystack = normalise(text);
-    if (!ACTION_VERB_RE.test(haystack)) return false;
-    if (ASKING_ASSISTANT_RE.test(haystack)) return true;
-    return !QUESTION_RE.test(haystack);
-  }
-
-  /* ---------------------------------------------------------
-     RENDERING (no innerHTML — the transcript contains user text)
-  --------------------------------------------------------- */
-  function scrollMessages() {
-    var list = byId('assistanceMessages');
-    if (list) list.scrollTop = list.scrollHeight;
-  }
-
-  function addMessage(role, text, action) {
-    var list = byId('assistanceMessages');
-    if (!list) return null;
-
-    var bubble = document.createElement('div');
-    bubble.className = 'assistance-msg ' + role;
-
-    String(text == null ? '' : text).split('\n').forEach(function (line) {
-      var trimmed = line.trim();
-      if (!trimmed) return;
-      var paragraph = document.createElement('p');
-      paragraph.textContent = trimmed;
-      bubble.appendChild(paragraph);
-    });
-
-    if (action) {
-      var bar = document.createElement('div');
-      bar.className = 'assistance-actions';
-
-      var button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'small-btn';
-      button.textContent = action.label;
-      button.addEventListener('click', function () {
-        performAction(action);
-      });
-
-      bar.appendChild(button);
-      bubble.appendChild(bar);
+      if (next === needle.length) return true;
     }
 
-    list.appendChild(bubble);
-    scrollMessages();
-    return bubble;
-  }
-
-  function showTyping() {
-    var list = byId('assistanceMessages');
-    if (!list || byId('assistanceTyping')) return;
-    var bubble = document.createElement('div');
-    bubble.className = 'assistance-msg assistant assistance-typing';
-    bubble.id = 'assistanceTyping';
-    bubble.textContent = 'Jax is typing…';
-    list.appendChild(bubble);
-    scrollMessages();
-  }
-
-  function hideTyping() {
-    var typing = byId('assistanceTyping');
-    if (typing && typing.parentElement) typing.parentElement.removeChild(typing);
-  }
-
-  /* ---------------------------------------------------------
-     OPENING WINDOWS FOR THE USER
-  --------------------------------------------------------- */
-  function performAction(action) {
-    if (!action) return false;
-
-    // Never open admin-only windows for non-admins, even if someone crafts
-    // a topic or quick-reply that points at them.
-    if (action && (action.buttonId === 'btnAdmin' || action.popupId === 'modalAdmin')) {
-      if (!isAdminSafe()) {
-        answerRestrictedAdmin();
-        return false;
-      }
-    }
-
-    var target = action.popupId ? byId(action.popupId) : null;
-    var hasButton = controlsFor(action.buttonId).length > 0;
-    if (!hasButton && !target) return false;
-
-    // Step aside first so the window being opened is the one on
-    // screen — Login, Register and Support sit earlier in the
-    // document than this popup and would otherwise open behind it.
-    close();
-
-    var opened = openViaControl(action.buttonId, action.popupId);
-
-    // No wired handler answered (or the control is gone from the
-    // page): fall back to showing the window ourselves rather than
-    // leaving the user with nothing.
-    if (!opened && target) {
-      target.style.display = 'flex';
-      opened = true;
-    }
-
-    if (!opened) {
-      open();
-      addMessage(
-        'assistant',
-        'I could not reach that window from here. Try the button for it in the action row, or send a support report and the admins will pick it up.',
-        {
-          label: 'Open a support report',
-          buttonId: 'openSupport',
-          popupId: 'supportPopup',
-          done: 'Opening the support report form for you.'
-        }
-      );
-      return false;
-    }
-
-    if (action.then) {
-      var followUpId = action.then;
-      setTimeout(function () {
-        var followUps = controlsFor(followUpId);
-        if (followUps.length) followUps[0].click();
-      }, 80);
-    }
-
-    return true;
-  }
-
-  function answerTopic(topic, text) {
-    if (isAdminTopic(topic) && !isAdminSafe()) {
-      addMessage(
-        'assistant',
-        'That area is for the site administrator only.\n' +
-          'If you need help with something an admin handles — a ban, a report, a bug, or a feature request — send it through Support and the admins will pick it up.',
-        {
-          label: 'Open a support report',
-          buttonId: 'openSupport',
-          popupId: 'supportPopup',
-          done: 'Opening the support report form for you.'
-        }
-      );
-      return;
-    }
-
-    var action = topic.action || null;
-
-    if (action && topic.requiresLogin && !getSessionSafe()) {
-      addMessage(
-        'assistant',
-        topic.answer +
-          '\nYou are signed out in this browser, so sign in first and I will take you straight there.',
-        LOGIN_ACTION
-      );
-      return;
-    }
-
-    if (isAdminTopic(topic) && !isAdminSafe()) {
-      addMessage(
-        'assistant',
-        'That area is for the site administrator only.\n' +
-          'If you need help with something an admin handles, use Support.',
-        {
-          label: 'Open a support report',
-          buttonId: 'openSupport',
-          popupId: 'supportPopup',
-          done: 'Opening the support report form for you.'
-        }
-      );
-      return;
-    }
-
-    if (action && shouldOpenDirectly(text)) {
-      addMessage('assistant', action.done || topic.answer);
-      performAction(action);
-      return;
-    }
-
-    addMessage('assistant', topic.answer, action);
-  }
-
-  function answerRestrictedAdmin() {
-    addMessage(
-      'assistant',
-      'That area is for the site administrator only.\n' +
-        'If you need help with something an admin handles — a ban, a report, a bug, or a feature request — send it through Support and the admins will pick it up.',
-      {
-        label: 'Open a support report',
-        buttonId: 'openSupport',
-        popupId: 'supportPopup',
-        done: 'Opening the support report form for you.'
-      }
-    );
-  }
-
-  function answerUnknown(text) {
-    addMessage(
-      'assistant',
-      'I do not have an answer for "' + text + '" yet.\n' +
-        'I can help with everything on the site: Age gate 18+, Login, Register (username/email/password/display/age/bio/colour/language/wins/losses/height 3\'5"-8\'0" weight 60-700 lbs/main image/extra photos up to 10), Forgot/Reset password (1-hour link, resend), Change password, Account Settings (change password min 6, delete account permanent cleanup), Arena public chat (send, reply bar, edit own messages with edited marker, emoji 😊, online list, presence broadcast, minimize _, close X marks offline but keeps session, beforeunload offline, sound computer.mp3, translation per language), User Roster (search rosterSearch, pagination 12 per page, quick roster 6, new members card), View Profile (avatar 150px holo, @username, display, age, height, weight, colour box, language, bio, wins/losses, Message User, Block User, extra photos gallery popup window, Stories approved, Relationships, Timeline, Add relationship types rival/friend/opponent/tagteam/dating/married/sibling/parent/owner), Edit Profile (all fields, height menu populated by physique.js, weight, bio, colour, language 30+, wins/losses, main image upload /api/upload-image 5MB ImgBB, extra photos via /api/profile/photos immediate save, status), Physique (height string 5\'11", weight lbs, rules in physique.js), Combat stats ATK=height(m)*sqrt(weight kg) DEF=weight kg/height(m) baseline 5\'11"/185lb ATK 16.52 DEF 46.53 saved on user, /api/combat-stats?usernames= max 20, multipliers, DAMAGE_CAP/MIN_DAMAGE/DAMAGE_SCALE, scoreboard shows ATK/DEF), Language & translation (auto-translate via Google Translate cached pendingTranslations, sender sees original), Discord linking (Discord User ID snowflake 16-25 digits, accepts <@id> <@!id> @id, rejects username tags, help Developer Mode Copy ID, linked for Arena bridge and DM bridge), Discord bridge (Arena ↔ UGCW Discord invite discord.gg/Y3VRjcw, webhook via DISCORD_WEBHOOK_URL with avatar via /img proxy or /avatar/:username initials PNG, DM bridge via discordBot sendDiscordDM and setupDiscordListener, reply syntax @username message, re-hosts images to ImgBB), DMs (sidebar dmSidebar, search dmSearch, badge dmBadge total 99+ cap, server-synced unread dmSeen dmUnreadSince via dmUnread event and dmRead emit, notification popup dmNotification 💬 8 sec auto-hide click to open, sound ui-alert.mp3, typing indicator typingDM/stopTypingDM 1200ms, image 📷 5MB ImgBB, clip 🎬 GIF 25MB video 50MB MP4/WebM /clips/32hex.ext total cap 2GB Range support, emoji 😊, Call ☎, Story button, Clear history /api/dm/clear, draggable movable z-index 1050+ cascade 28px), Rooms (roomsSidebar, sort roomSort newest/oldest/AZ/ZA, filter private owner/invitedUsers case-insensitive, Create Room prompt name + confirm private, Invite button owner only via inviteToRoom and roomInvited alert, joinRoom validates canAccessRoom and ObjectId, leaveRoom, requestRoomMembers, system messages join/leave type system centered muted not badged, members panel roomMembers with avatar 32px display @username online dot via updateRoomMembers fetchSockets, feed roomFeed, reply bar roomReplyBar, typing roomTyping, input roomMessageInput, Send roomSendBtn, image roomImageInput/roomImageBtn, clip roomClipInput/roomClipBtn, emoji, game panel roomGamePanel waiting card pinned under header with padding, Conference call roomCallBtn via room-audio-invite/join, unread badges roomBadge_<id> from cw_room_unread), Forums (forumsPopup, status, list forumsList live via forumsList/forumCreated/forumReplyCreated, New Forum newForumBtn → newForumModal title max 160 body max 10000, Create via POST /api/forums author check not banned, thread forumThreadPopup data-forum-id Back/Close, GET /api/forums/:forumId, original post forumOriginalPost, replies forumReplies, reply composer forumReplyBody max 5000 Post Response via POST /api/forums/:forumId/replies, lastActivityAt bumps), Stories (create from DM Story button or room, editor StoryUI.openEditor in storyPopup mcf-story-backdrop shared desktop/mobile, title max 120 body max 20000 counter chars/words/read mins, toolbar Bold ** Italic * Quote > Heading ## Break ---, surround/insertLine, Ctrl+B/I/S, clip attach via /api/upload-clip preview, Build from messages toggle 📥 date range fromDate/toDate, Load messages POST /api/story/load participant check bounded capped, search filter, speaker Everyone/Only you/Only them, style Script **Name:** vs Log [time] Name:, timestamps checkbox, scene breaks checkbox, aliases character names for @you/@them, Rename in story regex replace, message list 260px checkboxes picked Set survives filter, actions Add to story append at cursor glue newlines, Replace confirm, Select all/none/Invert, draft per conversation/edit in localStorage mcf.story.draft.<user>.<partner> or edit.<id> with updatedAt, auto-save 1200ms, banner with Restore/Discard if differs, >30 days ignored, beforeunload guard, close confirm if dirty, preview opens viewer, save via POST /api/story/save or /api/story/update validates length partner exists not owner check declined check, revision bumps, wasPublished flag, toast, onSaved/onDeleted callbacks, approval flow: server creates Story owner/partner approvalOwner true approvalPartner false approved false revision 0, emits storyApprovalRequest to partner socketId and system DM type storyApproval with Approve/Decline/Read buttons, partner approves via POST /api/story/approve sets approvalPartner true both → approved true approvedAt now emits storyStatusChanged, decline via POST /api/story/decline with reason max 500 sets declined true declinedBy declineReason approved false, resend via POST /api/story/resend, delete via POST /api/story/delete owner check, editing approved re-opens approval), Pending/Declined on profile (selfProfileStories selfProfilePendingStories via GET /api/story/list and /api/story/pending returns stories and declined, renderPendingList shows waiting for @other or @other waiting for you, revision count, actions Read/Edit/Resend/Withdraw/Approve/Decline, declined shows declined by @user date and reason in quotes and Revise & resubmit), Viewer (backdrop storyViewerPopup, panel mcf-story-viewer 720px max 92vh, head title Great Vibes script 40px font-face /fonts/great-vibes.woff2 not Google due CSP, byline @owner with @partner date revision chip declined chip, close X absolute, tools A- A+ fontSize localStorage mcf.story.fontScale 0.8-1.8 step 0.1 applied 15px*scale, Prev/Next disabled when readingList <=1 or ends, Copy link via clipboard fallback textarea execCommand, Export markdown via storyAsPlainText blob download sanitized filename, Print via new window print(), scroll mcf-story-scroll with renderStoryBody safe escaped then inlineFormat, clip max-height 38vh centered, footer Story N of M and Close, keys Escape closes, ArrowLeft/Right steps), Permalink /story/:id (server validates ObjectId, fetches approved story, injects OG title description url Twitter tags robots noindex follow, serves index.html with mobile/desktop CSS, client boot openFromUrl checks pathname /story/24hex and hash #story=24hex, fetchStory GET /api/story/:id?username=, opens viewer, toast if not available, readingList for Prev/Next via fetchArchives perPage 50), Archives (modalArchives, search archivesSearch 300ms debounce q, sort archivesSort recent/oldest/title/author, checkbox archivesMine participant filter, list archivesList, pagination archivesPrev/Next pageLabel Page X/Y · N stories totalPages server-side, fetchArchives via GET /api/story/archives?q=&page=&perPage=&participant=&sort= returns stories total page perPage totalPages, empty messages, renderStoryList with Read/Link/Edit/Delete), Relationships (types rival/friend/opponent/tagteam/dating/married/sibling/parent/owner, request via POST /api/relationship/request, live popup if online else SYSTEM DM relationshipApproval with Approve button, approve via POST /api/relationship/approve, lists via GET /api/relationship/list approved only and /api/relationship/pending requester not approved, timeline via GET /api/relationship/timeline sorted asc mapped id/type/with/role/approvedAt, rendered in profile), Blocking (vpBlockButton confirm, POST /api/block-user $addToSet blockedUsers, server privateMessage checks receiver.blockedUsers includes from drops and logs, unblock via POST /api/unblock-user $pull), Support (supportPopup, type srType user/issue toggles srUserSection, fields srUser Who, srWhere Where placeholder Public chat/DM/room etc, srWhen datetime-local, srInfo Additional Information placeholder Describe..., srSubmit builds payload from→Administrator text formatted and POST /api/send-dm creates DM and emitToUser + forwardDMToDiscord + Discord Support webhook + email admin alert if EMAIL_ADMIN_ALERTS), Rules/TOS/Privacy modals (btnRules/modalRules, btnTOS/modalTOS, btnPrivacy/modalPrivacy with full texts, zero tolerance), Audio calls (audio-calls.js, DM call pm-call dmCall, room conference roomCallBtn, signaling audio-call-signal {to,kind,offer,answer,candidate} relayed only to target socketId via User lookup, room-audio-invite to socket.to(room), room-audio-join to target socketId, audio-call-end, getLocalStream getUserMedia, RTCPeerConnection, floating card draggable volume slider, Connected status, sounds call-ring ringback call-end), Slash commands (slash-commands.js, tryHandle, ctx kind public/room/dm with room/target/input/deliver, commands: /create-game [roomId] default this room or dm-<me>-<other> sorted or game-<random>, one active match per room blocked until ended, auto join creator as fighter 1, GamePanels registry localStorage mcf_hp_room_games_v1 id/players/state/updatedAt, remember last game LAST_GAME_KEY mcf_hp_last_game, resolveGameRoom explicit or last or default, requireRoom, requireLogin, hpAction tries remote via /api/hp-config {configured,remote} and /api/hp/:action proxy 8 sec timeout fallback to local engine on 502/503/network error but Hp-level errors thrown as _hp, local engine faithful mirror of CyberFights/Hp server.js stateless roll/submit/escape/pin-escape/tease/recover and server2.js stateful create-game/join-game/dice-match/game-state/end-game/end-all-games with games in localStorage mcf_hp_games_v1, damage formula, pinAllowedRolls, hold type pin/submission, finished tie/win/loss/ko, turnIndex, localTag ⚙️ local engine, formatters for each command with share true/false, echoLocal for non-shared output div.message-row.slash-system slash-local-msg, feedFor, defaultRoomId, lastGameRoom, rememberGameRoom, slotForPlayer, nextMoveHint recover if HP/ST<5 else escape if trapped else attack|submission|escape|teasing|pin, statSuffix, slotNeedsStats, stateMissingPlayers, fetchCombatStats /api/combat-stats, applyStatsToState, refreshLocalGameStats, deliverRoomMessage, endRoomGame, panelDefaultPlayer/State, barHtml, playerHtml, panelWaitingHtml, bindPanelButtons, positionPanel, hidePanelEl/showPanelEl, GamePanels loadReg/saveReg/get/hasActive/upsert/markFinished/finalizeAll/scheduleFinalize/remove/renderInline/syncToRoom, fillEntryStats, tickScoreboardPoll polling game-state for open scoreboard windows + current room waiting, ensureScoreboardPolling interval 8 sec, observeRoomPopup MutationObserver on roomChatPopup data-room/style/class/hidden, roomPopupSignature, scoreboardEnsure/create draggable window scoreboard-popup with head title and End/Close buttons, scoreboardRender, scoreboardDismiss manual remembers dismissed, syncScoreboardUi finished always shows result even after manual close auto-close 25 sec, full shows live unless dismissed, waiting no window, syncAllScoreboards, restack, makeScoreboardDraggable), Moves database (SlamDB, /get-move, movesSlugify, movesFetch, movesRandomMove count then offset, movesListAll paging 100, movesNamedMove slug then q, proxy /api/get-move timeout 8 sec, formatters get-move card and get-move-list compact sorted), Autocomplete (slash-popup role listbox header ⚔️, slash-item sel, slash-name/usage/desc, positioned above/below, width 280-440, left clamped, top, visibility hidden to measure, hidePopup, renderPopup, syncPopup filters COMMANDS by prefix including aliases, completeWith replaces first token keeps rest focuses sets cursor dispatches input event, event listeners input focusin focusout delayed 120ms, keydown ArrowDown/Up Tab/Enter Escape while open, resize and scroll outside handlers), Images/Clips (image 5MB ImgBB via uploadImageToServer FormData, clip 25/50MB via uploadClipToServer, isClipFile, createClipElement img/video, clipElement local fallback, uploadClip fallback, /img proxy IMAGE_PROXY_HOSTS ibb.co etc 12MB max allowed image types png/jpeg/jpg/gif/webp/avif/bmp/svg+xml, placeholder transparent pixel 1x1 PNG base64 no-store, rate limits, /avatar/:username initials PNG), Sounds/Notifications (computer.mp3 public, ui-alert.mp3 DM, call sounds, badges), Apps (desktop download btnDownloadApp GitHub releases, mobile install btnInstallAppDesktop via pwa-install.js beforeinstallprompt, iOS Share Add to Home Screen, APK, Capacitor mobile/capacitor.config.ts, mobile.html mobile2.html www/index.html, workflows build-desktop.yml build-mobile.yml, footer download-apps), PWA (manifest.webmanifest icons mcf-192 mcf-512, theme-color #020617, apple-mobile-web-app-capable, sw.js no-cache, /js /css no-cache, offline.html, viewport-fit.js), Updates (updates.js loads /updates/todo.txt and /updates/completed.txt into #updates #completedupdates max-height 200px pre-wrap), Home cards (home-cards.js newMembersList recentForumsList), Search/Pagination (12 per page), Security (bcrypt, SHA-256 token hash, rate limits, helmet CSP, CORS, trust proxy, bufferTimeoutMS), Mobile vs desktop (isMobileClient Sec-CH-UA-Mobile ?1 else UA regex, Accept-CH header, Vary User-Agent Sec-CH-UA-Mobile, mainUI hidden), Idle logout (idle-logout.js), Email (mailer.js mailerConfigured MAIL_FROM escapeHtml sendMail transactional welcome reset admin alerts EMAIL_ADMIN_ALERTS), Misc (landing.html landing.css landing.js introGif, guide.css, slash-commands.css audio-calls.css desktop.css mobile.css, guide.html public page canonical /guide with structured data, storyRoutes.js storyService.js, dmDelivery.js createDmDelivery userRoom emitToUser markDMRead getUnreadDMCounts, discordBot.js sendDiscordDM discordEvents, discordWebhook.js buildWebhookPayload publicBaseUrlFromSocket resolveWebhookAvatarUrl avatarInitial renderInitialsAvatarPng, mailer.js, setupDiscordListener, image-proxy.js imgSrc direct-first with retry via proxy, emoji-picker.js, viewport-fit.js, popup-dissolve.js, download.js, pwa-install.js, etc).\n' +
-        'If it is a bug or something you want added, send it to the admins as a support report.',
-      {
-        label: 'Open a support report',
-        buttonId: 'openSupport',
-        popupId: 'supportPopup',
-        done: 'Opening the support report form for you.'
-      }
-    );
-  }
-
-  var LOGIN_ACTION = {
-    label: 'Open Login',
-    buttonId: 'btnLogin',
-    popupId: 'modalLogin',
-    done: 'Opening the login window — sign in and ask me again.'
-  };
-
-  var QUICK_REPLIES = [
-    { label: 'Open the Arena', text: 'open the arena' },
-    { label: 'How do I cyber wrestle?', text: 'how do I cyber wrestle?' },
-    { label: 'How do I DM someone?', text: 'how do I send a direct message?' },
-    { label: 'Create a room', text: 'create a room' },
-    { label: 'How do I edit my profile?', text: 'how do I edit my profile?' },
-    { label: 'What are dice matches?', text: 'what are dice matches?' },
-    { label: 'Report a problem', text: 'how do I report a problem?' },
-    { label: 'How do I create a story?', text: 'how do I create a story?' },
-    { label: 'How do forums work?', text: 'how do forums work?' },
-    { label: 'How do I block someone?', text: 'how do I block someone?' }
-  ];
-
-  /* ---------------------------------------------------------
-     MATCHING
-  --------------------------------------------------------- */
-  var QUESTION_RE = /\b(how|what|where|when|why|which|who|whose|is there|are there|do i|does it|can i|could i|should i|tell me|explain)\b|\?\s*$/;
-  var ASKING_ASSISTANT_RE = /\b(can you|could you|would you|will you|please|pls|kindly)\b/;
-  var ACTION_VERB_RE = /\b(open|show|go to|goto|take me|bring up|launch|start|load|jump to|switch to|log ?in|sign ?in|sign ?up|register|create|make|new|change|update|edit|add|send|join|report|block|install|download|reset)\b/;
-
-  function normalise(text) {
-    return ' ' +
-      String(text || '')
-        .toLowerCase()
-        .replace(/[^a-z0-9\s']/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim() +
-      ' ';
+    return false;
   }
 
   function scoreTopic(topic, haystack) {
     var score = 0;
+    var haystackWords = null;
+
     topic.keywords.forEach(function (keyword) {
       var needle = ' ' + keyword.toLowerCase() + ' ';
-      if (haystack.indexOf(needle) === -1) return;
+      var found = haystack.indexOf(needle) !== -1;
+
+      // The exact phrase missed, so try word by word: that is what lets
+      // "create a story" and "create stories" reach the "create story"
+      // keyword (and the assistant answer its own quick questions).
+      if (!found) {
+        if (!haystackWords) haystackWords = haystack.split(' ');
+        found = containsKeyword(haystackWords, keyword);
+      }
+
+      if (!found) return;
       // Longer phrases are a stronger signal than single words.
       score += keyword.indexOf(' ') === -1 ? 2 : 3 + keyword.split(' ').length;
     });
+
     return score;
   }
 
