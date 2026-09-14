@@ -582,6 +582,22 @@
   pointer-events: auto;
 }
 
+/* The avatar keeps its natural aspect ratio and is anchored to the bottom of
+   the card — right for the component's portrait placeholder art, but a real
+   member photo is usually landscape, so it collapsed into a thin strip along
+   the bottom edge. Fill the card instead (top-anchored, so faces stay in
+   frame) and fade the top of the image back so the name and record stay
+   readable over it. `.pc-card *` already sets grid-area, which is what keeps
+   the image and the copyright/credit children layered here. */
+.pc-avatar-content .avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 24%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 24%);
+}
+
 /* Height / weight line in the user info bar (the `contact` prop). */
 .pc-contact {
   font-size: 12px;

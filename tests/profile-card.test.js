@@ -77,6 +77,33 @@ test('the card renders the markup the React Bits stylesheet targets', () => {
   card.destroy();
 });
 
+test('a real (landscape) member photo fills the card instead of collapsing into a strip', () => {
+  /* The component gives the avatar its natural aspect ratio and anchors it to
+     the bottom of the card, which suits its portrait placeholder art but turns
+     a landscape member photo into a ~44px strip along the bottom edge. The
+     stylesheet carries the fix, and jsdom does not lay CSS out, so this pins
+     the rule itself. */
+  const css = fs.readFileSync(path.join(ROOT, 'public', 'css', 'profile-card.css'), 'utf8');
+  const rules = [...css.matchAll(/\.pc-avatar-content\s+\.avatar\s*\{([^}]*)\}/g)].map(m => m[1]);
+
+  assert.ok(rules.length, 'the avatar is styled at all');
+  assert.ok(
+    rules.some(body => /height:\s*100%/.test(body)),
+    'the card avatar is told to fill the card height'
+  );
+  assert.ok(rules.some(body => /object-fit:\s*cover/.test(body)), 'the photo is cropped, not squashed');
+  assert.ok(rules.some(body => /object-position:\s*center\s+top/.test(body)), 'faces stay in frame from the top');
+  assert.ok(
+    rules.some(body => /mask-image:\s*linear-gradient/.test(body)),
+    'the top of the photo fades so the name stays readable'
+  );
+  assert.equal(
+    rules.some(body => /(^|;)\s*height:\s*\d+px/.test(body)),
+    false,
+    'no fixed pixel height fights the fill'
+  );
+});
+
 test('props drive the card\'s CSS custom properties', () => {
   const { win, doc } = loadPage();
   const card = win.ProfileCard.create({
