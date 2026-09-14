@@ -281,7 +281,7 @@ test('the story question is answered however it is worded', async () => {
 
       const reply = page.lastMessage();
       assert.doesNotMatch(reply.textContent, /I do not have an answer/, `"${question}" is answered`);
-      assert.match(reply.textContent, /DM window press "Story"/, `"${question}" explains where stories come from`);
+      assert.match(reply.textContent, /press the "Story" button/, `"${question}" explains where stories come from`);
       assert.equal(
         reply.querySelector('.assistance-actions button').textContent,
         'Open DMs to start one',
@@ -295,6 +295,44 @@ test('the story question is answered however it is worded', async () => {
     await page.ask('create a story');
     assert.equal(page.display('dmSidebar'), 'flex', 'the DMs opened');
     assert.match(page.lastMessage().textContent, /Opening your DMs/);
+  } finally {
+    await page.close();
+  }
+});
+
+test('answers are written for members, not for developers', async () => {
+  const page = await startPage();
+  try {
+    // What the assistant shows is for members: where a thing lives, what to
+    // press, what happens. Element ids, endpoints, socket events, storage
+    // keys and other implementation detail belong in the code, not the chat.
+    const forbidden = [
+      [/\/api\//, 'an API endpoint'],
+      [/\b(GET|POST|DELETE|PUT) \//, 'an HTTP verb'],
+      [/\b(btn|modal|pm-|dm|room|forum|story|vp|sr|staleImages)[A-Z][A-Za-z]*\b/, 'an element id'],
+      [/localStorage|sessionStorage|\bcw_|\bmcf\./, 'a storage key'],
+      [/\bsocket|emit\(|broadcast|userRoom\b/i, 'a socket event'],
+      [/Mongo|collection\b|aggregate\b|schema\b/, 'a database detail'],
+      [/\.js\b|\.css\b|\.html\b|public\//, 'a file path'],
+      [/===|\(\)|\bvar \b|isLocalClipUrl|SHA-256|bcrypt|multer|helmet\b|CSP\b/, 'code']
+    ];
+
+    // Two topics are reference lists rather than instructions — the full
+    // menu of match styles and the eight rules of cyber fighting — so they
+    // are allowed to be longer than a quick answer.
+    const referenceTopics = new Set(['match-styles', 'eight-rules']);
+
+    page.win.Assistance.topics.forEach(topic => {
+      forbidden.forEach(([pattern, what]) => {
+        assert.doesNotMatch(
+          topic.answer,
+          pattern,
+          `${topic.id} mentions ${what} — answers should stay user-facing`
+        );
+      });
+      if (referenceTopics.has(topic.id)) return;
+      assert.ok(topic.answer.split('\n').length <= 5, `${topic.id} stays short enough to read`);
+    });
   } finally {
     await page.close();
   }
