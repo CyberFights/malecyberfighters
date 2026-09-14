@@ -234,6 +234,120 @@ test('the quick questions under the portrait ask themselves', async () => {
   }
 });
 
+test('every quick question the window offers really has an answer', async () => {
+  const page = await startPage();
+  try {
+    page.assistanceButton().click();
+
+    const chips = Array.from(page.doc.querySelectorAll('#assistanceQuickReplies button'));
+    assert.ok(chips.length >= 10, `${chips.length} quick questions offered`);
+
+    for (const chip of chips) {
+      // Start each chip from a clean transcript so the reply under test is
+      // the one it produced.
+      page.byId('assistanceMessages').textContent = '';
+      chip.click();
+      await tick(700);
+
+      const reply = page.lastMessage();
+      assert.ok(reply && reply.classList.contains('assistant'), `${chip.textContent}: got a reply`);
+      assert.doesNotMatch(
+        reply.textContent,
+        /I do not have an answer/,
+        `"${chip.textContent}" is one of our own questions, so it must be answered`
+      );
+    }
+  } finally {
+    await page.close();
+  }
+});
+
+test('the story question is answered however it is worded', async () => {
+  const page = await startPage({ signedIn: true });
+  try {
+    page.assistanceButton().click();
+
+    const phrasings = [
+      'how do I create a story?',
+      'how do i create stories?',
+      'how do i start a story',
+      'how do i write a story?',
+      'how do stories work?'
+    ];
+
+    for (const question of phrasings) {
+      page.byId('assistanceMessages').textContent = '';
+      await page.ask(question);
+
+      const reply = page.lastMessage();
+      assert.doesNotMatch(reply.textContent, /I do not have an answer/, `"${question}" is answered`);
+      assert.match(reply.textContent, /press the "Story" button/, `"${question}" explains where stories come from`);
+      assert.equal(
+        reply.querySelector('.assistance-actions button').textContent,
+        'Open DMs to start one',
+        `"${question}" offers the Story button`
+      );
+    }
+
+    // Asking for the thing rather than how it is done still opens the DMs,
+    // where the Story button lives, instead of only explaining it.
+    page.byId('assistanceMessages').textContent = '';
+    await page.ask('create a story');
+    assert.equal(page.display('dmSidebar'), 'flex', 'the DMs opened');
+    assert.match(page.lastMessage().textContent, /Opening your DMs/);
+  } finally {
+    await page.close();
+  }
+});
+
+test('answers are written for members, not for developers', async () => {
+  const page = await startPage();
+  try {
+    // What the assistant shows is for members: where a thing lives, what to
+    // press, what happens. Element ids, endpoints, socket events, storage
+    // keys and other implementation detail belong in the code, not the chat.
+    const forbidden = [
+      [/\/api\//, 'an API endpoint'],
+      [/\b(GET|POST|DELETE|PUT) \//, 'an HTTP verb'],
+      [/\b(btn|modal|pm-|dm|room|forum|story|vp|sr|staleImages)[A-Z][A-Za-z]*\b/, 'an element id'],
+      [/localStorage|sessionStorage|\bcw_|\bmcf\./, 'a storage key'],
+      [/\bsocket|emit\(|broadcast|userRoom\b/i, 'a socket event'],
+      [/Mongo|collection\b|aggregate\b|schema\b/, 'a database detail'],
+      [/\.js\b|\.css\b|\.html\b|public\//, 'a file path'],
+      [/===|\(\)|\bvar \b|isLocalClipUrl|SHA-256|bcrypt|multer|helmet\b|CSP\b/, 'code']
+    ];
+
+    // Two topics are reference lists rather than instructions — the full
+    // menu of match styles and the eight rules of cyber fighting — so they
+    // are allowed to be longer than a quick answer.
+    const referenceTopics = new Set(['match-styles', 'eight-rules']);
+
+    page.win.Assistance.topics.forEach(topic => {
+      forbidden.forEach(([pattern, what]) => {
+        assert.doesNotMatch(
+          topic.answer,
+          pattern,
+          `${topic.id} mentions ${what} — answers should stay user-facing`
+        );
+      });
+      if (referenceTopics.has(topic.id)) return;
+      assert.ok(topic.answer.split('\n').length <= 5, `${topic.id} stays short enough to read`);
+    });
+  } finally {
+    await page.close();
+  }
+});
+
+test('the matching helpers are declared once', async () => {
+  // A duplicated block of this file once shipped: the second copy silently
+  // overrode the first, so edits made in one place did nothing.
+  ['function normalise(', 'function scoreTopic(', 'function matchTopic(', 'function answerUnknown(']
+    .forEach(name => {
+      const copies = ASSISTANCE.split('\n').filter(line => line.includes(name)).length;
+      assert.equal(copies, 1, `${name} is declared once`);
+    });
+});
+
 test('the input bar sends from the Send button and from Enter', async () => {
   const page = await startPage();
   try {
