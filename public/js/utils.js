@@ -223,7 +223,7 @@ function renderProfilePhotoGallery(container, photos, emptyText = 'No extra phot
  * mobile, so leaving them open makes it look like nothing happened.
  */
 function closeUserBrowsingPopups() {
-  ['modalViewProfile', 'modalRoster', 'dmSidebar', 'roomsSidebar'].forEach(id => {
+  ['modalViewProfile', 'modalRoster', 'dmSidebar', 'roomsSidebar', 'profileCardPopup'].forEach(id => {
     document.querySelectorAll(`[id="${id}"]`).forEach(el => {
       el.style.display = 'none';
     });
