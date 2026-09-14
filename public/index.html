@@ -95,6 +95,9 @@
 <link rel="stylesheet" href="/css/desktop.css?v=9">
 <link rel="stylesheet" href="/css/slash-commands.css?v=1">
 <link rel="stylesheet" href="/css/audio-calls.css?v=4">
+<!-- ProfileCard — the 3D member card opened from the online list in the
+     public chat (see /js/profile-card.js) -->
+<link rel="stylesheet" href="/css/profile-card.css?v=1">
 
 <style>
 /* Logged-in profile card (#userProfileCard) on mobile.
@@ -717,6 +720,11 @@
 
   </div>
 </div>
+
+<!-- MEMBER PROFILE CARD POPUP
+     Shell only: /js/profile-card.js renders the card and its actions into
+     it when a member is clicked in the public chat's online list. -->
+<div id="profileCardPopup" class="pc-popup" role="dialog" aria-modal="true" aria-label="Member profile card" style="display:none"></div>
 
 <!-- VIEW PROFILE POPUP -->
 <div id="modalViewProfile" style="
@@ -1575,6 +1583,7 @@ Moderator decisions are final. </p>
 <script src="/js/audio-calls.js?v=5"></script>
 <script src="/js/auth.js"></script>
 <script src="/js/register.js"></script>
+<script src="/js/profile-card.js?v=1"></script>
 <script src="/js/chat.js"></script>
 <script src="/js/forums.js"></script>
 <script src="/js/pm.js?v=4"></script>

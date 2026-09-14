@@ -549,8 +549,18 @@ function renderOnlineList(){
 
   (window.users || []).forEach(u => {
     const avatar = renderMessageAvatar(u.username, u.display, u.imageUrl, 36);
+    const display = u.display || u.username;
 
+    // Every row opens that member's ProfileCard (public/js/profile-card.js).
+    // The PM button keeps its own job, so it stops the click from bubbling
+    // up to the row and opening the card on top of the conversation.
     const row = document.createElement('div');
+    row.className = 'online-row';
+    row.dataset.user = u.username;
+    row.setAttribute('role', 'button');
+    row.setAttribute('aria-label', `Open ${display}'s profile card`);
+    row.setAttribute('aria-haspopup', 'dialog');
+    row.tabIndex = 0;
     row.style.display = 'flex';
     row.style.justifyContent = 'space-between';
 
@@ -558,19 +568,38 @@ function renderOnlineList(){
       <div class="holo-avatar" style="display:flex;gap:8px;align-items:center">
         ${avatar}
         <div>
-          <div style="font-weight:700">${u.display}</div>
-          <div class="small">@${u.username}</div>
+          <div style="font-weight:700">${escapeHtml(display)}</div>
+          <div class="small">@${escapeHtml(u.username)}</div>
         </div>
       </div>
-      <button class="small-btn" data-user="${u.username}">PM</button>
+      <button class="small-btn" data-user="${escapeHtml(u.username)}">PM</button>
     `;
+
+    row.addEventListener('click', () => openMemberCard(u));
+    row.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+      e.preventDefault();
+      openMemberCard(u);
+    });
+
+    const pm = row.querySelector('.small-btn');
+    if (pm) {
+      pm.addEventListener('click', e => {
+        e.stopPropagation();
+        openPrivateWindow(pm.dataset.user);
+      });
+    }
 
     el.appendChild(row);
   });
+}
 
-  el.querySelectorAll('.small-btn').forEach(btn => {
-    btn.addEventListener('click', e => openPrivateWindow(e.target.dataset.user));
-  });
+/* The ProfileCard popup owns the rendering; fall back to the plain profile
+   modal on a page that has not loaded profile-card.js. */
+function openMemberCard(user){
+  if (!user) return;
+  if (typeof window.openProfileCard === 'function') window.openProfileCard(user);
+  else openUserProfile(user.username);
 }
 
 /* DM sidebar provided by utils.js */
@@ -584,6 +613,8 @@ socket.on('presence', users => {
   renderQuickRoster();
   renderRosterPage();
   renderOnlineList();
+  // Keep the status line of an open ProfileCard honest while it is on screen.
+  if (window.ProfileCard) window.ProfileCard.syncPresence(users);
   if (window.updateDMListSidebar) updateDMListSidebar();
 });
 
