@@ -13,6 +13,7 @@
 // body. The body is optional so "@jane" on its own gets a "what to send?" prompt
 // instead of a generic usage error.
 const mongoose = require('mongoose');
+const { rewriteDiscordInvites } = require('./discordInviteFilter');
 
 const MENTION = /^\s*@(\S+?)(?:\s+([\s\S]*))?$/;
 
@@ -57,7 +58,9 @@ const setupDiscordListener = (User, DM, translateText, emitToUser, sendDiscordDM
       }
 
       const targetUsername = match[1].replace(TRAILING_PUNCTUATION, '');
-      const messageContent = (match[2] || '').trim();
+      // Invites to other Discord servers are rewritten here too, same as a
+      // DM typed on the website — the bridge is not a way around the filter.
+      const messageContent = rewriteDiscordInvites((match[2] || '').trim());
 
       if (!targetUsername) {
         await sendDiscordDM(discordId, USAGE);
