@@ -15,6 +15,7 @@ const rateLimit = require('express-rate-limit');
 const cors = require("cors");
 const { sendMail, mailerConfigured, MAIL_FROM, escapeHtml } = require('./mailer');
 const { sendDiscordDM, discordEvents } = require('./discordBot');
+const { rewriteDiscordInvites } = require('./discordInviteFilter');
 const { createDmDelivery } = require('./dmDelivery');
 const { createStoryRouter } = require('./storyRoutes');
 const {
@@ -2383,10 +2384,13 @@ app.post("/api/check-availability", async (req, res) => {
 app.post("/api/send-dm", async (req, res) => {
   const { from, to, text } = req.body;
 
+  // User-typed support reports pass through the same invite rewrite.
+  const safeText = typeof text === 'string' ? rewriteDiscordInvites(text) : text;
+
   const dm = await DM.create({
     from,
     to,
-    text,
+    text: safeText,
     time: new Date(),
     type: "supportReport"
   });
@@ -2395,7 +2399,7 @@ app.post("/api/send-dm", async (req, res) => {
 
   emitToUser(to, "privateMessage", { ...dm.toObject(), id: String(dm._id) });
 
-  await forwardDMToDiscord(from, target, text);
+  await forwardDMToDiscord(from, target, safeText);
 
   res.json({ ok: true });
 });
@@ -2881,6 +2885,13 @@ app.post('/api/register', async (req, res) => {
   const rawHeight = req.body.height;
   const rawWeight = req.body.weight;
 
+  // Usernames become mention bodies in the Discord-DM bridge (the listener
+  // reads "@username message"), so allow only letters / digits / _ / . / -.
+  if (typeof username !== 'string' || !/^[A-Za-z0-9._-]+$/.test(username)) {
+    await logIp(req, { action: 'register_fail', username });
+    return res.status(400).json({ ok: false, error: 'invalid_username' });
+  }
+
   if (!username || !email || !password) {
     await logIp(req, { action: 'register_fail', username });
     return res.status(400).json({ ok: false, error: 'missing_fields' });
@@ -3180,10 +3191,14 @@ app.post("/api/chatMessage", async (req, res) => {
 
     const msgTimestamp = timestamp ? new Date(timestamp) : new Date();
 
+    // This endpoint is the ingress for messages bridged in from the Discord
+    // channel — those pass through the same invite rewrite as website chat.
+    const safeMessage = typeof message === 'string' ? rewriteDiscordInvites(message) : message;
+
     const enriched = {
       from: username,
       display: username,
-      text: message || "",
+      text: safeMessage || "",
       imageUrl: imageUrl || null,
       time: msgTimestamp
     };
@@ -3193,7 +3208,7 @@ app.post("/api/chatMessage", async (req, res) => {
     io.emit("externalPublicMessage", {
       from: username,
       display: username,
-      text: message || "",
+      text: safeMessage || "",
       avatar: avatar || null,
       imageUrl: imageUrl || null,
       time: msgTimestamp.toISOString()
@@ -3537,10 +3552,12 @@ io.on("connection", async (socket) => {
 
 socket.on('publicMessage', async (msg) => {
   try {
+    // Any Discord invite posted in chat is rewritten to the site's official
+    // invite before the message is stored, relayed to Discord, or delivered.
     const enriched = {
       from: msg.from,
       display: msg.display,
-      text: msg.text,
+      text: rewriteDiscordInvites(msg.text),
       replyTo: msg.replyTo || null,
       time: new Date()
     };
@@ -3561,7 +3578,7 @@ socket.on('publicMessage', async (msg) => {
     const baseUrl = publicBaseUrlFromSocket(socket, APP_BASE_URL);
     await sendDiscordWebhookMessage(
       msg.display || msg.from,
-      msg.text,
+      enriched.text,
       resolveWebhookAvatarUrl({
         username: msg.from,
         sender,
@@ -3612,7 +3629,9 @@ socket.on("editPublicMessage", async (data) => {
     const msg = await PublicMessage.findById(id);
     if (!msg || msg.from !== from) return; // only the author may edit
 
-    msg.text = text.trim();
+    // Edits re-run the invite rewrite: a foreign Discord invite must not
+    // sneak into history by editing it into an old message.
+    msg.text = rewriteDiscordInvites(text.trim());
     msg.edited = true;
     await msg.save();
 
@@ -3743,12 +3762,15 @@ socket.on("editPublicMessage", async (data) => {
     }
 
     // TEXT MESSAGE
-    const translated = await translateText(pm.text, receiver.language || "en");
+    // DMs pass through the same invite rewrite as the rooms: a foreign
+    // Discord invite is rewritten to the site's official invite everywhere.
+    const safeText = rewriteDiscordInvites(pm.text);
+    const translated = await translateText(safeText, receiver.language || "en");
 
     const saved = await DM.create({
       from: pm.from,
       to: pm.to,
-      originalText: pm.text,
+      originalText: safeText,
       text: translated
     });
 
@@ -3768,11 +3790,11 @@ socket.on("editPublicMessage", async (data) => {
       id: messageId,
       from: pm.from,
       to: pm.to,
-      text: pm.text,
+      text: safeText,
       time: messageTime
     });
 
-    await forwardDMToDiscord(pm.from, receiver, translated || pm.text);
+    await forwardDMToDiscord(pm.from, receiver, translated || safeText);
   });
 
   socket.on("joinRoom", async ({ room } = {}) => {
@@ -3868,7 +3890,9 @@ socket.on("editPublicMessage", async (data) => {
       room: roomId,
       from: socket.username,
       display: msg.display,
-      text: msg.text || null,
+      // Any Discord invite posted in a room is rewritten to the site's
+      // official invite before it is stored or relayed to other members.
+      text: msg.text ? rewriteDiscordInvites(msg.text) : null,
       imageUrl: msg.imageUrl || null,
       clipUrl,
       clipType: clipUrl ? (msg.clipType === "gif" ? "gif" : "video") : null,
@@ -3934,7 +3958,8 @@ socket.on("editPublicMessage", async (data) => {
       if (!msg || msg.from !== socket.username || socket.currentRoom !== msg.room
         || !socket.rooms.has(msg.room)) return; // only the author may edit
 
-      msg.text = text.trim();
+      // Edits re-run the invite rewrite, same as public-message edits.
+      msg.text = rewriteDiscordInvites(text.trim());
       msg.edited = true;
       await msg.save();
 

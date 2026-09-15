@@ -373,3 +373,27 @@ test('an image-only Discord DM without a recipient name is refused', async () =>
     await bridge.close();
   }
 });
+
+test('Discord invites in a bridged DM are rewritten to the official invite', async () => {
+  const bridge = await startBridge();
+  try {
+    bridge.db.addUser({ username: 'alice', discordId: '111' });
+    bridge.db.addUser({ username: 'bob' });
+
+    const bob = await bridge.connect('bob');
+    bridge.fireDiscordDM('111', '@bob join us at https://discord.gg/poachers — way better');
+
+    assert.ok(await waitFor(() => bob.received.length === 1), 'recipient got no live DM');
+    assert.equal(
+      bob.received[0].text,
+      'join us at https://discord.gg/CBetKKfyR9 — way better'
+    );
+
+    const stored = bridge.db.dms[0];
+    assert.equal(stored.originalText, bob.received[0].text, 'history stores the rewritten invite');
+    assert.equal(stored.text, bob.received[0].text);
+    assert.match(bridge.discordReplies[0].message, /Message sent to \*\*bob\*\*/);
+  } finally {
+    await bridge.close();
+  }
+});
