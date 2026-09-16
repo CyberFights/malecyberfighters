@@ -8,7 +8,7 @@
 const CACHE_NAME = 'cyber-fights-app-shell-v4';
 const STATIC_ASSETS = [
   '/manifest.webmanifest',
-  '/images/mcf.png',
+  '/images/mcf-180.png',
   '/images/mcf-192.png',
   '/images/mcf-512.png',
   '/offline.html'

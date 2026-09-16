@@ -33,8 +33,14 @@
     const container = document.getElementById('newMembersList');
     if (!container) return;
     try {
-      const res = await fetch('/api/allUsers');
+      const res = await authFetch('/api/allUsers');
       const data = await res.json();
+      if (res.status === 401) {
+        // The directory is members-only: it lists every member's profile,
+        // physique and record, not just whoever happens to be online.
+        container.innerHTML = '<div class="small muted">Sign in to see members.</div>';
+        return;
+      }
       if (!res.ok || !data.success || !Array.isArray(data.users)) {
         container.innerHTML = '<div class="small muted">Unable to load members.</div>';
         return;

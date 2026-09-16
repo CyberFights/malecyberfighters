@@ -11,6 +11,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const helmet = require('helmet');
+const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const cors = require("cors");
 const { sendMail, mailerConfigured, MAIL_FROM, escapeHtml } = require('./mailer');
@@ -18,6 +19,8 @@ const { sendDiscordDM, discordEvents } = require('./discordBot');
 const { rewriteDiscordInvites } = require('./discordInviteFilter');
 const { createDmDelivery } = require('./dmDelivery');
 const { createStoryRouter } = require('./storyRoutes');
+const { createSessionManager, cookieOptions, safeEqual, COOKIE_NAME } = require('./sessions');
+const assets = require('./assets');
 const {
   buildWebhookPayload,
   publicBaseUrlFromSocket,
@@ -58,11 +61,22 @@ const DISCORD_WEBHOOK_URL = process.env.Discord_webhook || null;
 const DISCORD_SUPPORT_URL = process.env.Discord_Support || null;
 const EMAIL_ADMIN_ALERTS = String(process.env.EMAIL_ADMIN_ALERTS || 'false').toLowerCase() === 'true';
 
+// Shared secret for POST /api/chatMessage, the ingress the Discord bridge uses
+// to publish a channel message into the arena. Empty means the route accepts a
+// member session only.
+const CHAT_INGRESS_KEY = (process.env.CHAT_INGRESS_KEY || '').trim();
+
 // Public base URL used when building the password-reset link in emails.
 // Defaults to the request origin when not set (see getBaseUrl()).
 const APP_BASE_URL = process.env.APP_BASE_URL || null;
 // How long a password-reset link stays valid.
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+// A DM window opens on the most recent page of the conversation and can ask
+// for the page before it. Unbounded history meant one request pulled every
+// message two members had ever exchanged.
+const DM_HISTORY_PAGE = 200;
+const DM_HISTORY_MAX = 500;
 
 
 
@@ -87,6 +101,7 @@ app.use(
     }
   })
 );
+app.use(compression());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 
@@ -105,17 +120,27 @@ function isMobileClient(req) {
   return /mobi|iphone|android|ipad|ipod|iemobile|opera mini|mobile/i.test(ua);
 }
 
+// The app shell, and the stylesheet tag injected into it. Both resolve through
+// assets.js so a deploy that produced public/dist serves the minified,
+// content-hashed bundle (cached immutably) while one that did not keeps
+// serving the hand-written files — same page either way.
+const appShellPath = () => assets.pageFile('index.html');
+const stylesheetTag = cssFile =>
+  `<link rel="stylesheet" href="${assets.assetUrl(`/css/${cssFile}`, 'css')}">`;
+
+// The stylesheet regex matches both the source href (/css/desktop.css) and the
+// built one (/dist/css/desktop.<hash>.css), so the mobile/desktop swap works
+// whichever copy of the shell is being served.
+const STYLESHEET_LINK_RE = /<link\s+rel=["']stylesheet["']\s+href=["'][^"']*\/css\/[^"']+["']\s*>/i;
+
 app.get('/', (req, res, next) => {
   const cssFile = isMobileClient(req) ? 'mobile.css' : 'desktop.css';
-  const indexPath = path.join(__dirname, 'public', 'index.html');
+  const indexPath = appShellPath();
 
   fs.readFile(indexPath, 'utf8', (err, html) => {
     if (err) return next(err);
 
-    const page = html.replace(
-      /<link\s+rel=["']stylesheet["']\s+href=["'][^"']*\/css\/[^"']+["']\s*>/i,
-      `<link rel="stylesheet" href="/css/${cssFile}?v=9">`
-    );
+    const page = html.replace(STYLESHEET_LINK_RE, stylesheetTag(cssFile));
 
     res.set({
       'Content-Type': 'text/html; charset=utf-8',
@@ -135,7 +160,7 @@ app.get('/', (req, res, next) => {
 // — these are member-written stories, not site content we invite crawlers to).
 app.get('/story/:id', async (req, res, next) => {
   const cssFile = isMobileClient(req) ? 'mobile.css' : 'desktop.css';
-  const indexPath = path.join(__dirname, 'public', 'index.html');
+  const indexPath = appShellPath();
 
   const { id } = req.params;
   if (!mongoose.isValidObjectId(id)) return res.redirect('/');
@@ -168,8 +193,8 @@ app.get('/story/:id', async (req, res, next) => {
 
     const page = html
       .replace(
-        /<link\s+rel=["']stylesheet["']\s+href=["'][^"']*\/css\/[^"']+["']\s*>/i,
-        `<link rel="stylesheet" href="/css/${cssFile}?v=9">`
+        STYLESHEET_LINK_RE,
+        stylesheetTag(cssFile)
       )
       .replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`)
       .replace(/<head>/i, '<head>\n<meta name="robots" content="noindex, follow">')
@@ -196,7 +221,7 @@ app.get('/story/:id', async (req, res, next) => {
 // single copy of the content. (express.static also serves the file at
 // /guide.html; robots.txt points crawlers at this canonical /guide URL.)
 app.get('/guide', (req, res, next) => {
-  const guidePath = path.join(__dirname, 'public', 'guide.html');
+  const guidePath = assets.pageFile('guide.html');
 
   fs.readFile(guidePath, 'utf8', (err, html) => {
     if (err) return next(err);
@@ -1075,6 +1100,37 @@ app.use('/clips', express.static(UPLOADS_DIR, { maxAge: '7d', immutable: true })
 
 app.use('/js', express.static(path.join(publicDir, 'js'), noCacheStatic));
 app.use('/css', express.static(path.join(publicDir, 'css'), noCacheStatic));
+
+// ---------- BUILT ASSETS ----------
+// Output of `npm run build` (see build.js): minified, content-hashed bundles.
+// The hash in the filename is the cache key, so these are the only assets on
+// the site that can be cached permanently — a changed file arrives under a new
+// URL rather than replacing one a browser already holds. When the build did not
+// run this directory does not exist and the route simply never matches.
+app.use('/dist', express.static(assets.DIST_DIR, {
+  maxAge: assets.IMMUTABLE_MAX_AGE,
+  immutable: true,
+  index: false,
+  dotfiles: 'ignore'
+}));
+
+// Pages whose script run the build replaced with a single bundle. Served ahead
+// of express.static so the rewritten copy wins; assets.pageFile falls back to
+// the hand-written page in public/ when there is no build output.
+const BUILT_PAGES = ['mobile.html', 'mobile2.html', 'reset-password.html', 'guide.html', 'offline.html', 'landing.html'];
+app.get(BUILT_PAGES.map(name => `/${name}`), (req, res, next) => {
+  const name = req.path.replace(/^\/+/, '');
+  if (!BUILT_PAGES.includes(name)) return next();
+
+  res.set('Content-Type', 'text/html; charset=utf-8');
+  res.sendFile(assets.pageFile(name), err => { if (err) next(err); });
+});
+
+// /index.html is the same document as "/" but without the desktop/mobile
+// stylesheet swap, so point it at the canonical URL instead of serving a
+// second, differently-cached copy of the app shell.
+app.get('/index.html', (req, res) => res.redirect(301, '/'));
+
 app.get('/sw.js', (req, res) => {
   res.set('Cache-Control', 'no-cache');
   res.sendFile(path.join(publicDir, 'sw.js'));
@@ -1089,6 +1145,20 @@ const authLimiter = rateLimit({
 });
 app.use('/api/login', authLimiter);
 app.use('/api/register', authLimiter);
+
+// Uploads write to a third party (ImgBB) or to this server's disk, and the clip
+// store has a hard 2 GB cap, so they are throttled separately and more tightly
+// than ordinary reads. Both also require a session now, which is what makes the
+// limit attributable.
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+app.use('/api/upload-image', uploadLimiter);
+app.use('/api/upload-clip', uploadLimiter);
+app.use('/api/profile/photos', uploadLimiter);
 app.use(cors({ origin: true, credentials: true }));
 // Request client hints so modern browsers will include Sec-CH-UA-Mobile on subsequent navigations.
 // This improves server-side mobile detection without relying solely on User-Agent sniffing.
@@ -1210,6 +1280,10 @@ const publicMessageSchema = new mongoose.Schema({
   time: { type: Date, default: Date.now }
 });
 
+// Public history is "the newest N, oldest first" and room history is "this
+// room, oldest first" — both need an index or they sort the whole collection.
+publicMessageSchema.index({ time: -1 });
+
 const roomMessageSchema = new mongoose.Schema({
   room: { type: String, required: true },
   from: String,
@@ -1231,6 +1305,8 @@ const RoomSchema = new mongoose.Schema({
   invitedUsers: { type: [String], default: [] },
   createdAt: { type: Date, default: Date.now }
 });
+
+roomMessageSchema.index({ room: 1, time: 1 });
 
 // Forums and forum replies are kept in their own collections so a thread can
 // be loaded independently from the forum list and responses remain tied to a
@@ -1295,6 +1371,13 @@ const dmSchema = new mongoose.Schema({
   // timestamp
   time: { type: Date, default: Date.now }
 });
+
+// Every DM query is an equality match on (from, to) ordered by time — the
+// conversation history — or a scan of one side of it for the partner list.
+// Without these the collection is walked on every DM window opened, and it
+// only ever grows.
+dmSchema.index({ from: 1, to: 1, time: -1 });
+dmSchema.index({ to: 1, time: -1 });
 
 const storySchema = new mongoose.Schema({
   owner: { type: String, required: true },
@@ -1410,6 +1493,50 @@ const passwordResetSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const PasswordReset = mongoose.model('PasswordReset', passwordResetSchema);
+
+// ---------- SESSIONS ----------
+// A signed-in member is identified by an opaque random token, never by a
+// username the client typed. Only the SHA-256 hash is stored (same rule as the
+// reset tokens above), and the TTL index lets MongoDB expire the document on
+// its own so no cleanup job is needed. See sessions.js for the full rules.
+const sessionSchema = new mongoose.Schema({
+  tokenHash:  { type: String, required: true, unique: true, index: true },
+  username:   { type: String, required: true, index: true },
+  createdAt:  { type: Date, default: Date.now },
+  lastSeenAt: { type: Date, default: Date.now },
+  expiresAt:  { type: Date, required: true },
+  userAgent:  { type: String, default: '' },
+  ip:         { type: String, default: '' }
+});
+sessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+const Session = mongoose.model('Session', sessionSchema);
+
+const sessions = createSessionManager({ Session, User, appBaseUrl: APP_BASE_URL });
+
+/**
+ * The session cookie is only sent over TLS in production. A local preview is
+ * plain http, where `secure` would stop the browser storing the cookie at all
+ * and nobody could sign in.
+ */
+function cookieIsSecure(req) {
+  return !!req && (req.secure === true || req.headers?.['x-forwarded-proto'] === 'https');
+}
+
+/** Attach the session cookie to a response. */
+function setSessionCookie(res, req, token) {
+  res.cookie(COOKIE_NAME, token, cookieOptions({ secure: cookieIsSecure(req) }));
+}
+
+/** Clear it again on sign-out. */
+function clearSessionCookie(res, req) {
+  res.clearCookie(COOKIE_NAME, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: cookieIsSecure(req),
+    path: '/'
+  });
+}
 
 // ---------- HELPERS ----------
 const upload = multer({
@@ -1982,8 +2109,15 @@ app.use("/api/story", createStoryRouter({
   forwardDMToDiscord: (...args) => forwardDMToDiscord(...args)
 }));
 
-app.post("/api/relationship/request", async (req, res) => {
-  const { requester, target, type } = req.body;
+app.post("/api/relationship/request", sessions.requireUser, async (req, res) => {
+  const { target, type } = req.body || {};
+  // The requester is the signed-in member. Taking it from the body let anyone
+  // send a relationship request as somebody else.
+  const requester = req.username;
+
+  if (!target || String(target).trim() === requester) {
+    return res.status(400).json({ ok: false, error: "invalid_target" });
+  }
 
   const rel = await Relationship.create({
     requester,
@@ -2020,11 +2154,17 @@ app.post("/api/relationship/request", async (req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/api/relationship/approve", async (req, res) => {
-  const { relationshipId } = req.body;
+app.post("/api/relationship/approve", sessions.requireUser, async (req, res) => {
+  const { relationshipId } = req.body || {};
 
   const rel = await Relationship.findById(relationshipId);
   if (!rel) return res.json({ ok: false });
+
+  // Only the member the request was sent to may accept it. Approving by id used
+  // to be open to anyone who could guess or read one.
+  if (rel.target !== req.username) {
+    return res.status(403).json({ ok: false, error: "not_your_request" });
+  }
 
   rel.approvedTarget = true;
 
@@ -2037,8 +2177,8 @@ app.post("/api/relationship/approve", async (req, res) => {
   res.json({ ok: true, approved: rel.approved });
 });
 
-app.get("/api/relationship/list", async (req, res) => {
-  const { username } = req.query;
+app.get("/api/relationship/list", sessions.requireUser, async (req, res) => {
+  const username = req.username;
 
   const rels = await Relationship.find({
     approved: true,
@@ -2051,8 +2191,8 @@ app.get("/api/relationship/list", async (req, res) => {
   res.json({ ok: true, relationships: rels });
 });
 
-app.get("/api/relationship/pending", async (req, res) => {
-  const { username } = req.query;
+app.get("/api/relationship/pending", sessions.requireUser, async (req, res) => {
+  const username = req.username;
 
   const rels = await Relationship.find({
     requester: username,
@@ -2063,12 +2203,8 @@ app.get("/api/relationship/pending", async (req, res) => {
 });
 
 // ---------- API: RELATIONSHIP TIMELINE ----------
-app.get("/api/relationship/timeline", async (req, res) => {
-  const { username } = req.query;
-
-  if (!username) {
-    return res.json({ ok: false, error: "missing_username" });
-  }
+app.get("/api/relationship/timeline", sessions.requireUser, async (req, res) => {
+  const username = req.username;
 
   try {
     const rels = await Relationship.find({
@@ -2103,10 +2239,11 @@ app.get("/api/relationship/timeline", async (req, res) => {
   }
 });
 
-app.post("/api/block-user", async (req, res) => {
-  const { username, target } = req.body;
+app.post("/api/block-user", sessions.requireUser, async (req, res) => {
+  const username = req.username;
+  const target = req.body?.target;
 
-  if (!username || !target) {
+  if (!target) {
     return res.json({ ok: false, error: "missing_fields" });
   }
 
@@ -2123,10 +2260,11 @@ app.post("/api/block-user", async (req, res) => {
   }
 });
 
-app.post("/api/unblock-user", async (req, res) => {
-  const { username, target } = req.body;
+app.post("/api/unblock-user", sessions.requireUser, async (req, res) => {
+  const username = req.username;
+  const target = req.body?.target;
 
-  if (!username || !target) {
+  if (!target) {
     return res.json({ ok: false, error: "missing_fields" });
   }
 
@@ -2143,8 +2281,21 @@ app.post("/api/unblock-user", async (req, res) => {
   }
 });
 
+// The admin panel is one shared key, so it is worth slowing down: without a
+// limit the only thing standing between a visitor and the ban / delete /
+// reset-password endpoints is how fast they can guess.
+const adminLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 function requireAdmin(req, res, next) {
-  if (!ADMIN_KEY || req.get("x-admin-key") !== ADMIN_KEY) {
+  const presented = req.get("x-admin-key");
+  // Constant-time, so the comparison does not leak how much of the key a
+  // guess got right.
+  if (!ADMIN_KEY || !presented || !safeEqual(presented, ADMIN_KEY)) {
     return res.status(403).json({ ok: false, error: "admin_denied" });
   }
   next();
@@ -2157,6 +2308,30 @@ async function broadcastPresence() {
 
   io.emit("presence", onlineUsers);
 }
+
+/**
+ * Sign a member out everywhere: revoke every stored session and tell every
+ * live socket to drop its local one.
+ *
+ * `socketId` on the user document only remembers the most recent connection, so
+ * kicking that one socket left the member's other tabs, phone and desktop app
+ * signed in — which matters most for a ban, where the point is that they stop.
+ */
+async function signOutEverywhere(username, reason) {
+  if (!username) return;
+  try {
+    await sessions.destroyUserSessions(username);
+  } catch (err) {
+    console.error('revoke sessions error:', err.message || err);
+  }
+  try {
+    emitToUser(username, 'forceLogout', { reason });
+  } catch (err) {
+    console.error('force logout error:', err.message || err);
+  }
+}
+
+app.use('/api/admin', adminLimiter);
 
 app.get("/api/admin/users", requireAdmin, async (req, res) => {
   try {
@@ -2196,8 +2371,12 @@ app.post("/api/admin/ban", requireAdmin, async (req, res) => {
 
     await user.save();
 
-    if (banned && previousSocketId) {
-      io.to(previousSocketId).emit("forceLogout", { reason: "banned" });
+    if (banned) {
+      // Sessions first, then the live sockets: a banned member must not be able
+      // to keep using a tab that was already signed in, and must not be able to
+      // sign back in with a token issued before the ban.
+      await signOutEverywhere(username, "banned");
+      if (previousSocketId) io.to(previousSocketId).emit("forceLogout", { reason: "banned" });
     }
 
     await broadcastPresence();
@@ -2232,6 +2411,10 @@ app.post("/api/admin/reset-password", requireAdmin, async (req, res) => {
       return res.status(404).json({ ok: false, error: "not_found" });
     }
 
+    // A new password invalidates every existing session, including any held by
+    // whoever had the old one.
+    await signOutEverywhere(username, "password_reset");
+
     res.json({ ok: true });
   } catch (err) {
     console.error("Admin reset password error:", err);
@@ -2252,6 +2435,7 @@ app.post("/api/admin/delete-user", requireAdmin, async (req, res) => {
       return res.status(404).json({ ok: false, error: "not_found" });
     }
 
+    await signOutEverywhere(username, "deleted");
     if (user.socketId) {
       io.to(user.socketId).emit("forceLogout", { reason: "deleted" });
     }
@@ -2381,8 +2565,15 @@ app.post("/api/check-availability", async (req, res) => {
   }
 });
 
-app.post("/api/send-dm", async (req, res) => {
-  const { from, to, text } = req.body;
+app.post("/api/send-dm", sessions.requireUser, async (req, res) => {
+  const { to, text } = req.body || {};
+  // A support report is filed by the signed-in member. `from` used to come from
+  // the request body, so a report could be filed as anybody.
+  const from = req.username;
+
+  if (!to) {
+    return res.status(400).json({ ok: false, error: "missing_fields" });
+  }
 
   // User-typed support reports pass through the same invite rewrite.
   const safeText = typeof text === 'string' ? rewriteDiscordInvites(text) : text;
@@ -2429,7 +2620,7 @@ app.get("/api/public-messages", async (req, res) => {
 // Used for avatars and chat attachments. Extra profile photos use the
 // dedicated endpoint below so their URLs are persisted to the user document
 // as part of the same request.
-app.post('/api/upload-image', upload.single('image'), async (req, res) => {
+app.post('/api/upload-image', sessions.requireUser, upload.single('image'), async (req, res) => {
   if (!req.file) return res.status(400).json({ ok: false, error: 'no_file' });
 
   try {
@@ -2454,7 +2645,7 @@ app.post('/api/upload-image', upload.single('image'), async (req, res) => {
 // Used by DMs, custom rooms and story attachments. GIFs, MP4 and WebM files
 // are stored locally and served from /clips/<name>; the returned URL is what
 // gets persisted on DM / RoomMessage / Story documents.
-app.post('/api/upload-clip', (req, res, next) => {
+app.post('/api/upload-clip', sessions.requireUser, (req, res, next) => {
   // Run multer with an explicit callback so size/type errors come back as
   // JSON (there is no global error middleware).
   clipUpload.single('clip')(req, res, err => {
@@ -2499,7 +2690,7 @@ app.post('/api/upload-clip', (req, res, next) => {
 });
 
 // ---------- API: EXTRA PROFILE PHOTOS ----------
-app.get('/api/profile/photos', async (req, res) => {
+app.get('/api/profile/photos', sessions.requireUser, async (req, res) => {
   const username = String(req.query.username || '').trim();
   if (!username) {
     return res.status(400).json({ ok: false, error: 'missing_username' });
@@ -2523,7 +2714,7 @@ app.get('/api/profile/photos', async (req, res) => {
 
 const receiveExtraProfilePhotos = upload.array('photos', MAX_EXTRA_PROFILE_PHOTOS);
 
-app.post('/api/profile/photos', (req, res) => {
+app.post('/api/profile/photos', sessions.requireUser, (req, res) => {
   receiveExtraProfilePhotos(req, res, async uploadError => {
     if (uploadError) {
       const isClientError = uploadError instanceof multer.MulterError;
@@ -2539,12 +2730,10 @@ app.post('/api/profile/photos', (req, res) => {
       });
     }
 
-    const username = String(req.body.username || '').trim();
+    // The session decides whose gallery this is, not the form field.
+    const username = req.username;
     const files = Array.isArray(req.files) ? req.files : [];
 
-    if (!username) {
-      return res.status(400).json({ ok: false, error: 'missing_username' });
-    }
     if (!files.length) {
       return res.status(400).json({ ok: false, error: 'no_file' });
     }
@@ -2599,11 +2788,11 @@ app.post('/api/profile/photos', (req, res) => {
   });
 });
 
-app.delete('/api/profile/photos', async (req, res) => {
-  const username = String(req.body.username || '').trim();
+app.delete('/api/profile/photos', sessions.requireUser, async (req, res) => {
+  const username = req.username;
   const photoUrl = String(req.body.photoUrl || '').trim();
 
-  if (!username || !photoUrl) {
+  if (!photoUrl) {
     return res.status(400).json({ ok: false, error: 'missing_fields' });
   }
 
@@ -2654,11 +2843,14 @@ function normalizeDiscordId(value) {
   return { ok: false, value: raw };
 }
 
-app.post('/api/update-profile', async (req, res) => {
-  const { username, updates } = req.body;
+app.post('/api/update-profile', sessions.requireUser, async (req, res) => {
+  const { updates } = req.body || {};
+  // Whose profile this edits comes from the session. Taking it from the body
+  // let anyone rewrite any member's display name, bio, photos and physique.
+  const username = req.username;
 
-  if (!username) {
-    return res.status(400).json({ ok: false, error: 'missing_username' });
+  if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+    return res.status(400).json({ ok: false, error: 'missing_updates' });
   }
 
   // Physique fields get normalised before they reach Mongo so clients can
@@ -2784,10 +2976,11 @@ app.get('/api/combat-stats', async (req, res) => {
 });
 
 // ---------- API: ACCOUNT SETTINGS - CHANGE PASSWORD ----------
-app.post('/api/account/change-password', async (req, res) => {
-  const { username, currentPassword, newPassword } = req.body;
+app.post('/api/account/change-password', sessions.requireUser, async (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+  const username = req.username;
 
-  if (!username || !currentPassword || !newPassword) {
+  if (!currentPassword || !newPassword) {
     return res.status(400).json({ ok: false, error: 'missing_fields' });
   }
 
@@ -2811,6 +3004,10 @@ app.post('/api/account/change-password', async (req, res) => {
     user.passwordHash = hash;
     await user.save();
 
+    // Changing the password signs every *other* device out. This session is
+    // kept alive so the member is not thrown out of the page they changed it on.
+    await sessions.destroyUserSessions(username, { exceptToken: req.sessionToken });
+
     await logIp(req, { action: 'change_password', username });
 
     return res.json({ ok: true });
@@ -2821,10 +3018,11 @@ app.post('/api/account/change-password', async (req, res) => {
 });
 
 // ---------- API: ACCOUNT SETTINGS - DELETE ACCOUNT ----------
-app.post('/api/account/delete', async (req, res) => {
-  const { username, password } = req.body;
+app.post('/api/account/delete', sessions.requireUser, async (req, res) => {
+  const { password } = req.body || {};
+  const username = req.username;
 
-  if (!username || !password) {
+  if (!password) {
     return res.status(400).json({ ok: false, error: 'missing_fields' });
   }
 
@@ -2844,6 +3042,10 @@ app.post('/api/account/delete', async (req, res) => {
 
     // Delete the user account itself
     await User.deleteOne({ username });
+
+    // No account, no sessions: drop every token issued for it and sign out every
+    // device that was using one.
+    await signOutEverywhere(username, 'deleted');
 
     // Clean up related data (DMs, stories, relationships, rooms ownership)
     try {
@@ -2995,6 +3197,30 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
+// The member record a client is allowed to hold. Everything the UI renders
+// comes from here, and nothing in it is a credential: identity is carried by
+// the session token, so this object can be cached, replaced or ignored without
+// ever changing who the server thinks is asking.
+function sessionUserPayload(user) {
+  return {
+    username: user.username,
+    display: user.display,
+    imageUrl: user.imageUrl,
+    extraPhotos: user.extraPhotos || [],
+    color: user.color,
+    language: user.language,
+    role: user.role,
+    stats: user.stats,
+    info: user.info,
+    age: user.age,
+    height: user.height || '',
+    weight: user.weight ?? undefined,
+    atk: user.atk ?? null,
+    def: user.def ?? null,
+    discordId: user.discordId ?? null
+  };
+}
+
 // ---------- API: LOGIN ----------
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
@@ -3023,31 +3249,45 @@ app.post('/api/login', async (req, res) => {
 
     await logIp(req, { action: 'login_success', username });
 
-    return res.json({
-      ok: true,
-      user: {
-        username: user.username,
-        display: user.display,
-        imageUrl: user.imageUrl,
-        extraPhotos: user.extraPhotos || [],
-        color: user.color,
-        language: user.language,
-        role: user.role,
-        stats: user.stats,
-        info: user.info,
-        age: user.age,
-        height: user.height || '',
-        weight: user.weight ?? undefined,
-        atk: user.atk ?? null,
-        def: user.def ?? null,
-        discordId: user.discordId ?? null
-      }
+    // The credential is an opaque random token, shown to this client exactly
+    // once. It also goes out as an httpOnly cookie, and that cookie — not
+    // anything the browser stores or sends back — is what every later request
+    // is authenticated by. The `user` object in the response is display data.
+    const token = await sessions.createSession(user.username, {
+      userAgent: req.headers['user-agent'] || '',
+      ip: req.ip
     });
+    setSessionCookie(res, req, token);
+
+    return res.json({ ok: true, token, user: sessionUserPayload(user) });
   } catch (e) {
     console.error(e);
     await logIp(req, { action: 'login_error', username });
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
+});
+
+// ---------- API: CURRENT MEMBER ----------
+// GET /api/me
+//   Answers from the session alone, never from anything the client claims. The
+//   app calls this on boot to confirm a remembered session is still valid — a
+//   forged or stale localStorage entry no longer signs anybody in.
+app.get('/api/me', async (req, res) => {
+  const token = sessions.tokenFromRequest(req);
+  const found = token ? await sessions.verifyToken(token) : null;
+  if (!found) return res.status(401).json({ ok: false, error: 'auth_required' });
+  return res.json({ ok: true, user: sessionUserPayload(found.user) });
+});
+
+// ---------- API: LOGOUT ----------
+// POST /api/logout
+//   Ends the calling session only, so signing out in one browser does not drop
+//   the member's phone or desktop app.
+app.post('/api/logout', async (req, res) => {
+  const token = sessions.tokenFromRequest(req);
+  if (token) await sessions.destroyToken(token);
+  clearSessionCookie(res, req);
+  return res.json({ ok: true });
 });
 
 // ---------- API: FORGOT / RESET PASSWORD ----------
@@ -3159,9 +3399,23 @@ app.post('/api/reset-password', async (req, res) => {
 });
 
 // ---------- API: EXTERNAL PUBLIC CHAT MESSAGE ----------
-app.post("/api/chatMessage", async (req, res) => {
+// The caller here is the Discord bridge, not a signed-in browser, so it cannot
+// hold a member session. It authenticates with a shared secret instead; a
+// member session is accepted too so the site's own clients can use the route.
+// Without CHAT_INGRESS_KEY set, only a member session works and the bridge
+// must be given a key — see .env.example.
+function requireChatIngress(req, res, next) {
+  const presented = req.get('x-chat-ingress-key');
+  if (CHAT_INGRESS_KEY && presented && safeEqual(presented, CHAT_INGRESS_KEY)) return next();
+  return sessions.requireUser(req, res, next);
+}
+
+app.post("/api/chatMessage", requireChatIngress, async (req, res) => {
   try {
-    const { username, message, timestamp, avatar } = req.body;
+    const { message, timestamp, avatar } = req.body;
+    // A session-authenticated caller may only post as themselves; the bridge
+    // (authenticated by key) supplies the Discord member's name.
+    const username = req.username || String(req.body.username || '').trim();
     const attachments = Array.isArray(req.body.attachments) ? req.body.attachments : [];
     let imageUrl = req.body.imageUrl || req.body.image || req.body.image_url ||
       attachments.find(a => a && (a.url || a.proxy_url) && String(a.content_type || a.contentType || "").startsWith("image/"))?.url ||
@@ -3222,65 +3476,107 @@ app.post("/api/chatMessage", async (req, res) => {
   }
 });
 
-app.post("/api/dm/history", async (req, res) => {
-  const { a, b } = req.body;
+// The conversation the caller is a party to. `a`/`b` arrive from the client in
+// either order, so the caller's own name is taken from the session and the
+// other one becomes the partner — a request naming two other members has no
+// conversation to return.
+function dmConversation(req) {
+  const me = req.username;
+  const names = [req.body?.a, req.body?.b].map(v => (v == null ? '' : String(v).trim()));
+  if (!names.includes(me)) return { me, partner: null };
+  const partner = names.find(name => name && name !== me) || null;
+  return { me, partner };
+}
 
- const messages = await DM.find({
-  $or: [
-    { from: a, to: b },
-    { from: b, to: a },
-    { from: "SYSTEM", to: a },
-    { from: "SYSTEM", to: b }
-  ]
-})
-.sort({ time: 1 })
-.lean();
-
-  res.json({ ok: true, messages });
-});
-
-app.post("/api/dm/partners", async (req, res) => {
-  const { username } = req.body;
-
-  if (!username) {
-    return res.json({ ok: false, partners: [] });
+app.post("/api/dm/history", sessions.requireUser, async (req, res) => {
+  const { me, partner } = dmConversation(req);
+  if (!partner) {
+    return res.status(403).json({ ok: false, error: "not_your_conversation" });
   }
 
-  const messages = await DM.find({
+  const requested = parseInt(req.body?.limit, 10);
+  const limit = Number.isFinite(requested) && requested > 0
+    ? Math.min(requested, DM_HISTORY_MAX)
+    : DM_HISTORY_PAGE;
+
+  // Paging backwards: the client sends the `oldest` timestamp it already has
+  // and receives the page immediately before it.
+  const beforeRaw = req.body?.before;
+  const before = beforeRaw ? new Date(beforeRaw) : null;
+
+  const filter = {
     $or: [
-      { from: username },
-      { to: username }
+      { from: me, to: partner },
+      { from: partner, to: me },
+      // System notices belong to the member they were addressed to, so only
+      // the caller's own are included — never the partner's.
+      { from: "SYSTEM", to: me }
     ]
-  }).lean();
+  };
+  if (before && !Number.isNaN(before.getTime())) filter.time = { $lt: before };
 
-  const partners = new Set();
+  try {
+    // Newest first so `limit` keeps the most recent page, then back into the
+    // chronological order the client renders.
+    const messages = await DM.find(filter).sort({ time: -1 }).limit(limit).lean();
+    messages.reverse();
 
-  messages.forEach(m => {
-    if (m.from !== username) partners.add(m.from);
-    if (m.to !== username) partners.add(m.to);
-  });
-
-  res.json({ ok: true, partners: [...partners] });
+    return res.json({
+      ok: true,
+      messages,
+      oldest: messages.length ? messages[0].time : null,
+      hasMore: messages.length === limit
+    });
+  } catch (err) {
+    console.error("dm history error:", err);
+    return res.status(500).json({ ok: false, error: "server_error" });
+  }
 });
 
-app.post("/api/dm/clear", async (req, res) => {
-  const { a, b } = req.body;
+app.post("/api/dm/partners", sessions.requireUser, async (req, res) => {
+  const me = req.username;
 
-  if (!a || !b) {
-    return res.json({ ok: false, error: "missing_users" });
+  try {
+    // Distinct names on the other side of the caller's conversations. This used
+    // to load every message the member had ever sent or received into Node just
+    // to build a Set of the people in it.
+    const rows = await DM.aggregate([
+      { $match: { $or: [{ from: me }, { to: me }] } },
+      { $project: { other: { $cond: [{ $eq: ["$from", me] }, "$to", "$from"] } } },
+      { $group: { _id: "$other" } },
+      { $sort: { _id: 1 } }
+    ]);
+
+    return res.json({ ok: true, partners: rows.map(row => row._id).filter(Boolean) });
+  } catch (err) {
+    console.error("dm partners error:", err);
+    return res.status(500).json({ ok: false, error: "server_error", partners: [] });
+  }
+});
+
+app.post("/api/dm/clear", sessions.requireUser, async (req, res) => {
+  const { me, partner } = dmConversation(req);
+  if (!partner) {
+    return res.status(403).json({ ok: false, error: "not_your_conversation" });
   }
 
-  await DM.deleteMany({
-    $or: [
-      { from: a, to: b },
-      { from: b, to: a }
-    ]
-  });
-
-  res.json({ ok: true });
+  try {
+    await DM.deleteMany({
+      $or: [
+        { from: me, to: partner },
+        { from: partner, to: me }
+      ]
+    });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("dm clear error:", err);
+    return res.status(500).json({ ok: false, error: "server_error" });
+  }
 });
 
-app.get("/api/allUsers", async (req, res) => {
+// The member directory. Requires a session: it is the roster behind the arena,
+// and it exposes every member's profile, physique and record.
+app.get("/api/allUsers", sessions.requireUser, async (req, res) => {
   try {
     const users = await User.find()
       .select("username display imageUrl extraPhotos info wins losses color language age height weight atk def createdAt")
@@ -3446,6 +3742,130 @@ function canAccessRoom(room, username) {
     ));
 }
 
+// ---------- SOCKET AUTHENTICATION ----------
+// A socket is identified once, at handshake, from the same session token the
+// HTTP API uses. `auth.token` covers clients that are not same-origin with the
+// API (the Electron and Capacitor wrappers point at the Railway host, where a
+// cookie for the site domain is not sent); otherwise the session cookie the
+// browser attaches to the handshake request is enough and no client code has to
+// change.
+//
+// Before this, `socket.username` came from whatever the browser chose to emit,
+// so any visitor could join another member's delivery room and receive their
+// DMs. Now an unauthenticated socket has no username at all: it can still read
+// the public arena, but every handler that acts on a member checks first.
+function tokenFromHandshake(socket) {
+  const auth = socket.handshake?.auth;
+  if (auth && typeof auth.token === 'string' && auth.token) return auth.token;
+
+  const cookieHeader = socket.handshake?.headers?.cookie;
+  if (typeof cookieHeader === 'string') {
+    for (const part of cookieHeader.split(';')) {
+      const [name, ...rest] = part.trim().split('=');
+      if (name === COOKIE_NAME) {
+        try { return decodeURIComponent(rest.join('=')); } catch (_) { return rest.join('='); }
+      }
+    }
+  }
+  return null;
+}
+
+io.use((socket, next) => {
+  const token = tokenFromHandshake(socket);
+  if (!token) return next(); // anonymous: public chat is readable when signed out
+
+  sessions.verifyToken(token)
+    .then(found => {
+      if (found) {
+        socket.username = found.username;
+        socket.sessionUser = found.user;
+        socket.sessionToken = token;
+      } else {
+        // Not worth dropping the connection over: the client is told on connect
+        // so it can clear a stale local session and prompt a login, while the
+        // public arena keeps working.
+        socket.authRejected = true;
+      }
+      next();
+    })
+    .catch(err => {
+      console.error('socket auth error:', err.message || err);
+      socket.authRejected = true;
+      next();
+    });
+});
+
+/**
+ * Bring an authenticated socket into the member's live state: join the delivery
+ * room its DMs are sent to, mark the member online, and hand back anything that
+ * arrived while no session of theirs was connected.
+ *
+ * Every await is guarded — this runs inside an async socket handler, where a
+ * rejection that escapes is an unhandled rejection and ends the process rather
+ * than just this connection.
+ */
+async function attachSocketSession(socket) {
+  const username = socket.username;
+  if (!username) return null;
+
+  socket.join(userRoom(username));
+
+  let user = null;
+  try {
+    user = await User.findOneAndUpdate(
+      { username },
+      { online: true, socketId: socket.id },
+      { new: true }
+    );
+  } catch (err) {
+    console.error('socket login error:', err.message || err);
+    return null;
+  }
+  if (!user) {
+    // The account went away (deleted, or banned and removed) between the
+    // handshake and now — do not keep a socket claiming it.
+    socket.username = null;
+    return null;
+  }
+
+  try {
+    await broadcastPresence();
+  } catch (err) {
+    console.error('presence broadcast error:', err.message || err);
+  }
+
+  try {
+    const counts = await getUnreadDMCounts(user);
+    if (Object.keys(counts).length) socket.emit('dmUnread', { counts });
+  } catch (err) {
+    console.error('dm unread catch-up error:', err.message || err);
+  }
+
+  return user;
+}
+
+/**
+ * The username this socket is allowed to act as. Handlers call this instead of
+ * reading a name out of the event payload, which is the whole point: the
+ * payload is data, the handshake is identity.
+ */
+function actor(socket) {
+  return socket.username || null;
+}
+
+/**
+ * Refuse an action from a socket with no verified session, and say so, so the
+ * client can react instead of watching nothing happen.
+ */
+function requireActor(socket, action) {
+  const username = actor(socket);
+  if (!username) {
+    socket.emit('actionRejected', { action, reason: 'auth_required' });
+    return null;
+  }
+  return username;
+}
+
 io.on("connection", async (socket) => {
   console.log("socket connected", socket.id);
 
@@ -3465,53 +3885,72 @@ io.on("connection", async (socket) => {
   } catch (err) {
     console.error('initial forum list error:', err);
   }
-  socket.on('login', async (user) => {
-    if (!user || !user.username) return;
+  // A socket that authenticated at handshake is signed in from the moment it
+  // connects; nothing has to be emitted to claim an identity.
+  if (socket.username) {
+    await attachSocketSession(socket);
+  } else if (socket.authRejected) {
+    socket.emit('auth:invalid', { reason: 'invalid_session' });
+  }
 
-    socket.username = user.username;
-    // Join this user's delivery room so DMs reach every session they have
-    // open, not just the one socketId happens to point at.
-    socket.join(userRoom(user.username));
-   // Same guard as above: a rejecting await in an async socket handler is an
-    // unhandled rejection, which ends the process rather than just this login.
-    let u;
-    try {
-      u = await User.findOneAndUpdate(
-        { username: user.username },
-        { online: true, socketId: socket.id },
-        { new: true }
-      );
-    } catch (err) {
-      console.error('socket login error:', err.message || err);
-      return;
+  // Kept for clients that connect before signing in: the page is already open,
+  // the member then logs in, and the socket picks the session up without a
+  // reconnect. The payload is a token — a username in it is ignored, because
+  // the point of the handshake is that a client cannot name itself.
+  socket.on('login', async (payload) => {
+    const token = typeof payload === 'string' ? payload : payload?.token;
+
+    if (token) {
+      const found = await sessions.verifyToken(token).catch(err => {
+        console.error('socket login verify error:', err.message || err);
+        return null;
+      });
+      if (!found) {
+        socket.emit('auth:invalid', { reason: 'invalid_session' });
+        return;
+      }
+      socket.username = found.username;
+      socket.sessionUser = found.user;
+      socket.sessionToken = token;
+      socket.authRejected = false;
     }
-    if (!u) return;
 
-    try {
-      const onlineUsers = await User.find({ online: true })
-        .select('username display imageUrl extraPhotos info wins losses color language age height weight createdAt -_id')
-        .lean();
+    if (!socket.username) return;
+    await attachSocketSession(socket);
+  });
 
-      io.emit('presence', onlineUsers);
-    } catch (err) {
-      console.error('presence broadcast error:', err.message || err);
+  // Signing out ends this socket's authenticated state without dropping the
+  // connection, so the member can keep reading the arena.
+  socket.on('logout', async () => {
+    const username = socket.username;
+    socket.username = null;
+    socket.sessionUser = null;
+    socket.sessionToken = null;
+    if (socket.currentRoom) {
+      socket.leave(socket.currentRoom);
+      socket.currentRoom = null;
     }
-    // Catch up on DMs that arrived while this user had no live socket (bridged
-    // in from Discord, laptop asleep, app backgrounded). They are in the
-    // database but never reached the client's own unread counter, so without
-    // this the badge stays empty until the conversation is opened by hand.
-    try {
-      const counts = await getUnreadDMCounts(u);
-      if (Object.keys(counts).length) socket.emit("dmUnread", { counts });
-    } catch (err) {
-      console.error('dm unread catch-up error:', err);
+    if (username) {
+      socket.leave(userRoom(username));
+      try {
+        const survivor = [...io.sockets.sockets.values()].find(s => s.username === username);
+        await User.findOneAndUpdate(
+          { username },
+          survivor ? { socketId: survivor.id } : { online: false, socketId: null }
+        );
+        await broadcastPresence();
+      } catch (err) {
+        console.error('socket logout error:', err.message || err);
+      }
     }
   });
 
   // The client reports a conversation as read when it opens a DM window or
   // renders an incoming message into one.
-  socket.on("dmRead", async ({ username, partner } = {}) => {
-    const who = username || socket.username;
+  socket.on("dmRead", async ({ partner } = {}) => {
+    // Whose read receipt this is comes from the handshake. Marking a
+    // conversation read for another member used to be possible by naming them.
+    const who = requireActor(socket, 'dmRead');
     if (!who || !partner) return;
     try {
       await markDMRead(who, partner);
@@ -3520,7 +3959,9 @@ io.on("connection", async (socket) => {
     }
   });
 
-  socket.on("chatClosed", async ({ username }) => {
+  // The member closed the chat, so only the member who closed it goes offline.
+  socket.on("chatClosed", async () => {
+    const username = requireActor(socket, 'chatClosed');
     if (!username) return;
 
     await User.findOneAndUpdate(
@@ -3535,12 +3976,21 @@ io.on("connection", async (socket) => {
     io.emit("presence", onlineUsers);
   });
 
-  socket.on("forceLogout", async ({ username }) => {
+  // A client asking to be signed out. Only this socket is dropped; the
+  // member's other sessions stay signed in.
+  socket.on("forceLogout", async () => {
+    const username = requireActor(socket, 'forceLogout');
+    socket.username = null;
+    socket.sessionUser = null;
+    socket.sessionToken = null;
     if (!username) return;
 
+    socket.leave(userRoom(username));
+
+    const survivor = [...io.sockets.sockets.values()].find(s => s.username === username);
     await User.findOneAndUpdate(
       { username },
-      { online: false, socketId: null }
+      survivor ? { socketId: survivor.id } : { online: false, socketId: null }
     );
 
     const onlineUsers = await User.find({ online: true })
@@ -3552,11 +4002,20 @@ io.on("connection", async (socket) => {
 
 socket.on('publicMessage', async (msg) => {
   try {
+    // Posting to the arena is a member action: an anonymous socket is refused
+    // and told why, rather than the message being silently dropped.
+    const from = requireActor(socket, 'publicMessage');
+    if (!from) return;
+
+    // The display name comes from the account, not the payload, so a message
+    // cannot be dressed up as somebody else's.
+    const display = socket.sessionUser?.display || from;
+
     // Any Discord invite posted in chat is rewritten to the site's official
     // invite before the message is stored, relayed to Discord, or delivered.
     const enriched = {
-      from: msg.from,
-      display: msg.display,
+      from,
+      display,
       text: rewriteDiscordInvites(msg.text),
       replyTo: msg.replyTo || null,
       time: new Date()
@@ -3565,7 +4024,7 @@ socket.on('publicMessage', async (msg) => {
     const created = await PublicMessage.create(enriched);
 
     // ⭐ Fetch sender avatar ONCE
-    const sender = await User.findOne({ username: msg.from }).lean();
+    const sender = await User.findOne({ username: from }).lean();
     const avatarUrl = sender?.imageUrl || null;
 
     // ⭐ Send Discord webhook
@@ -3577,7 +4036,7 @@ socket.on('publicMessage', async (msg) => {
     // Discord channel matches the website's chat.
     const baseUrl = publicBaseUrlFromSocket(socket, APP_BASE_URL);
     await sendDiscordWebhookMessage(
-      msg.display || msg.from,
+      display,
       enriched.text,
       resolveWebhookAvatarUrl({
         username: msg.from,
@@ -3602,7 +4061,7 @@ socket.on('publicMessage', async (msg) => {
 
         // The sender always sees exactly what they typed — never a translation
         // of their own message back into their profile language.
-        const isSender = u.username === msg.from;
+        const isSender = u.username === from;
         const translated = isSender ? enriched.text : await translateText(enriched.text, u.language || "en");
 
         io.to(u.socketId).emit("publicMessage", {
@@ -3623,10 +4082,13 @@ socket.on('publicMessage', async (msg) => {
 // translated for each recipient, matching how new messages are delivered.
 socket.on("editPublicMessage", async (data) => {
   try {
-    const { id, from, text } = data || {};
+    const { id, text } = data || {};
+    const from = requireActor(socket, 'editPublicMessage');
     if (!id || !from || typeof text !== "string" || !text.trim()) return;
 
     const msg = await PublicMessage.findById(id);
+    // The author check compares against the handshake identity, so an edit
+    // cannot be authorised by claiming the author's name in the payload.
     if (!msg || msg.from !== from) return; // only the author may edit
 
     // Edits re-run the invite rewrite: a foreign Discord invite must not
@@ -3687,11 +4149,17 @@ socket.on("editPublicMessage", async (data) => {
   });
 
   socket.on("privateMessage", async pm => {
+    // A DM is sent by whoever is signed in on this socket. `pm.from` is ignored
+    // entirely: it used to be the sender's name as the browser typed it, which
+    // meant any visitor could message anyone as anyone.
+    const from = requireActor(socket, "privateMessage");
+    if (!from) return;
+
     const receiver = await User.findOne({ username: pm.to }).lean();
 
     // ✅ FIXED: Check receiver.blockedUsers instead of undefined targetUser
-    if (receiver?.blockedUsers?.includes(pm.from)) {
-      console.log(`DM blocked: ${pm.from} → ${pm.to}`);
+    if (receiver?.blockedUsers?.includes(from)) {
+      console.log(`DM blocked: ${from} → ${pm.to}`);
       return; // do NOT deliver the DM
     }
 
@@ -3703,7 +4171,7 @@ socket.on("editPublicMessage", async (data) => {
     // IMAGE MESSAGE
     if (pm.imageUrl) {
       const saved = await DM.create({
-        from: pm.from,
+        from,
         to: pm.to,
         imageUrl: pm.imageUrl,
         text: null,
@@ -3712,7 +4180,7 @@ socket.on("editPublicMessage", async (data) => {
 
       const imagePayload = {
         id: String(saved._id),
-        from: pm.from,
+        from,
         to: pm.to,
         imageUrl: pm.imageUrl,
         time: saved.time
@@ -3722,9 +4190,9 @@ socket.on("editPublicMessage", async (data) => {
       // sender's own echo both need it, and neither should depend on which
       // single socket the user document happens to remember.
       emitToUser(pm.to, "privateMessage", imagePayload);
-      emitToUser(pm.from, "privateMessage", imagePayload);
+      emitToUser(from, "privateMessage", imagePayload);
 
-      await forwardDMToDiscord(pm.from, receiver, `[Image attachment: ${pm.imageUrl}]`);
+      await forwardDMToDiscord(from, receiver, `[Image attachment: ${pm.imageUrl}]`);
 
       return;
     }
@@ -3734,7 +4202,7 @@ socket.on("editPublicMessage", async (data) => {
       if (!isLocalClipUrl(pm.clipUrl)) return; // reject foreign URLs
 
       const saved = await DM.create({
-        from: pm.from,
+        from,
         to: pm.to,
         clipUrl: pm.clipUrl,
         clipType: pm.clipType === "gif" ? "gif" : "video",
@@ -3745,7 +4213,7 @@ socket.on("editPublicMessage", async (data) => {
 
       const clipPayload = {
         id: String(saved._id),
-        from: pm.from,
+        from,
         to: pm.to,
         clipUrl: saved.clipUrl,
         clipType: saved.clipType,
@@ -3753,10 +4221,10 @@ socket.on("editPublicMessage", async (data) => {
       };
 
       emitToUser(pm.to, "privateMessage", clipPayload);
-      emitToUser(pm.from, "privateMessage", clipPayload);
+      emitToUser(from, "privateMessage", clipPayload);
 
       let appBaseUrl = APP_BASE_URL || "https://male-cyber-fighters.com";
-      await forwardDMToDiscord(pm.from, receiver, `[Video/GIF attachment: ${appBaseUrl}${saved.clipUrl}]`);
+      await forwardDMToDiscord(from, receiver, `[Video/GIF attachment: ${appBaseUrl}${saved.clipUrl}]`);
 
       return;
     }
@@ -3768,7 +4236,7 @@ socket.on("editPublicMessage", async (data) => {
     const translated = await translateText(safeText, receiver.language || "en");
 
     const saved = await DM.create({
-      from: pm.from,
+      from,
       to: pm.to,
       originalText: safeText,
       text: translated
@@ -3780,24 +4248,27 @@ socket.on("editPublicMessage", async (data) => {
     // Recipient sees the translation, sender sees exactly what they typed.
     emitToUser(pm.to, "privateMessage", {
       id: messageId,
-      from: pm.from,
+      from,
       to: pm.to,
       text: translated,
       time: messageTime
     });
 
-    emitToUser(pm.from, "privateMessage", {
+    emitToUser(from, "privateMessage", {
       id: messageId,
-      from: pm.from,
+      from,
       to: pm.to,
       text: safeText,
       time: messageTime
     });
 
-    await forwardDMToDiscord(pm.from, receiver, translated || safeText);
+    await forwardDMToDiscord(from, receiver, translated || safeText);
   });
 
   socket.on("joinRoom", async ({ room } = {}) => {
+    // Rooms are member spaces, and `canAccessRoom` decides by username — which
+    // is only meaningful once that username came from a verified session.
+    if (!requireActor(socket, "joinRoom")) return;
     const roomId = room == null ? "" : String(room);
     if (!roomId) return;
     if (!mongoose.Types.ObjectId.isValid(roomId)) {
@@ -3850,6 +4321,7 @@ socket.on("editPublicMessage", async (data) => {
 
   // Remove this socket from a room when its chat window closes.
   socket.on("leaveRoom", async ({ room } = {}) => {
+    if (!requireActor(socket, "leaveRoom")) return;
     const roomId = room == null || room === "" ? socket.currentRoom : String(room);
     if (!roomId) return;
 
@@ -3864,6 +4336,7 @@ socket.on("editPublicMessage", async (data) => {
 
   // Allow clients to request a members refresh for a room (client emits "requestRoomMembers")
   socket.on("requestRoomMembers", async ({ room }) => {
+    if (!requireActor(socket, "requestRoomMembers")) return;
     try {
       const roomId = room == null ? "" : String(room);
       if (!roomId || !socket.rooms.has(roomId)) return;
@@ -3874,6 +4347,7 @@ socket.on("editPublicMessage", async (data) => {
   });
 
   socket.on("roomMessage", async (msg = {}) => {
+    if (!requireActor(socket, "roomMessage")) return;
     const roomId = msg.room == null ? "" : String(msg.room);
     // Do not trust the room/from fields supplied by the browser. A sender
     // must have successfully joined this exact room first.
@@ -3889,7 +4363,8 @@ socket.on("editPublicMessage", async (data) => {
     const enriched = {
       room: roomId,
       from: socket.username,
-      display: msg.display,
+      // From the account, not the payload — see publicMessage.
+      display: socket.sessionUser?.display || socket.username,
       // Any Discord invite posted in a room is rewritten to the site's
       // official invite before it is stored or relayed to other members.
       text: msg.text ? rewriteDiscordInvites(msg.text) : null,
@@ -3952,6 +4427,7 @@ socket.on("editPublicMessage", async (data) => {
   socket.on("editRoomMessage", async (data) => {
     try {
       const { id, text } = data || {};
+      if (!requireActor(socket, "editRoomMessage")) return;
       if (!id || typeof text !== "string" || !text.trim()) return;
 
       const msg = await RoomMessage.findById(id);
@@ -3980,28 +4456,36 @@ socket.on("editPublicMessage", async (data) => {
     }
   });
 
-  socket.on("typingDM", ({ from, to }) => {
+  // The "who is typing" name is the sender's, taken from the handshake, so a
+  // typing notice cannot be shown under somebody else's name.
+  socket.on("typingDM", ({ to }) => {
+    const from = requireActor(socket, "typingDM");
+    if (!from) return;
     const target = [...io.sockets.sockets.values()].find(s => s.username === to);
     if (target) {
       io.to(target.id).emit("typingDM", { from });
     }
   });
 
-  socket.on("stopTypingDM", ({ from, to }) => {
+  socket.on("stopTypingDM", ({ to }) => {
+    const from = requireActor(socket, "stopTypingDM");
+    if (!from) return;
     const target = [...io.sockets.sockets.values()].find(s => s.username === to);
     if (target) {
       io.to(target.id).emit("stopTypingDM", { from });
     }
   });
 
-  socket.on("typingRoom", ({ room, from } = {}) => {
+  socket.on("typingRoom", ({ room } = {}) => {
+    if (!requireActor(socket, "typingRoom")) return;
     const roomId = room == null ? "" : String(room);
     if (roomId && socket.currentRoom === roomId && socket.rooms.has(roomId)) {
       socket.to(roomId).emit("typingRoom", { from: socket.username, room: roomId });
     }
   });
 
-  socket.on("stopTypingRoom", ({ room, from } = {}) => {
+  socket.on("stopTypingRoom", ({ room } = {}) => {
+    if (!requireActor(socket, "stopTypingRoom")) return;
     const roomId = room == null ? "" : String(room);
     if (roomId && socket.currentRoom === roomId && socket.rooms.has(roomId)) {
       socket.to(roomId).emit("stopTypingRoom", { from: socket.username, room: roomId });
@@ -4009,6 +4493,7 @@ socket.on("editPublicMessage", async (data) => {
   });
 
   socket.on("createRoom", async ({ name, private }) => {
+    if (!requireActor(socket, "createRoom")) return;
     if (!name) return;
 
     const room = await Room.create({
@@ -4026,6 +4511,7 @@ socket.on("editPublicMessage", async (data) => {
   });
 
   socket.on("inviteToRoom", async ({ roomId, username }) => {
+    if (!requireActor(socket, "inviteToRoom")) return;
     const room = await Room.findById(roomId);
     if (!room) return;
 

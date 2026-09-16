@@ -223,10 +223,45 @@ function mobileImgSrc(value) {
     if (!user) {
       localStorage.removeItem(SESSION_KEY);
       localStorage.removeItem("currentUser");
+      clearSessionToken();
       return;
     }
     localStorage.setItem(SESSION_KEY, JSON.stringify(user));
     localStorage.setItem("currentUser", JSON.stringify(user));
+  }
+
+  /* The credential. The record above is only what the UI renders; this token is
+     what the server resolves to a member, on every request and on the socket
+     handshake. See utils.js for the longer note. */
+  const TOKEN_KEY = "cw_token_v1";
+
+  function setSessionToken(token) {
+    if (token) localStorage.setItem(TOKEN_KEY, String(token));
+    else localStorage.removeItem(TOKEN_KEY);
+  }
+
+  function getSessionToken() {
+    try { return localStorage.getItem(TOKEN_KEY) || null; } catch (e) { return null; }
+  }
+
+  function clearSessionToken() {
+    try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+  }
+
+  /** Headers carrying the session where the cookie cannot (cross-origin app). */
+  function authHeaders(extra) {
+    const token = getSessionToken();
+    const headers = Object.assign({}, extra);
+    if (token) headers["Authorization"] = "Bearer " + token;
+    return headers;
+  }
+
+  /** A fetch that always carries the session, cookie or bearer. */
+  function authFetch(url, options) {
+    const opts = Object.assign({}, options);
+    opts.credentials = opts.credentials || "same-origin";
+    opts.headers = authHeaders(opts.headers);
+    return fetch(url, opts);
   }
 
   function statOf(user, key) {
@@ -380,7 +415,12 @@ function mobileImgSrc(value) {
       return;
     }
 
-    const socket = io({ path: "/socket.io", transports: ["websocket", "polling"] });
+    const socket = io({
+      path: "/socket.io",
+      transports: ["websocket", "polling"],
+      // Identity comes from the handshake, so no event has to carry a username.
+      auth: cb => cb(getSessionToken() ? { token: getSessionToken() } : {})
+    });
     state.socket = socket;
 
     socket.on("connect", socketLogin);
@@ -554,8 +594,8 @@ function mobileImgSrc(value) {
   }
 
   function socketLogin() {
-    const s = getSession();
-    if (state.socket && s) state.socket.emit("login", s);
+    const token = getSessionToken();
+    if (state.socket && token) state.socket.emit("login", { token });
   }
 
   function mergeIntoDirectory(users) {
@@ -606,6 +646,7 @@ function mobileImgSrc(value) {
       return;
     }
 
+    setSessionToken(data.token);
     setSession(data.user);
     hideId("modalLogin");
     const loginUser = $("loginUser");
@@ -713,9 +754,11 @@ function mobileImgSrc(value) {
   let registerImageUrl = "";
 
   function logout() {
-    const s = getSession();
-    if (state.socket && s) {
-      try { state.socket.emit("forceLogout", { username: s.username }); } catch (e) {}
+    // End the session server-side, so the token stops working everywhere rather
+    // than staying valid until it expires.
+    try { authFetch("/api/logout", { method: "POST" }); } catch (e) {}
+    if (state.socket && state.socket.connected) {
+      try { state.socket.emit("logout"); } catch (e) {}
     }
     setSession(null);
     state.dmPartner = null;
@@ -2590,6 +2633,14 @@ if (typeof window.$ === 'undefined') {
   };
 }
 
+// The sections concatenated below this point run at the top level, outside the
+// app IIFE, so they reach the session helpers through window.
+window.getSessionToken = getSessionToken;
+window.setSessionToken = setSessionToken;
+window.clearSessionToken = clearSessionToken;
+window.authHeaders = authHeaders;
+window.authFetch = authFetch;
+
 
 
 
@@ -2607,16 +2658,19 @@ if (typeof window.$ === 'undefined') {
      - updateUIForSession → handled by mobile.js enterApp()
 ============================================================ */
 
-const socket = io();
+const socket = io({
+  auth: (cb) => {
+    const token = typeof getSessionToken === 'function' ? getSessionToken() : null;
+    cb(token ? { token } : {});
+  }
+});
 
 // Keep a single presence handler here; chat-mobile.js also listens and re-renders.
 // Avoid duplicate relationship-approval popups (pm-mobile.js owns those handlers).
 
 socket.on("connect", () => {
-  const user = typeof getSession === "function" ? getSession() : null;
-  if (user) {
-    socket.emit("login", user);
-  }
+  const token = typeof getSessionToken === "function" ? getSessionToken() : null;
+  if (token) socket.emit("login", { token });
 });
 
 socket.on("forceLogout", ({ reason } = {}) => {
@@ -2709,9 +2763,10 @@ async function doLogin(){
       return;
     }
 
+    setSessionToken(data.token);
     setSession(data.user);
     localStorage.setItem('currentUser', JSON.stringify(data.user));
-    socket.emit('login', data.user);
+    socket.emit('login', { token: data.token });
     hide($('modalLogin'));
 
     // MOBILE: show mainUI, hide authScreen

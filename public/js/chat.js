@@ -242,12 +242,19 @@ async function openRosterModal() {
   if (modal) modal.style.display = 'flex';
 
   try {
-    const res = await fetch('/api/allUsers');
+    const res = await authFetch('/api/allUsers');
     const data = await res.json();
     if (data.success) {
       window.allUsers = data.users;
       rosterPage = 1;
       renderRosterPopup();
+      return;
+    }
+    // The roster is members-only, so a signed-out visitor is told that rather
+    // than being shown an empty popup with no explanation.
+    const list = $('rosterPage') || $('rosterList');
+    if (res.status === 401 && list) {
+      list.innerHTML = '<div class="small muted">Sign in to see the member roster.</div>';
     }
   } catch (err) {
     console.error('Failed to load roster', err);
@@ -274,7 +281,7 @@ function openUserProfile(username) {
   if ($('vpHeight')) $('vpHeight').textContent = user.height || "Unknown";
   if ($('vpWeight')) $('vpWeight').textContent = (user.weight != null && user.weight !== "") ? user.weight + " lbs" : "Unknown";
   if ($('vpColorBox')) $('vpColorBox').style.background = user.color || "#7fd8ff";
-  if ($('vpAvatar')) $('vpAvatar').src = chatImgSrc(user.imageUrl) || "/images/mcf.png";
+  if ($('vpAvatar')) $('vpAvatar').src = chatImgSrc(user.imageUrl) || "/images/mcf-192.png";
   if (window.renderProfilePhotoGallery) {
     window.renderProfilePhotoGallery($('vpExtraPhotos'), user.extraPhotos);
   }

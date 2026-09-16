@@ -433,7 +433,7 @@
     /* Members without a photo get the same initials avatar the app serves
        everywhere else, instead of an empty frame. */
     if (!url && user && user.username) url = `/avatar/${encodeURIComponent(user.username)}.png`;
-    return url || '/images/mcf.png';
+    return url || '/images/mcf-192.png';
   }
 
   function recordLabel(user) {

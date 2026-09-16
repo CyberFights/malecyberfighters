@@ -47,9 +47,11 @@ async function doLogin(){
       return;
     }
 
+    // The token is the credential; the user record is only what the UI shows.
+    setSessionToken(data.token);
     setSession(data.user);
     localStorage.setItem('currentUser', JSON.stringify(data.user));
-    socket.emit('login', data.user);
+    socket.emit('login', { token: data.token });
     hide($('modalLogin'));
 
     // MOBILE: show mainUI, hide authScreen
@@ -73,6 +75,10 @@ async function doLogin(){
 }
 
 function logout(){
+  // End the session server-side too, so the token stops working everywhere.
+  try { authFetch('/api/logout', { method: 'POST' }); } catch(e){ /* ignore */ }
+  try { if (window.socket && window.socket.connected) window.socket.emit('logout'); } catch(e){ /* ignore */ }
+
   clearSession();
   localStorage.removeItem('currentUser');
 

@@ -11,21 +11,49 @@
      - updateUIForSession → handled by mobile.js enterApp()
 ============================================================ */
 
-const socket = io();
+/**
+ * Identity is established in the handshake: the server resolves the session
+ * token to a member, and no event carries a username. Read on every
+ * (re)connection so signing in on an open page upgrades the socket.
+ */
+const socket = io({
+  auth: (cb) => {
+    const token = typeof getSessionToken === 'function' ? getSessionToken() : null;
+    cb(token ? { token } : {});
+  }
+});
 
 // Keep a single presence handler here; chat-mobile.js also listens and re-renders.
 // Avoid duplicate relationship-approval popups (pm-mobile.js owns those handlers).
 
 socket.on("connect", () => {
-  const user = typeof getSession === "function" ? getSession() : null;
-  if (user) {
-    socket.emit("login", user);
-  }
+  const token = typeof getSessionToken === "function" ? getSessionToken() : null;
+  if (token) socket.emit("login", { token });
+});
+
+/** The server rejected our token: expired, or the account was banned/deleted. */
+function dropRejectedSession() {
+  if (typeof clearSession === "function") clearSession();
+  localStorage.removeItem("currentUser");
+  if (window.updateUIForSession) updateUIForSession();
+  if (window.updateProfileCard) updateProfileCard(null);
+  if (window.updateDMListSidebar) updateDMListSidebar();
+  if (window.updateDMBadge) updateDMBadge();
+}
+
+socket.on("auth:invalid", dropRejectedSession);
+
+socket.on("actionRejected", ({ reason } = {}) => {
+  if (reason !== "auth_required") return;
+  if (typeof getSession === "function" && getSession()) dropRejectedSession();
+  const authScreen = document.getElementById("authScreen");
+  const mainUI = document.getElementById("mainUI");
+  if (authScreen) authScreen.style.display = "flex";
+  if (mainUI) mainUI.style.display = "none";
 });
 
 socket.on("forceLogout", ({ reason } = {}) => {
-  if (typeof clearSession === "function") clearSession();
-  localStorage.removeItem("currentUser");
+  dropRejectedSession();
 
   // MOBILE: update mobile UI elements instead of desktop profile card
   if (window.updateUIForSession) updateUIForSession();

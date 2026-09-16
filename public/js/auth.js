@@ -109,9 +109,12 @@ async function doLogin(){
       return;
     }
 
+    // The token is the credential; the user record is only what the UI shows.
+    // Store the token first so the socket upgrade below can carry it.
+    setSessionToken(data.token);
     setSession(data.user);
     localStorage.setItem('currentUser', JSON.stringify(data.user));
-    socket.emit('login', data.user);
+    socket.emit('login', { token: data.token });
     hide($('modalLogin'));
     if (window.updateUIForSession) updateUIForSession();
     if (window.updateProfileCard) updateProfileCard(data.user);
@@ -128,6 +131,12 @@ async function doLogin(){
 }
 
 function logout(){
+  // Tell the server to end the session, so the token stops working everywhere
+  // rather than staying valid until it expires. Best effort: the local sign-out
+  // below happens either way.
+  try { authFetch('/api/logout', { method: 'POST' }); } catch(e){ /* ignore */ }
+  try { if (window.socket && window.socket.connected) window.socket.emit('logout'); } catch(e){ /* ignore */ }
+
   clearSession();
   localStorage.removeItem('currentUser');
   // The unread badge lives in localStorage, which is per browser rather than
