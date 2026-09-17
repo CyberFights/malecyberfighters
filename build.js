@@ -416,14 +416,20 @@ async function build() {
     const bundleUrl = `/dist/js/${name}`;
 
     // Single pass over the original offsets: the bundle takes the place of the
-    // first script tag (so execution order relative to the remaining,
-    // non-bundled tags is unchanged) and the rest are removed.
+    // LAST bundled script tag and the rest are removed. It must be inserted
+    // last (not first) so that any non-bundled external dependency that is
+    // interleaved among the page's scripts — e.g. /socket.io/socket.io.js,
+    // which /js/socket.js and friends call at top level — still loads *before*
+    // the bundle. Inserting at the first tag would run the whole bundle ahead
+    // of socket.io, throw `io is not defined`, and abort every script after
+    // it (including landing.js's age-gate handler), breaking the page.
     const sorted = scriptTags.slice().sort((a, b) => a.index - b.index);
+    const lastIdx = sorted.length - 1;
     let out = '';
     let cursor = 0;
     sorted.forEach((tag, i) => {
       out += html.slice(cursor, tag.index);
-      out += i === 0 ? `<script src="${bundleUrl}"></script>` : '';
+      out += i === lastIdx ? `<script src="${bundleUrl}"></script>` : '';
       cursor = tag.index + tag.full.length;
     });
     html = out + html.slice(cursor);
