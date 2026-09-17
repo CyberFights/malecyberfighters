@@ -2979,3 +2979,25 @@ h3{
   }
 }
 
+
+/* ---------------------------------------------------------------------
+   SCROLL-BACK BAR
+   Sits directly above a message feed and offers the page of history that
+   sits behind what is on screen. Hidden until the server says there is
+   more to load, so a short conversation shows no control at all.
+   --------------------------------------------------------------------- */
+.history-bar{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:8px 10px;
+  border-bottom:1px solid var(--panel-border);
+  background:var(--glass);
+}
+/* `display:flex` above would defeat the hidden attribute without this. */
+.history-bar[hidden]{ display:none; }
+.history-bar .history-status{
+  font-size:12px;
+  color:var(--muted);
+  opacity:.85;
+}

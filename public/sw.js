@@ -5,7 +5,7 @@
  * live JS/CSS that build chat UI always use the network. Only icons and
  * the offline page are reused from cache.
  */
-const CACHE_NAME = 'cyber-fights-app-shell-v4';
+const CACHE_NAME = 'cyber-fights-app-shell-v5';
 const STATIC_ASSETS = [
   '/manifest.webmanifest',
   '/images/mcf-180.png',
@@ -82,5 +82,60 @@ self.addEventListener('fetch', event => {
         return response;
       });
     })
+  );
+});
+
+/* ----------------------------------------------------------------------
+   Push notifications.
+
+   The server only pushes when a DM reaches no live socket of the member's —
+   the tab is closed, the laptop asleep — which is exactly when a notification
+   is worth interrupting for. The payload carries who wrote and nothing else:
+   never the message text, because a notification body can appear on a lock
+   screen and is relayed through a third-party push service.
+   ---------------------------------------------------------------------- */
+self.addEventListener('push', event => {
+  let payload = {};
+  if (event.data) {
+    try {
+      payload = event.data.json();
+    } catch (err) {
+      // Not JSON: fall back to the raw text rather than dropping the alert.
+      payload = { title: 'Male Cyber Fighters', body: event.data.text() };
+    }
+  }
+
+  const title = payload.title || 'Male Cyber Fighters';
+  const options = {
+    body: payload.body || 'You have a new notification.',
+    icon: '/images/mcf-192.png',
+    badge: '/images/mcf-180.png',
+    // Same sender replaces its own unread notification instead of stacking one
+    // per message.
+    tag: payload.tag || 'mcf-push',
+    renotify: false,
+    data: payload.data || { url: '/' }
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+
+  const target = (event.notification.data && event.notification.data.url) || '/';
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then(clientList => {
+        // Bring an existing window forward rather than opening a second arena.
+        for (const client of clientList) {
+          if (client.url && new URL(client.url).origin === self.location.origin && 'focus' in client) {
+            client.navigate(target);
+            return client.focus();
+          }
+        }
+        return self.clients.openWindow(target);
+      })
   );
 });

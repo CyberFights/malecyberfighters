@@ -20,7 +20,10 @@ const { rewriteDiscordInvites } = require('./discordInviteFilter');
 const { createDmDelivery } = require('./dmDelivery');
 const { createStoryRouter } = require('./storyRoutes');
 const { createSessionManager, cookieOptions, safeEqual, COOKIE_NAME } = require('./sessions');
+const { createRetentionJob, configFromEnv } = require('./retention');
+const { createPushNotifier } = require('./pushNotifications');
 const assets = require('./assets');
+const { pagingRequest, pageEnvelope } = require('./historyPaging');
 const {
   buildWebhookPayload,
   publicBaseUrlFromSocket,
@@ -77,6 +80,12 @@ const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 // message two members had ever exchanged.
 const DM_HISTORY_PAGE = 200;
 const DM_HISTORY_MAX = 500;
+
+// The arena feed behaves the same way: it opens on the newest page and scrolls
+// back a page at a time. Before this, "load the public messages" always meant
+// "load the newest 200", so anything older was simply unreachable.
+const PUBLIC_HISTORY_PAGE = 200;
+const PUBLIC_HISTORY_MAX = 500;
 
 
 
@@ -1307,6 +1316,9 @@ const RoomSchema = new mongoose.Schema({
 });
 
 roomMessageSchema.index({ room: 1, time: 1 });
+// The retention sweep prunes by age across every room at once, which the
+// room-first index above cannot serve.
+roomMessageSchema.index({ time: 1 });
 
 // Forums and forum replies are kept in their own collections so a thread can
 // be loaded independently from the forum list and responses remain tied to a
@@ -1339,6 +1351,10 @@ const ipLogSchema = new mongoose.Schema({
   userAgent: String,
   createdAt: { type: Date, default: Date.now }
 });
+// The most sensitive collection on the site (IP + user agent per auth attempt),
+// and the one with the shortest retention window — the sweep needs this to find
+// the old ones without walking the whole log.
+ipLogSchema.index({ createdAt: 1 });
 
 const dmSchema = new mongoose.Schema({
   from: { type: String, required: true },
@@ -1511,6 +1527,45 @@ const sessionSchema = new mongoose.Schema({
 sessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 const Session = mongoose.model('Session', sessionSchema);
+
+// ---------- WEB PUSH ----------
+// One document per browser a member has registered for notifications, so a
+// phone, a laptop and an installed PWA each get their own. The endpoint is the
+// natural key: the same browser re-subscribing updates its record instead of
+// adding a duplicate that would be notified twice.
+const pushSubscriptionSchema = new mongoose.Schema({
+  username:   { type: String, required: true, index: true },
+  endpoint:   { type: String, required: true, unique: true },
+  p256dh:     { type: String, required: true },
+  auth:       { type: String, required: true },
+  createdAt:  { type: Date, default: Date.now },
+  lastSeenAt: { type: Date, default: Date.now }
+});
+
+const PushSubscription = mongoose.model('PushSubscription', pushSubscriptionSchema);
+
+// Push is only armed with a VAPID key pair. Without one the notifier reports
+// itself disabled and every send is a no-op, so the site behaves exactly as it
+// did before push existed. See .env.example for generating a pair.
+const push = createPushNotifier({
+  PushSubscription,
+  webpush: require('web-push'),
+  publicKey: (process.env.VAPID_PUBLIC_KEY || '').trim(),
+  privateKey: (process.env.VAPID_PRIVATE_KEY || '').trim(),
+  subject: (process.env.VAPID_SUBJECT || '').trim()
+});
+if (!push.configured) {
+  console.log('Web push disabled: set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY to enable notifications (see .env.example)');
+}
+
+// ---------- RETENTION ----------
+// Chat transcripts, the IP log and spent reset tokens are pruned on a schedule.
+// DMs are deliberately not, unless RETENTION_DM_DAYS is set — see retention.js.
+const retention = createRetentionJob({
+  models: { PublicMessage, RoomMessage, IpLog, PasswordReset, DM },
+  config: configFromEnv(process.env),
+  isConnected: () => mongoose.connection.readyState === 1
+});
 
 const sessions = createSessionManager({ Session, User, appBaseUrl: APP_BASE_URL });
 
@@ -2105,7 +2160,7 @@ app.use("/api/story", createStoryRouter({
   DM,
   mongoose,
   isLocalClipUrl,
-  emitToUser: (...args) => emitToUser(...args),
+  emitToUser: (...args) => deliverToUser(...args),
   forwardDMToDiscord: (...args) => forwardDMToDiscord(...args)
 }));
 
@@ -2436,6 +2491,7 @@ app.post("/api/admin/delete-user", requireAdmin, async (req, res) => {
     }
 
     await signOutEverywhere(username, "deleted");
+    await push.unsubscribeAll(username);
     if (user.socketId) {
       io.to(user.socketId).emit("forceLogout", { reason: "deleted" });
     }
@@ -2588,7 +2644,7 @@ app.post("/api/send-dm", sessions.requireUser, async (req, res) => {
 
   const target = await User.findOne({ username: to }).lean();
 
-  emitToUser(to, "privateMessage", { ...dm.toObject(), id: String(dm._id) });
+  deliverToUser(to, "privateMessage", { ...dm.toObject(), id: String(dm._id) });
 
   await forwardDMToDiscord(from, target, safeText);
 
@@ -2598,18 +2654,26 @@ app.post("/api/send-dm", sessions.requireUser, async (req, res) => {
 // ---------- API: PUBLIC CHAT HISTORY ----------
 app.get("/api/public-messages", async (req, res) => {
   try {
-    // Fetch the latest 200 records, then restore chronological display order.
+    // Paging backwards: the client sends the `oldest` timestamp it already has
+    // and receives the page immediately before it — the same contract
+    // /api/dm/history uses, so one scroll-back helper serves both feeds.
+    const { limit, filter } = pagingRequest(req.query, {
+      page: PUBLIC_HISTORY_PAGE,
+      max: PUBLIC_HISTORY_MAX
+    });
+
+    // Fetch the newest page, then restore chronological display order.
     // Sorting ascending before limiting returned the oldest 200 forever, so
     // new messages did not change the response and browsers kept seeing 304.
     const messages = (await PublicMessage
-      .find({})
+      .find(filter)
       .sort({ time: -1 })
-      .limit(200)
+      .limit(limit)
       .lean())
       .reverse();
 
     res.set("Cache-Control", "no-store, no-cache, must-revalidate");
-    res.json({ ok: true, messages });
+    res.json({ ok: true, ...pageEnvelope(messages, { limit }) });
   } catch (err) {
     console.error("load public messages error:", err);
     res.status(500).json({ ok: false });
@@ -3046,6 +3110,8 @@ app.post('/api/account/delete', sessions.requireUser, async (req, res) => {
     // No account, no sessions: drop every token issued for it and sign out every
     // device that was using one.
     await signOutEverywhere(username, 'deleted');
+    // No account, no notifications either.
+    await push.unsubscribeAll(username);
 
     // Clean up related data (DMs, stories, relationships, rooms ownership)
     try {
@@ -3279,6 +3345,42 @@ app.get('/api/me', async (req, res) => {
   return res.json({ ok: true, user: sessionUserPayload(found.user) });
 });
 
+// ---------- API: WEB PUSH ----------
+// GET /api/push/config
+//   The public VAPID key the browser encrypts a subscription to, and whether
+//   push is armed at all. Public on purpose: a signed-out visitor's browser asks
+//   before offering the button.
+app.get('/api/push/config', (req, res) => {
+  res.json({ ok: true, ...push.clientConfig() });
+});
+
+// POST /api/push/subscribe
+//   body: the PushSubscription JSON from the service worker registration.
+//   Bound to the signed-in member — a subscription cannot be registered for
+//   somebody else, so nobody can point another member's notifications at a
+//   browser they control.
+app.post('/api/push/subscribe', sessions.requireUser, async (req, res) => {
+  if (!push.configured) {
+    return res.status(503).json({ ok: false, error: 'push_not_configured' });
+  }
+  const result = await push.subscribe(req.username, req.body || {});
+  if (!result.ok) {
+    return res.status(400).json(result);
+  }
+  return res.json(result);
+});
+
+// POST /api/push/unsubscribe
+//   body: { endpoint } — forget this browser. Only the owner's own
+//   subscriptions can be removed.
+app.post('/api/push/unsubscribe', sessions.requireUser, async (req, res) => {
+  const endpoint = String(req.body?.endpoint || '').trim();
+  if (!endpoint) {
+    return res.status(400).json({ ok: false, error: 'missing_endpoint' });
+  }
+  return res.json(await push.unsubscribe(req.username, endpoint));
+});
+
 // ---------- API: LOGOUT ----------
 // POST /api/logout
 //   Ends the calling session only, so signing out in one browser does not drop
@@ -3494,17 +3596,15 @@ app.post("/api/dm/history", sessions.requireUser, async (req, res) => {
     return res.status(403).json({ ok: false, error: "not_your_conversation" });
   }
 
-  const requested = parseInt(req.body?.limit, 10);
-  const limit = Number.isFinite(requested) && requested > 0
-    ? Math.min(requested, DM_HISTORY_MAX)
-    : DM_HISTORY_PAGE;
-
   // Paging backwards: the client sends the `oldest` timestamp it already has
   // and receives the page immediately before it.
-  const beforeRaw = req.body?.before;
-  const before = beforeRaw ? new Date(beforeRaw) : null;
+  const { limit, filter: olderThan } = pagingRequest(req.body, {
+    page: DM_HISTORY_PAGE,
+    max: DM_HISTORY_MAX
+  });
 
   const filter = {
+    ...olderThan,
     $or: [
       { from: me, to: partner },
       { from: partner, to: me },
@@ -3513,7 +3613,6 @@ app.post("/api/dm/history", sessions.requireUser, async (req, res) => {
       { from: "SYSTEM", to: me }
     ]
   };
-  if (before && !Number.isNaN(before.getTime())) filter.time = { $lt: before };
 
   try {
     // Newest first so `limit` keeps the most recent page, then back into the
@@ -3521,12 +3620,7 @@ app.post("/api/dm/history", sessions.requireUser, async (req, res) => {
     const messages = await DM.find(filter).sort({ time: -1 }).limit(limit).lean();
     messages.reverse();
 
-    return res.json({
-      ok: true,
-      messages,
-      oldest: messages.length ? messages[0].time : null,
-      hasMore: messages.length === limit
-    });
+    return res.json({ ok: true, ...pageEnvelope(messages, { limit }) });
   } catch (err) {
     console.error("dm history error:", err);
     return res.status(500).json({ ok: false, error: "server_error" });
@@ -3725,6 +3819,36 @@ app.post('/api/forums/:forumId/replies', async (req, res) => {
 // Directed DM delivery (per-user socket rooms) and the server-side unread
 // counts the client is sent on connect. Split into its own module so the
 // rules can be tested without a running deployment; see dmDelivery.js.
+/**
+ * Deliver to a member's live sessions — and when there are none, push instead.
+ *
+ * `emitToUser` returns how many sockets it reached, so 0 means the member is
+ * not here: the tab is closed, the laptop is asleep, the phone is in a pocket.
+ * That is exactly when a DM bridged in from Discord or a story waiting for
+ * approval used to disappear without a trace, because the unread badge is only
+ * fed by a live socket and the reconnect catch-up only runs when they come back
+ * on their own. This is the hook that brings them back.
+ *
+ * Only `privateMessage` pushes. Presence, typing and room events are ambient —
+ * notifying on those would be noise, and a member who is not connected is not
+ * missing anything they would want woken for.
+ *
+ * The message text is never included; see pushNotifications.js.
+ */
+function deliverToUser(username, event, payload) {
+  const reached = emitToUser(username, event, payload);
+
+  if (reached === 0 && event === 'privateMessage' && push.configured) {
+    const sender = payload && payload.from;
+    const isSystem = !sender || String(sender).toUpperCase() === 'SYSTEM';
+    push
+      .notify({ to: username, from: sender, kind: isSystem ? 'system' : 'dm' })
+      .catch(err => console.error('push notify error:', err.message || err));
+  }
+
+  return reached;
+}
+
 const { userRoom, emitToUser, markDMRead, getUnreadDMCounts } =
   createDmDelivery({ User, DM, io });
 
@@ -4189,7 +4313,9 @@ socket.on("editPublicMessage", async (data) => {
       // One emit per user room: the recipient's other sessions and the
       // sender's own echo both need it, and neither should depend on which
       // single socket the user document happens to remember.
-      emitToUser(pm.to, "privateMessage", imagePayload);
+      // The recipient gets a push when no session of theirs is live; the
+      // sender's own echo does not, since they are obviously here.
+      deliverToUser(pm.to, "privateMessage", imagePayload);
       emitToUser(from, "privateMessage", imagePayload);
 
       await forwardDMToDiscord(from, receiver, `[Image attachment: ${pm.imageUrl}]`);
@@ -4220,7 +4346,7 @@ socket.on("editPublicMessage", async (data) => {
         time: saved.time
       };
 
-      emitToUser(pm.to, "privateMessage", clipPayload);
+      deliverToUser(pm.to, "privateMessage", clipPayload);
       emitToUser(from, "privateMessage", clipPayload);
 
       let appBaseUrl = APP_BASE_URL || "https://male-cyber-fighters.com";
@@ -4246,7 +4372,7 @@ socket.on("editPublicMessage", async (data) => {
     const messageId = String(saved._id);
 
     // Recipient sees the translation, sender sees exactly what they typed.
-    emitToUser(pm.to, "privateMessage", {
+    deliverToUser(pm.to, "privateMessage", {
       id: messageId,
       from,
       to: pm.to,
@@ -4580,9 +4706,22 @@ socket.on("editPublicMessage", async (data) => {
 });
 
 const setupDiscordListener = require('./setupDiscordListener');
-setupDiscordListener(User, DM, translateText, emitToUser, sendDiscordDM, discordEvents, rehostImageToImgBB);
+// deliverToUser rather than emitToUser, so a DM bridged in from Discord while
+// the member is offline reaches them as a push.
+setupDiscordListener(User, DM, translateText, deliverToUser, sendDiscordDM, discordEvents, rehostImageToImgBB);
 
 // ---------- START ----------
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Server listening on http://localhost:${PORT}`);
+
+  // Say what will be pruned and what will not, so the window is visible in the
+  // host's log rather than buried in the environment.
+  const rc = retention.config;
+  const days = value => (value > 0 ? `${value}d` : 'kept forever');
+  console.log(
+    `retention: arena ${days(rc.publicMessageDays)}, rooms ${days(rc.roomMessageDays)}, ` +
+    `ip-log ${days(rc.ipLogDays)}, reset-tokens ${days(rc.passwordResetDays)}, ` +
+    `dms ${days(rc.dmDays)} — sweeping every ${rc.intervalHours}h`
+  );
+  retention.start();
 });

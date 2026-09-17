@@ -111,6 +111,16 @@
     </div>
   </section>
 
+  <section id="notificationsCard" class="app-download-card" aria-labelledby="notificationsHeading" hidden>
+    <div class="app-download-icon" aria-hidden="true">🔔</div>
+    <div class="app-download-copy">
+      <h2 id="notificationsHeading">Hear about a DM you are not watching</h2>
+      <p class="small muted">Turn on notifications and a direct message reaches you even with the arena closed. Only the sender's name is shown &mdash; never the message itself.</p>
+      <p id="notificationsHint" class="small muted"></p>
+    </div>
+    <button id="btnNotifications" class="small-btn" type="button" aria-pressed="false" hidden>Enable notifications</button>
+  </section>
+
 </div>
 
 <!-- ============================================================
@@ -340,6 +350,10 @@
   </div>
 
   <div id="chatBody" class="chat-body">
+    <div class="history-bar" id="publicHistoryBar" hidden>
+      <button type="button" id="btnPublicOlder" class="ghost small-btn">Load earlier messages</button>
+      <span class="history-status small muted" id="publicHistoryStatus"></span>
+    </div>
     <div id="publicFeed" class="public-feed"></div>
     <aside class="online-list">
       <h4>Online</h4>
@@ -386,6 +400,10 @@
   </div>
 
   <div class="chat-body">
+    <div class="history-bar" id="dmHistoryBar" hidden>
+      <button type="button" id="btnDmOlder" class="ghost small-btn">Load earlier messages</button>
+      <span class="history-status small muted" id="dmHistoryStatus"></span>
+    </div>
     <div id="dmMessages" class="public-feed"></div>
   </div>
 
@@ -900,9 +918,12 @@ Moderator decisions are final. </p>
 <script src="/js/audio-calls.js?v=5"></script>
 <script src="/js/emoji-picker.js"></script>
 <script src="/js/physique.js"></script>
+<script src="/js/unread-badge.js"></script>
+<script src="/js/scroll-back.js"></script>
 <script src="/js/mobile.js"></script>
 <script src="/js/story-ui.js?v=1"></script>
 <script src="/js/pwa-install.js"></script>
+<script src="/js/push.js"></script>
 <script src="/js/account.js"></script>
 <script src="/js/popup-dissolve.js"></script>
 

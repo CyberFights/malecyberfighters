@@ -285,13 +285,27 @@ function authFetch(url, options){
   return fetch(url, opts);
 }
 
-function setSession(user){ localStorage.setItem(STORAGE_SESSION, JSON.stringify(user)); }
+/* Signing in or out is worth announcing: controls that only make sense for a
+   member — notifications, install — listen for this instead of polling. */
+function announceSession(user){
+  try {
+    document.dispatchEvent(new CustomEvent('mcf:session', {
+      detail: { username: (user && user.username) ? user.username : null }
+    }));
+  } catch (e) { /* a WebView without CustomEvent simply gets no announcement */ }
+}
+
+function setSession(user){
+  localStorage.setItem(STORAGE_SESSION, JSON.stringify(user));
+  announceSession(user);
+}
 function getSession(){ return JSON.parse(localStorage.getItem(STORAGE_SESSION) || 'null'); }
 function clearSession(){
   localStorage.removeItem(STORAGE_SESSION);
   // The token goes with it: keeping one without the other would leave a
   // browser that looks signed out but can still act as that member.
   clearSessionToken();
+  announceSession(null);
 }
 
 window.setSessionToken = setSessionToken;
@@ -349,6 +363,9 @@ function getUnreadMap() {
 
 function saveUnreadMap(map) {
   localStorage.setItem(STORAGE_DM_UNREAD, JSON.stringify(map));
+  // Every unread change funnels through here, so this is the one place that
+  // has to tell the tab-title / favicon badge the count moved.
+  if (window.MCFUnreadBadge) window.MCFUnreadBadge.refresh();
 }
 
 function incrementUnread(fromUser) {
@@ -895,6 +912,7 @@ function getRoomUnread() {
 
 function saveRoomUnread(map) {
   localStorage.setItem(STORAGE_ROOM_UNREAD, JSON.stringify(map));
+  if (window.MCFUnreadBadge) window.MCFUnreadBadge.refresh();
 }
 
 function incrementRoomUnread(roomId) {

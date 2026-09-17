@@ -16,6 +16,15 @@ const { JSDOM } = require('jsdom');
 const ROOT = path.join(__dirname, '..');
 const PAGE = fs.readFileSync(path.join(ROOT, 'public', 'mobile.html'), 'utf8');
 const SOURCE = fs.readFileSync(path.join(ROOT, 'public', 'js', 'mobile.js'), 'utf8');
+// The page loads this before mobile.js; the real one is used here too, so the
+// paging assertions cover the shipped controller rather than a stand-in.
+const SCROLL_BACK_SOURCE = fs.readFileSync(
+  path.join(ROOT, 'public', 'js', 'scroll-back.js'), 'utf8'
+);
+// The page loads the badge before mobile.js so the unread counters can reach it.
+const UNREAD_BADGE_SOURCE = fs.readFileSync(
+  path.join(ROOT, 'public', 'js', 'unread-badge.js'), 'utf8'
+);
 
 const tick = (ms = 50) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -28,8 +37,13 @@ async function waitFor(predicate, timeoutMs = 5000) {
   return predicate();
 }
 
-/** Boots the mobile page as "username", past the age gate, sockets connected. */
-async function startMobilePage(username = 'bob') {
+/**
+ * Boots the mobile page as "username", past the age gate, sockets connected.
+ *
+ * `dmHistory` and `publicHistory` script the pages the matching endpoints
+ * return; every request is recorded so a test can assert on the cursor sent.
+ */
+async function startMobilePage(username = 'bob', { dmHistory = null, publicHistory = null } = {}) {
   const dom = new JSDOM(PAGE, {
     url: 'http://127.0.0.1/',
     pretendToBeVisual: true,
@@ -51,11 +65,39 @@ async function startMobilePage(username = 'bob') {
     return sock;
   };
 
-  win.fetch = async () => ({
-    json: async () => ({ ok: true, messages: [], partners: [], users: [], stories: [] })
-  });
+  const requests = [];
+  const dmPages = dmHistory ? [...dmHistory] : [];
+  const publicPages = publicHistory ? [...publicHistory] : [];
+  win.fetch = async (url, options) => {
+    const target = String(url);
+    const body = options && options.body ? JSON.parse(options.body) : null;
+    requests.push({ url: target, body });
+
+    if (target.includes('/api/dm/history')) {
+      const page = dmPages.length ? dmPages.shift() : { ok: true, messages: [] };
+      return { ok: true, json: async () => page };
+    }
+    if (target.includes('/api/public-messages')) {
+      const page = publicPages.length
+        ? publicPages.shift()
+        : { ok: true, messages: [], oldest: null, hasMore: false };
+      return { ok: true, json: async () => page };
+    }
+    return {
+      ok: true,
+      json: async () => ({ ok: true, messages: [], partners: [], users: [], stories: [] })
+    };
+  };
   win.localStorage.setItem('cw_session_v1', JSON.stringify({ username, display: username }));
 
+  // physique.js supplies the avatar renderer on the real page; jsdom does not
+  // load the page's other scripts, so the harness provides it the same way it
+  // provides the sockets and fetch.
+  win.renderMessageAvatar = (from, display) =>
+    `<div class="avatar-fallback">${String(display || from || '?')[0]}</div>`;
+
+  win.eval(UNREAD_BADGE_SOURCE);
+  win.eval(SCROLL_BACK_SOURCE);
   win.eval(SOURCE);
 
   // mobile.js defers start() to DOMContentLoaded when it is evaluated while
@@ -76,8 +118,14 @@ async function startMobilePage(username = 'bob') {
   return {
     win,
     sockets,
+    requests,
+    dmRequests: () => requests.filter(r => r.url.includes('/api/dm/history')),
+    publicRequests: () => requests.filter(r => r.url.includes('/api/public-messages')),
+    historyBar: id => win.document.getElementById(id),
+    historyStatus: id => win.document.getElementById(id),
     badge,
     badgeText: () => badge().textContent,
+    title: () => win.document.title,
     unreadMap: () => JSON.parse(win.localStorage.getItem('cw_dm_unread') || '{}'),
     dmReads,
     /** Deliver a DM to every socket the page holds, like the server's room does. */
@@ -169,6 +217,186 @@ test('our own echoed message is not badged', async () => {
 
     assert.equal(page.badgeText(), '');
     assert.deepEqual(page.unreadMap(), {});
+  } finally {
+    await page.close();
+  }
+});
+
+/* ---------- SCROLL-BACK ----------
+   The phone client has two feeds worth paging: the arena and a DM. Both are
+   driven here through the real page markup and the real controller. */
+
+const arenaMsg = text => ({
+  id: text, from: 'alice', display: 'Alice', text, time: new Date('2026-09-10T00:00:00.000Z')
+});
+
+test('the arena feed walks back through history a page at a time', async () => {
+  const page = await startMobilePage('bob', {
+    publicHistory: [
+      { ok: true, messages: [arenaMsg('new-1'), arenaMsg('new-2')], oldest: 'cursor-new', hasMore: true },
+      { ok: true, messages: [arenaMsg('old-1'), arenaMsg('old-2')], oldest: 'cursor-old', hasMore: false }
+    ]
+  });
+  try {
+    const feed = () => page.win.document.getElementById('publicFeed');
+    assert.ok(await waitFor(() => feed().querySelectorAll('.message-row').length === 2),
+      'the newest page rendered on entry');
+
+    const bar = page.historyBar('publicHistoryBar');
+    assert.ok(bar, 'the page carries the scroll-back control');
+    assert.equal(bar.hidden, false, 'offered, because the server says there is more');
+
+    feed().scrollTop = 0;
+    feed().dispatchEvent(new page.win.Event('scroll'));
+
+    assert.ok(await waitFor(() => feed().querySelectorAll('.message-row').length === 4),
+      'the older page rendered');
+
+    // Chronological: earlier messages land above later ones.
+    const rows = [...feed().querySelectorAll('.message-row')].map(row => row.textContent);
+    assert.ok(rows[0].includes('old-1'), `first row was "${rows[0]}"`);
+    assert.ok(rows[1].includes('old-2'));
+    assert.ok(rows[2].includes('new-1'));
+    assert.ok(rows[3].includes('new-2'));
+
+    // The cursor travels in the query string of the second request.
+    const older = page.publicRequests().at(-1);
+    assert.match(older.url, /before=cursor-new/);
+    assert.match(older.url, /limit=100/);
+
+    // The beginning of the archive stops offering.
+    assert.ok(await waitFor(() => bar.hidden === true));
+    assert.match(page.historyStatus('publicHistoryStatus').textContent, /beginning/i);
+
+    feed().dispatchEvent(new page.win.Event('scroll'));
+    await tick(80);
+    assert.equal(page.publicRequests().length, 2, 'no request past the beginning');
+  } finally {
+    await page.close();
+  }
+});
+
+test('a DM on the phone pages back the same way', async () => {
+  const page = await startMobilePage('bob', {
+    dmHistory: [
+      { ok: true, messages: [arenaMsg('dm-new'), arenaMsg('dm-newer')], oldest: 'dm-cursor', hasMore: true },
+      { ok: true, messages: [arenaMsg('dm-old')], oldest: 'dm-oldest', hasMore: false }
+    ]
+  });
+  try {
+    page.win.openPrivateWindow('alice');
+
+    const body = () => page.win.document.getElementById('dmMessages');
+    assert.ok(await waitFor(() => body().querySelectorAll('.message-row').length === 2),
+      'the conversation opened on its newest page');
+
+    const bar = page.historyBar('dmHistoryBar');
+    assert.ok(bar, 'the DM popup carries the scroll-back control');
+    assert.equal(bar.hidden, false);
+
+    body().scrollTop = 0;
+    body().dispatchEvent(new page.win.Event('scroll'));
+
+    assert.ok(await waitFor(() => body().querySelectorAll('.message-row').length === 3),
+      'the older page rendered');
+
+    const rows = [...body().querySelectorAll('.message-row')].map(row => row.textContent);
+    assert.ok(rows[0].includes('dm-old'), `first row was "${rows[0]}"`);
+    assert.ok(rows[1].includes('dm-new'));
+
+    const older = page.dmRequests().at(-1);
+    assert.equal(older.body.before, 'dm-cursor');
+    assert.equal(older.body.limit, 100);
+    assert.equal(older.body.b, 'alice', 'still the same conversation');
+
+    assert.ok(await waitFor(() => bar.hidden === true));
+  } finally {
+    await page.close();
+  }
+});
+
+test('closing the DM popup stops its history paging', async () => {
+  const page = await startMobilePage('bob', {
+    dmHistory: [
+      { ok: true, messages: [arenaMsg('dm-new')], oldest: 'dm-cursor', hasMore: true },
+      { ok: true, messages: [arenaMsg('dm-old')], oldest: 'dm-oldest', hasMore: false }
+    ]
+  });
+  try {
+    page.win.openPrivateWindow('alice');
+    const body = () => page.win.document.getElementById('dmMessages');
+    assert.ok(await waitFor(() => body().querySelectorAll('.message-row').length === 1));
+
+    page.win.document.getElementById('dmClose').click();
+    assert.equal(page.historyBar('dmHistoryBar').hidden, true);
+
+    body().scrollTop = 0;
+    body().dispatchEvent(new page.win.Event('scroll'));
+    await tick(80);
+
+    assert.equal(page.dmRequests().length, 1, 'a closed conversation made no further request');
+  } finally {
+    await page.close();
+  }
+});
+
+/* ---------- UNREAD BADGE ----------
+   The same unread count that badges the DM button also has to reach the tab
+   title, so a member with the arena in a background tab can see it there. */
+
+test('an unread DM badges the tab title as well as the button', async () => {
+  const page = await startMobilePage();
+  try {
+    const baseTitle = page.title();
+    assert.ok(baseTitle.length > 0, 'the page has a title to prefix');
+
+    page.deliverEverywhere({ id: 'dm1', from: 'alice', to: 'bob', text: 'hey', time: new Date() });
+
+    assert.ok(await waitFor(() => page.badgeText() === '1'));
+    assert.ok(await waitFor(() => page.title() === `(1) ${baseTitle}`),
+      `title was "${page.title()}"`);
+
+    page.deliverEverywhere({ id: 'dm2', from: 'carol', to: 'bob', text: 'yo', time: new Date() });
+    assert.ok(await waitFor(() => page.title() === `(2) ${baseTitle}`));
+  } finally {
+    await page.close();
+  }
+});
+
+test('opening the conversation clears the tab title again', async () => {
+  const page = await startMobilePage();
+  try {
+    const baseTitle = page.title();
+
+    page.deliverEverywhere({ id: 'dm1', from: 'alice', to: 'bob', text: 'hey', time: new Date() });
+    assert.ok(await waitFor(() => page.title() === `(1) ${baseTitle}`));
+
+    page.win.openPrivateWindow('alice');
+
+    assert.ok(await waitFor(() => page.title() === baseTitle),
+      `title was "${page.title()}"`);
+    assert.equal(page.badgeText(), '');
+  } finally {
+    await page.close();
+  }
+});
+
+test('an unread room message counts towards the same badge', async () => {
+  const page = await startMobilePage();
+  try {
+    const baseTitle = page.title();
+
+    page.deliverEverywhere({ id: 'dm1', from: 'alice', to: 'bob', text: 'hey', time: new Date() });
+    assert.ok(await waitFor(() => page.title() === `(1) ${baseTitle}`));
+
+    // A room message for a room that is not open is unread too — and this page
+    // counts those in memory, which is why the badge takes sources.
+    page.sockets.forEach(sock => sock.fire('roomMessage', {
+      id: 'r1', room: 'room-1', from: 'carol', text: 'anyone in here', type: 'text'
+    }));
+
+    assert.ok(await waitFor(() => page.title() === `(2) ${baseTitle}`),
+      `title was "${page.title()}", total ${page.win.MCFUnreadBadge.total()}`);
   } finally {
     await page.close();
   }

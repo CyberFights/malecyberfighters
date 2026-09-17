@@ -226,6 +226,16 @@
     </div>
   </section>
 
+  <section id="notificationsCard" class="app-download-card" aria-labelledby="notificationsHeading" hidden>
+    <div class="app-download-icon" aria-hidden="true">🔔</div>
+    <div class="app-download-copy">
+      <h2 id="notificationsHeading">Hear about a DM you are not watching</h2>
+      <p class="small muted">Turn on notifications and a direct message reaches you even with the arena closed. Only the sender's name is shown &mdash; never the message itself.</p>
+      <p id="notificationsHint" class="small muted"></p>
+    </div>
+    <button id="btnNotifications" class="small-btn" type="button" aria-pressed="false" hidden>Enable notifications</button>
+  </section>
+
   <!-- DM CHAT POPUP (used by the mobile DM implementation) -->
   <div id="dmPopup" class="chat-popup" style="display:none" data-partner="">
     <div class="chat-header">
@@ -372,6 +382,10 @@
         <span class="app-store-coming-soon">iPhone and iPad — App Store build coming soon</span>
       </div>
       <p id="appInstallHintDesktop" class="small muted">The mobile app uses the same live account, arena, rooms and DMs.</p>
+      <span id="notificationsCardDesktop" hidden>
+        <button id="btnNotificationsDesktop" class="download-btn" type="button" aria-pressed="false" hidden>Enable notifications</button>
+        <span id="notificationsHintDesktop" class="small muted" style="display:block"></span>
+      </span>
     </div>
   </div>
   <div class="footer-brand">Male Cyber Fighters</div>
@@ -924,6 +938,10 @@
   </div>
 
   <div class="chat-body">
+    <div class="history-bar" id="publicHistoryBar" hidden>
+      <button type="button" id="btnPublicOlder" class="ghost small-btn">Load earlier messages</button>
+      <span class="history-status small muted" id="publicHistoryStatus"></span>
+    </div>
     <div class="public-feed" id="publicFeed"></div>
 
     <div class="online-list card">
@@ -1575,6 +1593,7 @@ Moderator decisions are final. </p>
 <script src="/js/image-proxy.js"></script>
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/physique.js"></script>
+<script src="/js/unread-badge.js"></script>
 <script src="/js/utils.js"></script>
 <script src="/js/story-ui.js?v=1"></script>
 <script src="/js/emoji-picker.js"></script>
@@ -1584,6 +1603,7 @@ Moderator decisions are final. </p>
 <script src="/js/auth.js"></script>
 <script src="/js/register.js"></script>
 <script src="/js/profile-card.js?v=1"></script>
+<script src="/js/scroll-back.js"></script>
 <script src="/js/chat.js"></script>
 <script src="/js/forums.js"></script>
 <script src="/js/pm.js?v=4"></script>
@@ -1602,6 +1622,7 @@ Moderator decisions are final. </p>
 <script src="/js/popup-dissolve.js"></script>
 <script src="/js/download.js"></script>
 <script src="/js/pwa-install.js"></script>
+<script src="/js/push.js"></script>
 
 </body>
 </html>

@@ -89,15 +89,69 @@ function makePmWindowDraggable(pmWindow) {
    SERVER-SYNCED DM SYSTEM (MongoDB + Translation + Images)
 ============================================================ */
 
-async function loadDMHistory(a, b) {
-  const res = await fetch("/api/dm/history", {
+async function loadDMHistory(a, b, opts) {
+  const payload = { a, b };
+  // `before` is the oldest timestamp already on screen: the server returns the
+  // page immediately preceding it, which is what scrolling up asks for.
+  if (opts && opts.before) payload.before = opts.before;
+  if (opts && opts.limit) payload.limit = opts.limit;
+
+  const res = await authFetch("/api/dm/history", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ a, b })
+    body: JSON.stringify(payload)
   });
 
   const data = await res.json();
-  return data.messages || [];
+  return {
+    messages: (data && data.messages) || [],
+    oldest: data ? data.oldest : null,
+    hasMore: !!(data && data.hasMore)
+  };
+}
+
+/* ---------- SCROLL-BACK ----------
+   One controller per open window, keyed by partner. The shared paging logic
+   (cursor, in-flight guard, end of history, holding the reader's place) lives
+   in /js/scroll-back.js so the arena feed and DMs behave the same way. */
+const pmScrollBacks = new Map();
+
+function attachPmScrollBack(targetUsername, firstPage) {
+  const body = document.getElementById("pmBody_" + targetUsername);
+  if (!body || !window.MCFScrollBack) return;
+
+  destroyPmScrollBack(targetUsername);
+
+  const controller = MCFScrollBack.create({
+    scroller: body,
+    ui: {
+      bar: document.getElementById("pmHistoryBar_" + targetUsername),
+      button: document.getElementById("pmOlder_" + targetUsername),
+      status: document.getElementById("pmHistoryStatus_" + targetUsername)
+    },
+    load: async before => {
+      const me = getSession();
+      if (!me) throw new Error("signed_out");
+      return loadDMHistory(me.username, targetUsername, { before, limit: 100 });
+    },
+    prepend: messages => {
+      // A new message rebuilds this window from body._history, so the page just
+      // loaded has to be folded into it or it would vanish on the next render.
+      body._history = [...messages, ...(body._history || [])];
+      renderPMHistory(targetUsername, messages, { prepend: true });
+    }
+  });
+
+  controller.reset({ oldest: firstPage.oldest, hasMore: firstPage.hasMore });
+  pmScrollBacks.set(targetUsername, controller);
+}
+
+function destroyPmScrollBack(targetUsername) {
+  const existing = pmScrollBacks.get(targetUsername);
+  if (existing) {
+    existing.destroy();
+    pmScrollBacks.delete(targetUsername);
+  }
 }
 
 /* ---------- Upload Image Using FormData (matches your server) ---------- */
@@ -220,6 +274,11 @@ function openPrivateWindow(targetUsername) {
       </div>
     </div>
 
+    <div class="history-bar pm-history-bar" id="pmHistoryBar_${targetUsername}" hidden>
+      <button class="ghost small-btn" type="button" id="pmOlder_${targetUsername}">Load earlier messages</button>
+      <span class="history-status small muted" id="pmHistoryStatus_${targetUsername}"></span>
+    </div>
+
     <div class="pm-body" id="pmBody_${targetUsername}"></div>
 
     <div class="pm-input">
@@ -267,6 +326,7 @@ function openPrivateWindow(targetUsername) {
   pmWindow.querySelector(".pm-body").appendChild(typing);
 
   pmWindow.querySelector(".pm-close").addEventListener("click", () => {
+    destroyPmScrollBack(targetUsername);
     pmWindow.remove();
   });
 
@@ -282,6 +342,8 @@ function openPrivateWindow(targetUsername) {
     clearUnread(targetUsername);
     markConversationRead(targetUsername);
     renderPMHistory(targetUsername, []);
+    // The server has nothing left to page through either.
+    destroyPmScrollBack(targetUsername);
     const body = document.getElementById("pmBody_" + targetUsername);
     if (body) body._history = [];
     if (window.updateDMListSidebar) updateDMListSidebar();
@@ -357,10 +419,11 @@ pmWindow.querySelector(".pm-story").addEventListener("click", () => {
       if (file) uploadDMClip(targetUsername, file);
     });
 
-  loadDMHistory(s.username, targetUsername).then(history => {
+  loadDMHistory(s.username, targetUsername).then(page => {
     const body = document.getElementById("pmBody_" + targetUsername);
-    if (body) body._history = history;
-    renderPMHistory(targetUsername, history);
+    if (body) body._history = page.messages;
+    renderPMHistory(targetUsername, page.messages);
+    attachPmScrollBack(targetUsername, page);
   });
 
   clearUnread(targetUsername);
@@ -412,14 +475,29 @@ function sendPM(targetUsername) {
 
 /* ---------- Render DM History ---------- */
 
-function renderPMHistory(targetUsername, messages) {
+function renderPMHistory(targetUsername, messages, options) {
   const s = getSession();
   const body = document.getElementById("pmBody_" + targetUsername);
   if (!body) return;
 
+  const prepend = !!(options && options.prepend);
+
   // Preserve typing indicator if present
   const typingEl = document.getElementById("pmTyping_" + targetUsername);
-  body.innerHTML = "";
+
+  // A rebuild happens whenever a message arrives. Someone parked at the bottom
+  // should follow the conversation down; someone who scrolled up into history
+  // should stay exactly where they were reading.
+  const prevHeight = body.scrollHeight;
+  const prevTop = body.scrollTop;
+  const stickToBottom = body.childElementCount === 0
+    || (prevHeight - prevTop - body.clientHeight < 60);
+
+  if (!prepend) body.innerHTML = "";
+
+  // Captured once, before anything is inserted: every older row goes in above
+  // it, which keeps the prepended page in chronological order.
+  const anchor = prepend ? body.firstChild : null;
 
   messages.forEach(m => {
     // Skip SYSTEM messages that aren't for this conversation partner
@@ -484,11 +562,18 @@ function renderPMHistory(targetUsername, messages) {
       div.appendChild(clipEl);
     }
 
-    body.appendChild(div);
+    if (anchor) body.insertBefore(div, anchor);
+    else body.appendChild(div);
   });
 
-  if (typingEl) body.appendChild(typingEl);
-  body.scrollTop = body.scrollHeight;
+  if (typingEl && !prepend) body.appendChild(typingEl);
+
+  if (prepend) return; // the caller holds the scroll position instead
+  if (stickToBottom) {
+    body.scrollTop = body.scrollHeight;
+  } else {
+    body.scrollTop = prevTop + (body.scrollHeight - prevHeight);
+  }
 }
 document.addEventListener("click", async (e) => {
   if (e.target.classList.contains("approveRelBtn")) {
