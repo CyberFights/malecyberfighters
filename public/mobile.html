@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Cyber Fights">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="apple-touch-icon" href="/images/mcf.png">
+<link rel="apple-touch-icon" href="/images/mcf-180.png">
 
 <link rel="stylesheet" href="/css/mobile.css?v=8">
 <link rel="stylesheet" href="/css/slash-commands.css?v=1">
@@ -38,7 +38,7 @@
      ============================================================ -->
 <div id="authScreen" class="auth-screen">
   <div class="auth-box">
-    <img src="./images/mcf.png" alt="Male Cyber Fighters" class="holo-avatar"
+    <img src="./images/mcf-192.png" alt="Male Cyber Fighters" class="holo-avatar"
          style="width:90px;height:90px;border-radius:10px;margin:auto;display:block">
 
     <h2 style="text-align:center;margin-top:12px">NOVA OS Mobile</h2>
@@ -57,7 +57,7 @@
 
   <header class="mobile-header">
     <div class="brand">
-      <img src="./images/mcf.png" alt="" class="holo-avatar" style="height:56px;width:56px;border-radius:8px">
+      <img src="./images/mcf-192.png" alt="" class="holo-avatar" style="height:56px;width:56px;border-radius:8px">
       <div>
         <h1>Male Cyber Fighters</h1>
         <p class="lead">Arena • Rooms • DMs</p>
@@ -109,6 +109,16 @@
       <span>Android APK and iOS native builds are prepared in the mobile release pipeline.</span>
       <a href="https://github.com/CyberFights/malecyberfighters/releases" target="_blank" rel="noopener">View mobile releases</a>
     </div>
+  </section>
+
+  <section id="notificationsCard" class="app-download-card" aria-labelledby="notificationsHeading" hidden>
+    <div class="app-download-icon" aria-hidden="true">🔔</div>
+    <div class="app-download-copy">
+      <h2 id="notificationsHeading">Hear about a DM you are not watching</h2>
+      <p class="small muted">Turn on notifications and a direct message reaches you even with the arena closed. Only the sender's name is shown &mdash; never the message itself.</p>
+      <p id="notificationsHint" class="small muted"></p>
+    </div>
+    <button id="btnNotifications" class="small-btn" type="button" aria-pressed="false" hidden>Enable notifications</button>
   </section>
 
 </div>
@@ -340,6 +350,10 @@
   </div>
 
   <div id="chatBody" class="chat-body">
+    <div class="history-bar" id="publicHistoryBar" hidden>
+      <button type="button" id="btnPublicOlder" class="ghost small-btn">Load earlier messages</button>
+      <span class="history-status small muted" id="publicHistoryStatus"></span>
+    </div>
     <div id="publicFeed" class="public-feed"></div>
     <aside class="online-list">
       <h4>Online</h4>
@@ -386,6 +400,10 @@
   </div>
 
   <div class="chat-body">
+    <div class="history-bar" id="dmHistoryBar" hidden>
+      <button type="button" id="btnDmOlder" class="ghost small-btn">Load earlier messages</button>
+      <span class="history-status small muted" id="dmHistoryStatus"></span>
+    </div>
     <div id="dmMessages" class="public-feed"></div>
   </div>
 
@@ -900,9 +918,12 @@ Moderator decisions are final. </p>
 <script src="/js/audio-calls.js?v=5"></script>
 <script src="/js/emoji-picker.js"></script>
 <script src="/js/physique.js"></script>
+<script src="/js/unread-badge.js"></script>
+<script src="/js/scroll-back.js"></script>
 <script src="/js/mobile.js"></script>
 <script src="/js/story-ui.js?v=1"></script>
 <script src="/js/pwa-install.js"></script>
+<script src="/js/push.js"></script>
 <script src="/js/account.js"></script>
 <script src="/js/popup-dissolve.js"></script>
 

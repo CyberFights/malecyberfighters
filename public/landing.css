@@ -48,3 +48,11 @@ body {
   opacity: 0;
   transition: opacity 1.2s ease;
 }
+#introGif picture,
+#introGif img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}

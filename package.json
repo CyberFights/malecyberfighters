@@ -4,8 +4,10 @@
   "description": "Cyber Wrestling Chatroom with MongoDB, Socket.IO, Admin Panel, and Analytics",
   "main": "electron/main.js",
   "scripts": {
+    "build": "node build.js",
+    "prestart": "node build.js",
     "start": "node index.js",
-    "test": "node --test tests/*.test.js",
+    "test": "node --test --test-concurrency=1 tests/*.test.js",
     "desktop": "electron .",
     "dist": "electron-builder --publish never",
     "dist:linux": "electron-builder --linux --publish never",
@@ -14,9 +16,11 @@
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
+    "compression": "^1.8.2",
     "cors": "^2.8.5",
     "discord.js": "^14.27.0",
     "dotenv": "^16.4.0",
+    "esbuild": "^0.25.12",
     "express": "^4.19.0",
     "express-rate-limit": "^7.0.0",
     "form-data": "^4.0.0",
@@ -25,7 +29,8 @@
     "multer": "^1.4.5-lts.2",
     "node-fetch": "^2.6.7",
     "nodemailer": "^6.9.16",
-    "socket.io": "^4.7.5"
+    "socket.io": "^4.7.5",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "electron": "^43.4.1",
@@ -58,7 +63,7 @@
           ]
         }
       ],
-      "icon": "public/images/mcf.png"
+      "icon": "public/images/mcf-512.png"
     },
     "nsis": {
       "oneClick": false,
@@ -75,7 +80,7 @@
           ]
         }
       ],
-      "icon": "public/images/mcf.png",
+      "icon": "public/images/mcf-512.png",
       "category": "public.app-category.social-networking"
     },
     "linux": {
@@ -87,7 +92,7 @@
           ]
         }
       ],
-      "icon": "public/images/mcf.png",
+      "icon": "public/images/mcf-512.png",
       "category": "Network",
       "maintainer": "Male Cyber Fighters"
     }

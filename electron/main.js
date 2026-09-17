@@ -47,7 +47,7 @@ function createWindow() {
     title: 'Male Cyber Fighters',
     backgroundColor: '#020617',
     autoHideMenuBar: true,
-    icon: path.join(__dirname, '..', 'public', 'images', 'mcf.png'),
+    icon: path.join(__dirname, '..', 'public', 'images', 'mcf-512.png'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

@@ -15,3 +15,6 @@ uploads/
 mobile/android/
 mobile/ios/
 mobile/build/
+
+# front-end build output (npm run build) — content-hashed, regenerated on boot
+public/dist/

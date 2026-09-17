@@ -242,12 +242,19 @@ async function openRosterModal() {
   if (modal) modal.style.display = 'flex';
 
   try {
-    const res = await fetch('/api/allUsers');
+    const res = await authFetch('/api/allUsers');
     const data = await res.json();
     if (data.success) {
       window.allUsers = data.users;
       rosterPage = 1;
       renderRosterPopup();
+      return;
+    }
+    // The roster is members-only, so a signed-out visitor is told that rather
+    // than being shown an empty popup with no explanation.
+    const list = $('rosterPage') || $('rosterList');
+    if (res.status === 401 && list) {
+      list.innerHTML = '<div class="small muted">Sign in to see the member roster.</div>';
     }
   } catch (err) {
     console.error('Failed to load roster', err);
@@ -274,7 +281,7 @@ function openUserProfile(username) {
   if ($('vpHeight')) $('vpHeight').textContent = user.height || "Unknown";
   if ($('vpWeight')) $('vpWeight').textContent = (user.weight != null && user.weight !== "") ? user.weight + " lbs" : "Unknown";
   if ($('vpColorBox')) $('vpColorBox').style.background = user.color || "#7fd8ff";
-  if ($('vpAvatar')) $('vpAvatar').src = chatImgSrc(user.imageUrl) || "/images/mcf.png";
+  if ($('vpAvatar')) $('vpAvatar').src = chatImgSrc(user.imageUrl) || "/images/mcf-192.png";
   if (window.renderProfilePhotoGallery) {
     window.renderProfilePhotoGallery($('vpExtraPhotos'), user.extraPhotos);
   }
@@ -821,6 +828,8 @@ function startRoomEdit(div, msg){
 /* ============================================================
    PUBLIC CHAT — HISTORY
 ============================================================ */
+let publicScrollBack = null;
+
 async function loadPublicMessages(){
   const feed = $('publicFeed');
   if (!feed) return;
@@ -832,6 +841,44 @@ async function loadPublicMessages(){
   if (!data.ok) return;
 
   data.messages.forEach(m => appendPublicMessage(m, false));
+
+  attachPublicScrollBack(feed, data);
+}
+
+/* The arena opens on the newest page; scrolling up now walks backwards through
+   the archive a page at a time instead of stopping at message 200. */
+function attachPublicScrollBack(feed, firstPage){
+  if (publicScrollBack) {
+    publicScrollBack.destroy();
+    publicScrollBack = null;
+  }
+  if (!window.MCFScrollBack) return;
+
+  publicScrollBack = MCFScrollBack.create({
+    scroller: feed,
+    ui: {
+      bar: $('publicHistoryBar'),
+      button: $('btnPublicOlder'),
+      status: $('publicHistoryStatus')
+    },
+    load: async before => {
+      const params = new URLSearchParams({ limit: '100' });
+      if (before) params.set('before', before);
+      const older = await fetch('/api/public-messages?' + params.toString());
+      const payload = await older.json();
+      if (!payload || !payload.ok) throw new Error('history_failed');
+      return payload;
+    },
+    prepend: messages => {
+      // One anchor, captured before anything is inserted, keeps the page in
+      // chronological order: each older message goes in above the first message
+      // that was already on screen.
+      const anchor = feed.firstChild;
+      messages.forEach(m => appendPublicMessage(m, false, anchor));
+    }
+  });
+
+  publicScrollBack.reset({ oldest: firstPage.oldest, hasMore: firstPage.hasMore });
 }
 
 /* ============================================================
@@ -933,7 +980,7 @@ socket.on("externalPublicMessage", msg => {
 /* ============================================================
    PUBLIC CHAT — RENDER MESSAGE
 ============================================================ */
-function appendPublicMessage(msg, playSound = true){
+function appendPublicMessage(msg, playSound = true, before = null){
   const feed = $('publicFeed');
   if (!feed) return;
 
@@ -990,8 +1037,15 @@ function appendPublicMessage(msg, playSound = true){
     startPublicEdit(div, msg);
   });
 
-  feed.appendChild(div);
-  feed.scrollTop = feed.scrollHeight;
+  if (before) {
+    // Scroll-back: slot an older message in above what is already rendered and
+    // leave the reader's position alone — jumping to the bottom here would make
+    // every page of history unreadable.
+    feed.insertBefore(div, before);
+  } else {
+    feed.appendChild(div);
+    feed.scrollTop = feed.scrollHeight;
+  }
 
   // Play the new-message sound only for incoming messages from others
   // (never for your own messages or when loading message history).

@@ -48,10 +48,62 @@ const STORAGE_PUBLIC  = 'cw_public_v1';
 const STORAGE_DM_PREFIX = 'cw_dm_';
 const STORAGE_DM_UNREAD = 'cw_dm_unread';
 
-/* SESSION ------------------------------------------------------------ */
-function setSession(user){ localStorage.setItem(STORAGE_SESSION, JSON.stringify(user)); }
+/* SESSION ------------------------------------------------------------
+   The member record the UI renders, and separately the opaque token that
+   actually identifies this session to the server. Only the token is a
+   credential; the record is display data. See utils.js for the full note.
+-------------------------------------------------------------------- */
+const STORAGE_TOKEN = 'cw_token_v1';
+
+function setSessionToken(token){
+  if (token) localStorage.setItem(STORAGE_TOKEN, String(token));
+  else localStorage.removeItem(STORAGE_TOKEN);
+}
+function getSessionToken(){
+  try { return localStorage.getItem(STORAGE_TOKEN) || null; } catch(e){ return null; }
+}
+function clearSessionToken(){ localStorage.removeItem(STORAGE_TOKEN); }
+
+function authHeaders(extra){
+  const token = getSessionToken();
+  const headers = Object.assign({}, extra);
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  return headers;
+}
+
+function authFetch(url, options){
+  const opts = Object.assign({}, options);
+  opts.credentials = opts.credentials || 'same-origin';
+  opts.headers = authHeaders(opts.headers);
+  return fetch(url, opts);
+}
+
+/* Signing in or out is worth announcing: controls that only make sense for a
+   member — notifications, install — listen for this instead of polling. */
+function announceSession(user){
+  try {
+    document.dispatchEvent(new CustomEvent('mcf:session', {
+      detail: { username: (user && user.username) ? user.username : null }
+    }));
+  } catch (e) { /* a WebView without CustomEvent simply gets no announcement */ }
+}
+
+function setSession(user){
+  localStorage.setItem(STORAGE_SESSION, JSON.stringify(user));
+  announceSession(user);
+}
 function getSession(){ return JSON.parse(localStorage.getItem(STORAGE_SESSION) || 'null'); }
-function clearSession(){ localStorage.removeItem(STORAGE_SESSION); }
+function clearSession(){
+  localStorage.removeItem(STORAGE_SESSION);
+  clearSessionToken();
+  announceSession(null);
+}
+
+window.setSessionToken = setSessionToken;
+window.getSessionToken = getSessionToken;
+window.clearSessionToken = clearSessionToken;
+window.authHeaders = authHeaders;
+window.authFetch = authFetch;
 
 /* PUBLIC CHAT -------------------------------------------------------- */
 function loadPublic(){ return JSON.parse(localStorage.getItem(STORAGE_PUBLIC) || '[]'); }
@@ -79,6 +131,7 @@ function getUnreadMap() {
 
 function saveUnreadMap(map) {
   localStorage.setItem(STORAGE_DM_UNREAD, JSON.stringify(map));
+  if (window.MCFUnreadBadge) window.MCFUnreadBadge.refresh();
 }
 
 function incrementUnread(fromUser) {
@@ -277,6 +330,7 @@ function getRoomUnread() {
 
 function saveRoomUnread(map) {
   localStorage.setItem(STORAGE_ROOM_UNREAD, JSON.stringify(map));
+  if (window.MCFUnreadBadge) window.MCFUnreadBadge.refresh();
 }
 
 function incrementRoomUnread(roomId) {

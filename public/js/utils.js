@@ -241,10 +241,78 @@ const STORAGE_PUBLIC  = 'cw_public_v1';
 const STORAGE_DM_PREFIX = 'cw_dm_';
 const STORAGE_DM_UNREAD = 'cw_dm_unread';
 
-/* SESSION ------------------------------------------------------------ */
-function setSession(user){ localStorage.setItem(STORAGE_SESSION, JSON.stringify(user)); }
+/* SESSION ------------------------------------------------------------
+   Two separate things live here, and only one of them is a credential.
+
+   STORAGE_SESSION holds the member record the UI renders (display name,
+   avatar, physique, stats). It is not trusted by the server for anything.
+
+   STORAGE_TOKEN holds the opaque session token the server issued at login.
+   That token — not the record above — is what says who is asking. It travels
+   two ways: as an httpOnly cookie the browser attaches by itself, which is why
+   ordinary same-origin fetch calls need no changes, and as a bearer header for
+   the cases where the cookie does not reach the API (the desktop and mobile
+   wrappers run on a different origin) and for the socket.io handshake, where
+   JavaScript has to supply it explicitly.
+-------------------------------------------------------------------- */
+const STORAGE_TOKEN = 'cw_token_v1';
+
+function setSessionToken(token){
+  if (token) localStorage.setItem(STORAGE_TOKEN, String(token));
+  else localStorage.removeItem(STORAGE_TOKEN);
+}
+function getSessionToken(){
+  try { return localStorage.getItem(STORAGE_TOKEN) || null; } catch(e){ return null; }
+}
+function clearSessionToken(){ localStorage.removeItem(STORAGE_TOKEN); }
+
+/**
+ * Headers that carry the session on a request the cookie cannot cover. Safe to
+ * spread into any fetch: when there is no token it adds nothing.
+ */
+function authHeaders(extra){
+  const token = getSessionToken();
+  const headers = Object.assign({}, extra);
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  return headers;
+}
+
+/** A fetch that always carries the session, cookie or bearer. */
+function authFetch(url, options){
+  const opts = Object.assign({}, options);
+  opts.credentials = opts.credentials || 'same-origin';
+  opts.headers = authHeaders(opts.headers);
+  return fetch(url, opts);
+}
+
+/* Signing in or out is worth announcing: controls that only make sense for a
+   member — notifications, install — listen for this instead of polling. */
+function announceSession(user){
+  try {
+    document.dispatchEvent(new CustomEvent('mcf:session', {
+      detail: { username: (user && user.username) ? user.username : null }
+    }));
+  } catch (e) { /* a WebView without CustomEvent simply gets no announcement */ }
+}
+
+function setSession(user){
+  localStorage.setItem(STORAGE_SESSION, JSON.stringify(user));
+  announceSession(user);
+}
 function getSession(){ return JSON.parse(localStorage.getItem(STORAGE_SESSION) || 'null'); }
-function clearSession(){ localStorage.removeItem(STORAGE_SESSION); }
+function clearSession(){
+  localStorage.removeItem(STORAGE_SESSION);
+  // The token goes with it: keeping one without the other would leave a
+  // browser that looks signed out but can still act as that member.
+  clearSessionToken();
+  announceSession(null);
+}
+
+window.setSessionToken = setSessionToken;
+window.getSessionToken = getSessionToken;
+window.clearSessionToken = clearSessionToken;
+window.authHeaders = authHeaders;
+window.authFetch = authFetch;
 
 function isAdministratorUser(user){
   return !!user && String(user.username || '').trim() === 'Administrator';
@@ -295,6 +363,9 @@ function getUnreadMap() {
 
 function saveUnreadMap(map) {
   localStorage.setItem(STORAGE_DM_UNREAD, JSON.stringify(map));
+  // Every unread change funnels through here, so this is the one place that
+  // has to tell the tab-title / favicon badge the count moved.
+  if (window.MCFUnreadBadge) window.MCFUnreadBadge.refresh();
 }
 
 function incrementUnread(fromUser) {
@@ -775,8 +846,41 @@ window.updateUIForSession = function() {
   if (typeof updateAccountSettingsButtonVisibility === 'function') updateAccountSettingsButtonVisibility(user);
 };
 
-/* LOAD PROFILE ON PAGE LOAD ------------------------------------------ */
-window.addEventListener('load', () => {
+/* LOAD PROFILE ON PAGE LOAD ------------------------------------------
+   The cached member record is rendered straight away so the UI does not flash
+   a signed-out state on every reload, and then confirmed against the server.
+   /api/me answers from the session token alone, so a record that was edited in
+   devtools, left over from a previous member on this browser, or issued before
+   a ban or password change does not survive the check.
+-------------------------------------------------------------------- */
+async function verifyStoredSession(){
+  const cached = getSession();
+  if (!cached) return null;
+
+  try {
+    const resp = await authFetch('/api/me');
+    if (!resp.ok) {
+      // 401: the token is gone, expired, or the account was banned/deleted.
+      clearSession();
+      localStorage.removeItem('currentUser');
+      return null;
+    }
+    const data = await resp.json();
+    if (!data || !data.ok || !data.user) return null;
+
+    // The server's copy is authoritative — pick up profile edits made from
+    // another device without waiting for the next login.
+    setSession(data.user);
+    return data.user;
+  } catch(e){
+    // Offline or a failed request is not a sign-out: keep the cached session
+    // and let the next attempt confirm it.
+    return cached;
+  }
+}
+window.verifyStoredSession = verifyStoredSession;
+
+window.addEventListener('load', async () => {
   // Prefer session storage; fall back to currentUser for legacy sessions
   const sessionUser = getSession();
   const legacyUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
@@ -785,6 +889,19 @@ window.addEventListener('load', () => {
   updateProfileCard(user);
   updateAdminButtonVisibility(user);
   if (typeof updateAccountSettingsButtonVisibility === 'function') updateAccountSettingsButtonVisibility(user);
+
+  const verified = await verifyStoredSession();
+  if (!verified && user) {
+    // The remembered session is no longer valid — drop back to signed out.
+    if (typeof updateUIForSession === 'function') updateUIForSession();
+    if (typeof updateDMListSidebar === 'function') updateDMListSidebar();
+    if (typeof updateDMBadge === 'function') updateDMBadge();
+    if (window.socket && window.socket.connected) window.socket.emit('logout');
+  } else if (verified) {
+    updateProfileCard(verified);
+    updateAdminButtonVisibility(verified);
+    if (typeof updateAccountSettingsButtonVisibility === 'function') updateAccountSettingsButtonVisibility(verified);
+  }
 });
 
 const STORAGE_ROOM_UNREAD = 'cw_room_unread';
@@ -795,6 +912,7 @@ function getRoomUnread() {
 
 function saveRoomUnread(map) {
   localStorage.setItem(STORAGE_ROOM_UNREAD, JSON.stringify(map));
+  if (window.MCFUnreadBadge) window.MCFUnreadBadge.refresh();
 }
 
 function incrementRoomUnread(roomId) {

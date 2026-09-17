@@ -223,10 +223,57 @@ function mobileImgSrc(value) {
     if (!user) {
       localStorage.removeItem(SESSION_KEY);
       localStorage.removeItem("currentUser");
+      clearSessionToken();
+      announceSessionChange(null);
       return;
     }
     localStorage.setItem(SESSION_KEY, JSON.stringify(user));
     localStorage.setItem("currentUser", JSON.stringify(user));
+    announceSessionChange(user);
+  }
+
+  /* Same announcement utils.js makes, so member-only controls behave the same
+     on this page as on the desktop one. */
+  function announceSessionChange(user) {
+    try {
+      document.dispatchEvent(new CustomEvent("mcf:session", {
+        detail: { username: (user && user.username) ? user.username : null }
+      }));
+    } catch (e) { /* no CustomEvent, no announcement */ }
+  }
+
+  /* The credential. The record above is only what the UI renders; this token is
+     what the server resolves to a member, on every request and on the socket
+     handshake. See utils.js for the longer note. */
+  const TOKEN_KEY = "cw_token_v1";
+
+  function setSessionToken(token) {
+    if (token) localStorage.setItem(TOKEN_KEY, String(token));
+    else localStorage.removeItem(TOKEN_KEY);
+  }
+
+  function getSessionToken() {
+    try { return localStorage.getItem(TOKEN_KEY) || null; } catch (e) { return null; }
+  }
+
+  function clearSessionToken() {
+    try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+  }
+
+  /** Headers carrying the session where the cookie cannot (cross-origin app). */
+  function authHeaders(extra) {
+    const token = getSessionToken();
+    const headers = Object.assign({}, extra);
+    if (token) headers["Authorization"] = "Bearer " + token;
+    return headers;
+  }
+
+  /** A fetch that always carries the session, cookie or bearer. */
+  function authFetch(url, options) {
+    const opts = Object.assign({}, options);
+    opts.credentials = opts.credentials || "same-origin";
+    opts.headers = authHeaders(opts.headers);
+    return fetch(url, opts);
   }
 
   function statOf(user, key) {
@@ -380,7 +427,12 @@ function mobileImgSrc(value) {
       return;
     }
 
-    const socket = io({ path: "/socket.io", transports: ["websocket", "polling"] });
+    const socket = io({
+      path: "/socket.io",
+      transports: ["websocket", "polling"],
+      // Identity comes from the handshake, so no event has to carry a username.
+      auth: cb => cb(getSessionToken() ? { token: getSessionToken() } : {})
+    });
     state.socket = socket;
 
     socket.on("connect", socketLogin);
@@ -489,6 +541,7 @@ function mobileImgSrc(value) {
         if (msg && msg.room && msg.type !== "system" && (!s || msg.from !== s.username)) {
           state.roomUnread[msg.room] = (state.roomUnread[msg.room] || 0) + 1;
           renderRoomsSidebar();
+          if (window.MCFUnreadBadge) window.MCFUnreadBadge.refresh();
         }
         return;
       }
@@ -554,8 +607,8 @@ function mobileImgSrc(value) {
   }
 
   function socketLogin() {
-    const s = getSession();
-    if (state.socket && s) state.socket.emit("login", s);
+    const token = getSessionToken();
+    if (state.socket && token) state.socket.emit("login", { token });
   }
 
   function mergeIntoDirectory(users) {
@@ -606,6 +659,7 @@ function mobileImgSrc(value) {
       return;
     }
 
+    setSessionToken(data.token);
     setSession(data.user);
     hideId("modalLogin");
     const loginUser = $("loginUser");
@@ -713,9 +767,11 @@ function mobileImgSrc(value) {
   let registerImageUrl = "";
 
   function logout() {
-    const s = getSession();
-    if (state.socket && s) {
-      try { state.socket.emit("forceLogout", { username: s.username }); } catch (e) {}
+    // End the session server-side, so the token stops working everywhere rather
+    // than staying valid until it expires.
+    try { authFetch("/api/logout", { method: "POST" }); } catch (e) {}
+    if (state.socket && state.socket.connected) {
+      try { state.socket.emit("logout"); } catch (e) {}
     }
     setSession(null);
     state.dmPartner = null;
@@ -735,6 +791,10 @@ function mobileImgSrc(value) {
   /* ---------------------------------------------------------------------
      Public (arena) chat
      --------------------------------------------------------------------- */
+  /* One controller for the arena feed, retired and rebuilt whenever the feed is
+     reloaded from scratch. */
+  let publicHistoryBack = null;
+
   async function loadPublicMessages() {
     const feed = $("publicFeed");
     if (!feed) return;
@@ -750,13 +810,49 @@ function mobileImgSrc(value) {
       const data = await getJSON("/api/public-messages");
       if (!data.ok) return;
       feed.innerHTML = "";
-      (data.messages || []).forEach(appendPublicMessage);
+      // An arrow, not the bare function: forEach would otherwise hand the loop
+      // index to appendPublicMessage's new `before` argument.
+      (data.messages || []).forEach(m => appendPublicMessage(m));
+      attachPublicHistoryBack(feed, data);
     } catch (e) {
       // keep whatever is on screen
     }
   }
 
-  function appendPublicMessage(msg) {
+  /* Scrolling to the top of the arena walks back through the archive a page at
+     a time instead of stopping at the newest 200 messages. */
+  function attachPublicHistoryBack(feed, firstPage) {
+    if (publicHistoryBack) {
+      publicHistoryBack.destroy();
+      publicHistoryBack = null;
+    }
+    if (!window.MCFScrollBack) return;
+
+    publicHistoryBack = MCFScrollBack.create({
+      scroller: feed,
+      ui: {
+        bar: $("publicHistoryBar"),
+        button: $("btnPublicOlder"),
+        status: $("publicHistoryStatus")
+      },
+      load: async before => {
+        const params = new URLSearchParams({ limit: "100" });
+        if (before) params.set("before", before);
+        const page = await getJSON("/api/public-messages?" + params.toString());
+        if (!page || !page.ok) throw new Error("history_failed");
+        return page;
+      },
+      prepend: messages => {
+        // One anchor captured up front keeps the older page chronological.
+        const anchor = feed.firstChild;
+        messages.forEach(m => appendPublicMessage(m, anchor));
+      }
+    });
+
+    publicHistoryBack.reset({ oldest: firstPage.oldest, hasMore: firstPage.hasMore });
+  }
+
+  function appendPublicMessage(msg, before = null) {
     const feed = $("publicFeed");
     if (!feed || !msg) return;
 
@@ -787,8 +883,14 @@ function mobileImgSrc(value) {
     `;
     const imgEl = row.querySelector(".chat-image");
     if (imgEl) imgEl.addEventListener("click", () => window.open(msg.imageUrl, "_blank"));
-    feed.appendChild(row);
-    feed.scrollTop = feed.scrollHeight;
+    if (before) {
+      // Scroll-back: slot an older message in above what is on screen and leave
+      // the reader's position alone.
+      feed.insertBefore(row, before);
+    } else {
+      feed.appendChild(row);
+      feed.scrollTop = feed.scrollHeight;
+    }
   }
 
   function dispatchPublicMessage(text, s) {
@@ -1508,7 +1610,25 @@ function mobileImgSrc(value) {
     } catch (e) {
       // Private mode / quota — the in-memory counters still work.
     }
+    if (window.MCFUnreadBadge) window.MCFUnreadBadge.refresh();
   }
+
+  /* This client counts unread rooms in memory rather than in cw_room_unread,
+     so hand the badge a source for them instead of a second storage key. */
+  function roomUnreadTotal() {
+    let n = 0;
+    for (const roomId in state.roomUnread) n += Number(state.roomUnread[roomId]) || 0;
+    return n;
+  }
+
+  function registerRoomUnreadSource() {
+    if (window.MCFUnreadBadge && window.MCFUnreadBadge.addSource) {
+      window.MCFUnreadBadge.addSource(roomUnreadTotal);
+    }
+  }
+
+  registerRoomUnreadSource();
+  window.addEventListener("load", registerRoomUnreadSource);
 
   function incrementUnread(fromUser) {
     if (!fromUser) return;
@@ -1656,9 +1776,23 @@ function mobileImgSrc(value) {
     if (body) body.innerHTML = '<div class="small muted">Loading…</div>';
 
     try {
-      const data = await postJSON("/api/dm/history", { a: s.username, b: username });
+      // authFetch rather than postJSON: this route is members-only, and the
+      // desktop/mobile wrappers reach the API from another origin where the
+      // session cookie alone does not arrive.
+      const data = await authFetch("/api/dm/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ a: s.username, b: username })
+      }).then(res => res.json());
+
       if (body) body.innerHTML = "";
-      (data.messages || []).forEach(appendDmMessage);
+      (data.messages || []).forEach(m => appendDmMessage(m));
+      // The shared controller lives with this page's other DM history code, so
+      // it is told how to find the partner and how *this* opener draws a row.
+      attachDmHistoryBack(body, data, {
+        partner: () => state.dmPartner,
+        renderOlder: (messages, anchor) => messages.forEach(m => appendDmMessage(m, anchor))
+      });
     } catch (e) {
       if (body) body.innerHTML = '<div class="small muted">Could not load this conversation.</div>';
     }
@@ -1667,10 +1801,11 @@ function mobileImgSrc(value) {
   function closeDm() {
     state.dmPartner = null;
     currentDmPartner = null;
+    destroyDmHistoryBack();
     hideId("dmPopup");
   }
 
-  function appendDmMessage(msg) {
+  function appendDmMessage(msg, before = null) {
     const body = $("dmMessages");
     if (!body || !msg) return;
 
@@ -1748,8 +1883,12 @@ function mobileImgSrc(value) {
       imgEl.addEventListener("click", () => window.open(msg.imageUrl, "_blank"));
     }
 
-    body.appendChild(row);
-    body.scrollTop = body.scrollHeight;
+    if (before) {
+      body.insertBefore(row, before);
+    } else {
+      body.appendChild(row);
+      body.scrollTop = body.scrollHeight;
+    }
   }
 
   function sendDm() {
@@ -1796,6 +1935,8 @@ function mobileImgSrc(value) {
       await postJSON("/api/dm/clear", { a: s.username, b: state.dmPartner });
       const body = $("dmMessages");
       if (body) body.innerHTML = "";
+      // Nothing is left to page back through.
+      destroyDmHistoryBack();
     } catch (e) {
       alert("Could not clear this conversation.");
     }
@@ -1890,6 +2031,7 @@ function mobileImgSrc(value) {
     popup.dataset.room = roomId;
     delete state.roomUnread[roomId];
     renderRoomsSidebar();
+    if (window.MCFUnreadBadge) window.MCFUnreadBadge.refresh();
 
     const title = $("roomChatTitle");
     if (title) title.textContent = roomName || "Room";
@@ -2590,6 +2732,14 @@ if (typeof window.$ === 'undefined') {
   };
 }
 
+// The sections concatenated below this point run at the top level, outside the
+// app IIFE, so they reach the session helpers through window.
+window.getSessionToken = getSessionToken;
+window.setSessionToken = setSessionToken;
+window.clearSessionToken = clearSessionToken;
+window.authHeaders = authHeaders;
+window.authFetch = authFetch;
+
 
 
 
@@ -2607,16 +2757,19 @@ if (typeof window.$ === 'undefined') {
      - updateUIForSession → handled by mobile.js enterApp()
 ============================================================ */
 
-const socket = io();
+const socket = io({
+  auth: (cb) => {
+    const token = typeof getSessionToken === 'function' ? getSessionToken() : null;
+    cb(token ? { token } : {});
+  }
+});
 
 // Keep a single presence handler here; chat-mobile.js also listens and re-renders.
 // Avoid duplicate relationship-approval popups (pm-mobile.js owns those handlers).
 
 socket.on("connect", () => {
-  const user = typeof getSession === "function" ? getSession() : null;
-  if (user) {
-    socket.emit("login", user);
-  }
+  const token = typeof getSessionToken === "function" ? getSessionToken() : null;
+  if (token) socket.emit("login", { token });
 });
 
 socket.on("forceLogout", ({ reason } = {}) => {
@@ -2709,9 +2862,10 @@ async function doLogin(){
       return;
     }
 
+    setSessionToken(data.token);
     setSession(data.user);
     localStorage.setItem('currentUser', JSON.stringify(data.user));
-    socket.emit('login', data.user);
+    socket.emit('login', { token: data.token });
     hide($('modalLogin'));
 
     // MOBILE: show mainUI, hide authScreen
@@ -2949,15 +3103,72 @@ const REL_COLORS = {
 // Track the current DM partner
 let currentDmPartner = null;
 
-async function loadDMHistory(a, b) {
-  const res = await fetch("/api/dm/history", {
+async function loadDMHistory(a, b, opts) {
+  const payload = { a, b };
+  // `before` is the oldest timestamp already on screen; the server answers with
+  // the page immediately preceding it.
+  if (opts && opts.before) payload.before = opts.before;
+  if (opts && opts.limit) payload.limit = opts.limit;
+
+  const res = await authFetch("/api/dm/history", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ a, b })
+    body: JSON.stringify(payload)
   });
 
   const data = await res.json();
-  return data.messages || [];
+  return {
+    messages: (data && data.messages) || [],
+    oldest: data ? data.oldest : null,
+    hasMore: !!(data && data.hasMore)
+  };
+}
+
+/* ---------- DM SCROLL-BACK (shared) ----------
+   Two openers fill #dmMessages on this page: the in-page openDm above, and the
+   global openPrivateWindow below — which is the one window.openPrivateWindow
+   ends up pointing at, because it is assigned last. Both hand their paging to
+   this single controller, so one conversation never grows two listeners on the
+   same feed (and never two requests for the same page). */
+let dmHistoryBack = null;
+
+function destroyDmHistoryBack() {
+  if (dmHistoryBack) {
+    dmHistoryBack.destroy();
+    dmHistoryBack = null;
+  }
+}
+
+/**
+ * @param {HTMLElement} body        the #dmMessages element
+ * @param {object} firstPage        the envelope the opener already fetched
+ * @param {object} options
+ * @param {function} options.partner     who the conversation is with, right now
+ * @param {function} options.renderOlder (messages, anchor) — draw a page above
+ */
+function attachDmHistoryBack(body, firstPage, options) {
+  destroyDmHistoryBack();
+  if (!body || !options || !window.MCFScrollBack) return;
+
+  dmHistoryBack = MCFScrollBack.create({
+    scroller: body,
+    ui: {
+      bar: document.getElementById("dmHistoryBar"),
+      button: document.getElementById("btnDmOlder"),
+      status: document.getElementById("dmHistoryStatus")
+    },
+    load: async before => {
+      const me = getSession();
+      const partner = options.partner();
+      if (!me || !partner) throw new Error("no_conversation");
+      const page = await loadDMHistory(me.username, partner, { before, limit: 100 });
+      if (!page || !page.messages) throw new Error("history_failed");
+      return page;
+    },
+    prepend: messages => options.renderOlder(messages, body.firstChild)
+  });
+
+  dmHistoryBack.reset({ oldest: firstPage.oldest, hasMore: firstPage.hasMore });
 }
 
 /* ---------- Upload Image Using FormData (matches your server) ---------- */
@@ -3034,9 +3245,14 @@ function openPrivateWindow(targetUsername) {
   // Load history
   body.innerHTML = '<div class="small muted">Loading…</div>';
 
-  loadDMHistory(s.username, targetUsername).then(history => {
+  loadDMHistory(s.username, targetUsername).then(page => {
     body.innerHTML = "";
-    renderDMMessages(targetUsername, history);
+    renderDMMessages(targetUsername, page.messages);
+    attachDmHistoryBack(body, page, {
+      partner: () => currentDmPartner,
+      renderOlder: (messages, anchor) =>
+        renderDMMessages(targetUsername, messages, { prepend: true, anchor })
+    });
   });
 
   // Close the popups the DM may have been launched from so the conversation is
@@ -3091,16 +3307,29 @@ function sendPM(targetUsername) {
 
 /* ---------- Render DM Messages (MOBILE: uses dmMessages) ---------- */
 
-function renderDMMessages(targetUsername, messages) {
+function renderDMMessages(targetUsername, messages, options) {
   const s = getSession();
   const body = document.getElementById("dmMessages");
   if (!body) return;
 
+  const prepend = !!(options && options.prepend);
+
   // Preserve typing indicator
   const typingEl = document.getElementById("dmTyping");
 
+  // A rebuild happens whenever a message arrives. Someone at the bottom follows
+  // the conversation down; someone reading older history stays where they are.
+  const prevHeight = body.scrollHeight;
+  const prevTop = body.scrollTop;
+  const stickToBottom = body.childElementCount === 0
+    || (prevHeight - prevTop - body.clientHeight < 60);
+
   // Don't clear the whole body — just append or re-render
-  body.innerHTML = "";
+  if (!prepend) body.innerHTML = "";
+
+  // One anchor, captured before anything is inserted, keeps a prepended page in
+  // chronological order.
+  const anchor = prepend ? (options.anchor || body.firstChild) : null;
 
   messages.forEach(m => {
     // Skip SYSTEM messages that aren't for this conversation partner
@@ -3152,12 +3381,19 @@ function renderDMMessages(targetUsername, messages) {
       img.addEventListener('click', () => window.open(img.dataset.url, '_blank'));
     });
 
-    body.appendChild(div);
+    if (anchor) body.insertBefore(div, anchor);
+    else body.appendChild(div);
   });
 
   // Re-append typing indicator
-  if (typingEl) body.appendChild(typingEl);
-  body.scrollTop = body.scrollHeight;
+  if (typingEl && !prepend) body.appendChild(typingEl);
+
+  if (prepend) return; // the scroll-back controller holds the position instead
+  if (stickToBottom) {
+    body.scrollTop = body.scrollHeight;
+  } else {
+    body.scrollTop = prevTop + (body.scrollHeight - prevHeight);
+  }
 }
 
 /* ---------- Click handlers for approval buttons ---------- */
@@ -3384,6 +3620,7 @@ document.getElementById("dmClose")?.addEventListener("click", () => {
   const popup = document.getElementById("dmPopup");
   if (popup) popup.style.display = "none";
   currentDmPartner = null;
+  destroyDmHistoryBack();
 });
 
 // Send DM
@@ -3427,6 +3664,8 @@ document.getElementById("dmClear")?.addEventListener("click", async () => {
   markDmConversationRead(currentDmPartner);
   const body = document.getElementById("dmMessages");
   if (body) body.innerHTML = "";
+  // Nothing is left to page back through.
+  destroyDmHistoryBack();
   if (window.updateDMListSidebar) updateDMListSidebar();
 });
 
