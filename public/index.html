@@ -187,26 +187,63 @@
     </div>
   </div>
 
-  <div class="actions">
-    <button id="btnLogin" type="button">Login</button>
-    <button id="btnRegister" class="ghost" type="button">Register</button>
-    <button id="btnOpenChat" type="button">Open Arena(Public Chat)</button>
-    <button id="btnRoster" class="ghost" type="button">User Roster</button>
-    <button id="btnArchives" class="ghost" type="button">Archives(Stories)</button>
-    <button id="btnDMs" class="ghost" type="button">DMs(Direct Msgs) <span id="dmBadge" class="badge" style="display:none"></span>
-    </button>
-    <button id="btnRooms" class="ghost" type="button">Custom Rooms</button>
-    <button id="btnForums" class="ghost" type="button">Forums</button>
-    <button id="btnLfg" class="ghost" type="button">Find a Match</button>
-    <button id="btnChallenges" class="ghost" type="button">Challenges</button>
-    <button id="btnRecord" class="ghost" type="button">Record</button>
-    <button id="btnAchievements" class="ghost" type="button">Achievements</button>
-    <button id="btnBookmarks" class="ghost" type="button">Bookmarks</button>
-    <button id="btnPreferences" class="ghost" type="button">Preferences</button>
-    <button id="openSupport" type="button">Report</button>
-    <button id="btnAssistance" class="ghost" type="button">Assistance</button>
-    <button id="btnGuide" class="ghost" type="button">Beginner's Guide</button>
-  </div>
+  <!-- ACTION BUTTONS, grouped by category. Each .nav-group is a category
+       toggle plus a .nav-group-menu that holds the original buttons — same
+       ids, same handlers. Tapping a category drops its menu open; see
+       /js/nav-groups.js (behaviour) and the .nav-group rules in mobile.css /
+       desktop.css (layout). The toggle label must stay the first text node
+       of the button: i18n.js swaps that node for the translated label. -->
+  <nav class="actions nav-groups" aria-label="Site menu">
+
+    <div class="nav-group" data-nav-group="account">
+      <button id="navAccount" class="nav-group-toggle" type="button" aria-expanded="false">Account<span class="nav-group-badge" hidden></span><span class="nav-caret" aria-hidden="true"></span></button>
+      <div class="nav-group-menu" role="group" aria-label="Account" hidden>
+        <button id="btnLogin" type="button">Login</button>
+        <button id="btnRegister" class="ghost" type="button">Register</button>
+        <button id="btnBookmarks" class="ghost" type="button">Bookmarks</button>
+        <button id="btnPreferences" class="ghost" type="button">Preferences</button>
+      </div>
+    </div>
+
+    <div class="nav-group" data-nav-group="chatrooms">
+      <button id="navChatrooms" class="nav-group-toggle" type="button" aria-expanded="false">Chatrooms<span class="nav-group-badge" hidden></span><span class="nav-caret" aria-hidden="true"></span></button>
+      <div class="nav-group-menu" role="group" aria-label="Chatrooms" hidden>
+        <button id="btnOpenChat" type="button">Open Arena(Public Chat)</button>
+        <button id="btnRooms" class="ghost" type="button">Custom Rooms</button>
+        <button id="btnDMs" class="ghost" type="button">DMs(Direct Msgs) <span id="dmBadge" class="badge" style="display:none"></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="nav-group" data-nav-group="community">
+      <button id="navCommunity" class="nav-group-toggle" type="button" aria-expanded="false">Community<span class="nav-group-badge" hidden></span><span class="nav-caret" aria-hidden="true"></span></button>
+      <div class="nav-group-menu" role="group" aria-label="Community" hidden>
+        <button id="btnRoster" class="ghost" type="button">User Roster</button>
+        <button id="btnForums" class="ghost" type="button">Forums</button>
+        <button id="btnArchives" class="ghost" type="button">Archives(Stories)</button>
+      </div>
+    </div>
+
+    <div class="nav-group" data-nav-group="matches">
+      <button id="navMatches" class="nav-group-toggle" type="button" aria-expanded="false">Matches<span class="nav-group-badge" hidden></span><span class="nav-caret" aria-hidden="true"></span></button>
+      <div class="nav-group-menu" role="group" aria-label="Matches" hidden>
+        <button id="btnLfg" class="ghost" type="button">Find a Match</button>
+        <button id="btnChallenges" class="ghost" type="button">Challenges</button>
+        <button id="btnRecord" class="ghost" type="button">Record</button>
+        <button id="btnAchievements" class="ghost" type="button">Achievements</button>
+      </div>
+    </div>
+
+    <div class="nav-group" data-nav-group="help">
+      <button id="navHelp" class="nav-group-toggle" type="button" aria-expanded="false">Help<span class="nav-group-badge" hidden></span><span class="nav-caret" aria-hidden="true"></span></button>
+      <div class="nav-group-menu" role="group" aria-label="Help" hidden>
+        <button id="openSupport" type="button">Report</button>
+        <button id="btnAssistance" class="ghost" type="button">Assistance</button>
+        <button id="btnGuide" class="ghost" type="button">Beginner's Guide</button>
+      </div>
+    </div>
+
+  </nav>
 
   <div id="legalLinks">
     <button id="btnTOS" class="ghost small-btn" type="button">Terms of Service</button>
@@ -287,31 +324,61 @@
   </div>
 </div>
 
-  <div class="actions">
-    <button id="btnLogin">Login</button>
-    <button id="btnRegister" class="ghost">Register</button>
-    <button id="btnRoster" class="ghost">User Roster</button>
-    <button id="btnArchives" class="ghost">Archives</button>
-    <button id="btnOpenChat">Open Arena</button>
+  <!-- ACTION BUTTONS, grouped by category (desktop copy — same groups as
+       the mobile block above). On desktop each category's menu flies out to
+       the right of its toggle; see /js/nav-groups.js and desktop.css. -->
+  <nav class="actions nav-groups" aria-label="Site menu">
 
-    <!-- NEW DM SIDEBAR BUTTON -->
-<button id="btnDMs" class="ghost">
-  DMs <span id="dmBadge" class="badge" style="display:none"></span>
-</button>
-    <button id="btnRooms" class="ghost">Rooms</button>
-    <button id="btnForums" class="ghost">Forums</button>
-    <button id="btnLfg" class="ghost">Find a Match</button>
-    <button id="btnChallenges" class="ghost">Challenges</button>
-    <button id="btnRecord" class="ghost">Record</button>
-    <button id="btnAchievements" class="ghost">Achievements</button>
-    <button id="btnBookmarks" class="ghost">Bookmarks</button>
-    <button id="btnPreferences" class="ghost">Preferences</button>
-<button id="openSupport">Support</button>
-<button id="btnAssistance">Assistance</button>
-<button id="btnGuide" class="ghost">Beginner's Guide</button>
+    <div class="nav-group" data-nav-group="account">
+      <button id="navAccount" class="nav-group-toggle" type="button" aria-expanded="false">Account<span class="nav-group-badge" hidden></span><span class="nav-caret" aria-hidden="true"></span></button>
+      <div class="nav-group-menu" role="group" aria-label="Account" hidden>
+        <button id="btnLogin" type="button">Login</button>
+        <button id="btnRegister" class="ghost" type="button">Register</button>
+        <button id="btnBookmarks" class="ghost" type="button">Bookmarks</button>
+        <button id="btnPreferences" class="ghost" type="button">Preferences</button>
+      </div>
+    </div>
 
+    <div class="nav-group" data-nav-group="chatrooms">
+      <button id="navChatrooms" class="nav-group-toggle" type="button" aria-expanded="false">Chatrooms<span class="nav-group-badge" hidden></span><span class="nav-caret" aria-hidden="true"></span></button>
+      <div class="nav-group-menu" role="group" aria-label="Chatrooms" hidden>
+        <button id="btnOpenChat" type="button">Open Arena</button>
+        <button id="btnRooms" class="ghost" type="button">Rooms</button>
+        <!-- DM SIDEBAR BUTTON (the badge is the unread count) -->
+        <button id="btnDMs" class="ghost" type="button">
+          DMs <span id="dmBadge" class="badge" style="display:none"></span>
+        </button>
+      </div>
+    </div>
 
- 
+    <div class="nav-group" data-nav-group="community">
+      <button id="navCommunity" class="nav-group-toggle" type="button" aria-expanded="false">Community<span class="nav-group-badge" hidden></span><span class="nav-caret" aria-hidden="true"></span></button>
+      <div class="nav-group-menu" role="group" aria-label="Community" hidden>
+        <button id="btnRoster" class="ghost" type="button">User Roster</button>
+        <button id="btnForums" class="ghost" type="button">Forums</button>
+        <button id="btnArchives" class="ghost" type="button">Archives</button>
+      </div>
+    </div>
+
+    <div class="nav-group" data-nav-group="matches">
+      <button id="navMatches" class="nav-group-toggle" type="button" aria-expanded="false">Matches<span class="nav-group-badge" hidden></span><span class="nav-caret" aria-hidden="true"></span></button>
+      <div class="nav-group-menu" role="group" aria-label="Matches" hidden>
+        <button id="btnLfg" class="ghost" type="button">Find a Match</button>
+        <button id="btnChallenges" class="ghost" type="button">Challenges</button>
+        <button id="btnRecord" class="ghost" type="button">Record</button>
+        <button id="btnAchievements" class="ghost" type="button">Achievements</button>
+      </div>
+    </div>
+
+    <div class="nav-group" data-nav-group="help">
+      <button id="navHelp" class="nav-group-toggle" type="button" aria-expanded="false">Help<span class="nav-group-badge" hidden></span><span class="nav-caret" aria-hidden="true"></span></button>
+      <div class="nav-group-menu" role="group" aria-label="Help" hidden>
+        <button id="openSupport" type="button">Support</button>
+        <button id="btnAssistance" type="button">Assistance</button>
+        <button id="btnGuide" class="ghost" type="button">Beginner's Guide</button>
+      </div>
+    </div>
+
     <div id="legalLinks" style="text-align:center;margin-top:20px">
   <button id="btnTOS" class="ghost small-btn">Terms of Service</button>
   <button id="btnPrivacy" class="ghost small-btn">Privacy Policy</button>
@@ -320,7 +387,7 @@
      <button id="btnAdmin" class="ghost" hidden>Admin Panel</button>
 </div>
 
-  </div>
+  </nav>
 </header>
 <div class="container-main">
   <div class="contain">
@@ -1680,6 +1747,7 @@ Moderator decisions are final. </p>
 <script src="/js/achievements.js?v=1"></script>
 <script src="/js/message-extras.js?v=1"></script>
 <script src="/js/room-moderation.js?v=1"></script>
+<script src="/js/nav-groups.js?v=1"></script>
 
 </body>
 </html>

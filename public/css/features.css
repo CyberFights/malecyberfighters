@@ -588,3 +588,10 @@ html[data-mcf-theme="light"] .mcf-match-row,
 html[data-mcf-theme="light"] .mcf-badge { border-color: rgba(10, 60, 110, 0.18); }
 html[data-mcf-theme="light"] .mcf-lfg-mine,
 html[data-mcf-theme="light"] .mcf-record-bar { border-color: rgba(10, 60, 110, 0.2); }
+
+/* The action-button category panels (desktop flyout / phone drop-down). */
+html[data-mcf-theme="light"] .actions .nav-group-menu {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(10, 60, 110, 0.3);
+  box-shadow: 0 12px 40px rgba(15, 40, 80, 0.25);
+}

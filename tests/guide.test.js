@@ -96,7 +96,8 @@ test('both action rows carry a Beginner\'s Guide button', async () => {
     assert.equal(buttons.length, 2, 'mobile and desktop action rows');
     buttons.forEach(button => {
       assert.equal(button.textContent.trim(), "Beginner's Guide");
-      assert.ok(button.parentElement.classList.contains('actions'), 'lives in the action row');
+      assert.ok(button.closest('.actions'), 'lives in the action row');
+      assert.equal(button.closest('.nav-group')?.dataset.navGroup, 'help', 'filed under the Help category');
     });
     assert.ok(PAGE.includes('/js/guide.js'), 'the page loads guide.js');
     assert.ok(PAGE.includes('id="modalGuide"'), 'the guide modal is on the page');

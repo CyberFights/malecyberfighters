@@ -9,7 +9,10 @@
    profile language, then English.
 
    Scope is deliberately the fixed chrome — element ids and
-   placeholders — because that set is stable and testable.
+   placeholders — because that set is stable and testable. That
+   includes the action-button category toggles (navAccount …
+   navHelp); their label is the button's first text node, which is
+   what setLabel() swaps.
    Member-written content is never touched.
 
    Also home of the presence label helper ("Online" / "Active 2h
@@ -44,6 +47,8 @@
       btnLfg: 'Find a Match', btnChallenges: 'Challenges',
       btnRecord: 'Record', btnAchievements: 'Achievements',
       btnPreferences: 'Preferences', btnBookmarks: 'Bookmarks',
+      navAccount: 'Account', navChatrooms: 'Chatrooms', navCommunity: 'Community',
+      navMatches: 'Matches', navHelp: 'Help',
       sendPublic: 'Send', dmSend: 'Send', roomSendBtn: 'Send',
       'ph:publicMessage': 'Say something to the arena',
       'ph:roomMessageInput': 'Message room',
@@ -64,6 +69,8 @@
       btnLfg: 'Buscar combate', btnChallenges: 'Desafíos',
       btnRecord: 'Historial', btnAchievements: 'Logros',
       btnPreferences: 'Preferencias', btnBookmarks: 'Guardados',
+      navAccount: 'Cuenta', navChatrooms: 'Salas de chat', navCommunity: 'Comunidad',
+      navMatches: 'Combates', navHelp: 'Ayuda',
       sendPublic: 'Enviar', dmSend: 'Enviar', roomSendBtn: 'Enviar',
       'ph:publicMessage': 'Escribe algo en la arena',
       'ph:roomMessageInput': 'Mensaje de la sala',
@@ -84,6 +91,8 @@
       btnLfg: 'Trouver un match', btnChallenges: 'Défis',
       btnRecord: 'Palmarès', btnAchievements: 'Succès',
       btnPreferences: 'Préférences', btnBookmarks: 'Favoris',
+      navAccount: 'Compte', navChatrooms: 'Salons de chat', navCommunity: 'Communauté',
+      navMatches: 'Combats', navHelp: 'Aide',
       sendPublic: 'Envoyer', dmSend: 'Envoyer', roomSendBtn: 'Envoyer',
       'ph:publicMessage': 'Dis quelque chose à l\'arène',
       'ph:roomMessageInput': 'Message du salon',
@@ -104,6 +113,8 @@
       btnLfg: 'Match finden', btnChallenges: 'Herausforderungen',
       btnRecord: 'Kampfbilanz', btnAchievements: 'Erfolge',
       btnPreferences: 'Einstellungen', btnBookmarks: 'Lesezeichen',
+      navAccount: 'Konto', navChatrooms: 'Chaträume', navCommunity: 'Community',
+      navMatches: 'Kämpfe', navHelp: 'Hilfe',
       sendPublic: 'Senden', dmSend: 'Senden', roomSendBtn: 'Senden',
       'ph:publicMessage': 'Sag der Arena etwas',
       'ph:roomMessageInput': 'Raumnachricht',
@@ -124,6 +135,8 @@
       btnLfg: 'Achar luta', btnChallenges: 'Desafios',
       btnRecord: 'Histórico', btnAchievements: 'Conquistas',
       btnPreferences: 'Preferências', btnBookmarks: 'Salvos',
+      navAccount: 'Conta', navChatrooms: 'Salas de chat', navCommunity: 'Comunidade',
+      navMatches: 'Combates', navHelp: 'Ajuda',
       sendPublic: 'Enviar', dmSend: 'Enviar', roomSendBtn: 'Enviar',
       'ph:publicMessage': 'Diga algo na arena',
       'ph:roomMessageInput': 'Mensagem da sala',
@@ -144,6 +157,8 @@
       btnLfg: 'Trova match', btnChallenges: 'Sfide',
       btnRecord: 'Storico', btnAchievements: 'Obiettivi',
       btnPreferences: 'Preferenze', btnBookmarks: 'Salvati',
+      navAccount: 'Account', navChatrooms: 'Chat', navCommunity: 'Comunità',
+      navMatches: 'Incontri', navHelp: 'Aiuto',
       sendPublic: 'Invia', dmSend: 'Invia', roomSendBtn: 'Invia',
       'ph:publicMessage': 'Dì qualcosa all\'arena',
       'ph:roomMessageInput': 'Messaggio della stanza',

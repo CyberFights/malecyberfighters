@@ -88,7 +88,8 @@ test('the action rows both carry an Assistance button', async () => {
     assert.equal(buttons.length, 2, 'mobile and desktop action rows');
     buttons.forEach(button => {
       assert.equal(button.textContent.trim(), 'Assistance');
-      assert.ok(button.parentElement.classList.contains('actions'), 'lives in the action row');
+      assert.ok(button.closest('.actions'), 'lives in the action row');
+      assert.equal(button.closest('.nav-group')?.dataset.navGroup, 'help', 'filed under the Help category');
     });
     assert.ok(PAGE.includes('/js/assistance.js'), 'the page loads assistance.js');
   } finally {
