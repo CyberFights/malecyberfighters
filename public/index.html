@@ -446,6 +446,15 @@
 
       <textarea id="editInfo" rows="3" placeholder="Bio"></textarea>
 
+      <!-- FIGHTER TAGS: the same four groups as the register modal -->
+      <section class="tag-picker-section" aria-labelledby="editTagsHeading">
+        <div class="tag-picker-heading">
+          <strong id="editTagsHeading">Fighter Tags</strong>
+          <span class="small muted">Shown on your profile and searchable in the roster.</span>
+        </div>
+        <div id="editTags" class="tag-picker-slot"></div>
+      </section>
+
       <div>
         <label>Favorite Color</label>
         <input id="editColor" type="color">
@@ -575,6 +584,16 @@
 
       <textarea id="regInfo" placeholder="Short bio / info" rows="3"></textarea>
 
+      <!-- FIGHTER TAGS: wrestling style / gear & fetish / heel-jobber-face / sexual position -->
+      <section class="tag-picker-section" aria-labelledby="regTagsHeading">
+        <div class="tag-picker-heading">
+          <strong id="regTagsHeading">Fighter Tags</strong>
+          <span class="small muted">Optional — pick what fits your fighter. They show on your
+            profile and the roster can be searched by them.</span>
+        </div>
+        <div id="regTags" class="tag-picker-slot"></div>
+      </section>
+
       <div>
         <input id="regImageFile" type="file" accept="image/*" />
         <button id="btnUploadImage" class="small-btn">Upload Image</button>
@@ -667,13 +686,20 @@
 
     <h3 style="margin:0 0 12px 0">User Roster</h3>
 
-    <!-- SEARCH BAR -->
+    <!-- SEARCH BAR — matches names AND tags ("heel", "singlet", "vers") -->
     <input 
       id="rosterSearch" 
       type="text" 
-      placeholder="Search users..." 
+      placeholder="Search users or tags..." 
       style="width:100%;margin-bottom:12px"
     >
+
+    <!-- TAG FILTER — every tag, grouped by category -->
+    <div class="roster-tag-filter">
+      <label for="rosterTagFilter" class="small muted">Tag</label>
+      <select id="rosterTagFilter" style="width:auto;flex:1"></select>
+      <button id="rosterTagClear" class="small-btn ghost" type="button" style="display:none">Clear</button>
+    </div>
 
     <!-- USER LIST -->
     <div id="rosterPage" class="roster-list"></div>
@@ -821,6 +847,11 @@
         <div style="margin-top:12px">
           <div class="muted">Bio</div>
           <div id="vpBio" style="margin-top:4px"></div>
+        </div>
+
+        <div style="margin-top:12px">
+          <div class="muted">Tags</div>
+          <div id="vpTags" class="tag-list" style="margin-top:4px"></div>
         </div>
 
         <div style="margin-top:12px;display:flex;gap:20px">
@@ -1593,8 +1624,10 @@ Moderator decisions are final. </p>
 <script src="/js/image-proxy.js"></script>
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/physique.js"></script>
+<script src="/js/tags.js"></script>
 <script src="/js/unread-badge.js"></script>
 <script src="/js/utils.js"></script>
+<script src="/js/profile-tags.js"></script>
 <script src="/js/story-ui.js?v=1"></script>
 <script src="/js/emoji-picker.js"></script>
 <script src="/js/socket.js"></script>

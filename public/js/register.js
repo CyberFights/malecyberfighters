@@ -1,4 +1,27 @@
-$('btnRegister').addEventListener('click', () => show($('modalRegister')));
+/* Fighter tags. The picker is built the first time the register modal opens,
+ * so a visitor who never registers never pays for the ~60 checkboxes. */
+let registerTagPicker = null;
+
+function ensureRegisterTagPicker(){
+  if (registerTagPicker) return registerTagPicker;
+  const slot = $('regTags');
+  if (!slot || !window.ProfileTags) return null;
+  registerTagPicker = window.ProfileTags.renderPicker(slot, { idPrefix: 'regTags' });
+  return registerTagPicker;
+}
+
+/* The ticked tags, or undefined when the page has no picker (an older shell) —
+ * the server then stores an empty selection rather than rejecting the call. */
+function registerTagSelection(){
+  const slot = $('regTags');
+  if (!slot || !window.ProfileTags) return undefined;
+  return window.ProfileTags.pickerSelection(slot);
+}
+
+$('btnRegister').addEventListener('click', () => {
+  ensureRegisterTagPicker();
+  show($('modalRegister'));
+});
 
 $('regCancel').addEventListener('click', () => hide($('modalRegister')));
 
@@ -90,7 +113,8 @@ $('regSubmit').addEventListener('click', async () => {
     weight: normalizeWeight(weight) ?? undefined,
     stats:{wins,losses},
     info, color, language,
-    imageUrl: uploadedImageUrl
+    imageUrl: uploadedImageUrl,
+    tags: registerTagSelection()
   };
 
   const resp = await fetch('/api/register', {
@@ -102,6 +126,8 @@ $('regSubmit').addEventListener('click', async () => {
   const data = await resp.json();
 
   if(data.ok){
+    // The account exists now — start the next registration from a clean slate.
+    if (registerTagPicker) registerTagPicker.clear();
     hide($('modalRegister'));
     alert('Account created. Please login.');
   } else {

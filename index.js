@@ -1206,6 +1206,36 @@ const {
   normalizeWeight
 } = physique;
 
+// ---------- TAG HELPERS (wrestling style / fetish / heel-jobber-face / position) ----------
+// Members tag themselves in four categories from registration or the profile
+// editor, and the roster can then be searched by tag ("heel", "singlet",
+// "vers"). The catalogue, the per-category caps and the search rules live in
+// public/js/tags.js so the pickers the browser renders and the values the API
+// stores can never drift apart.
+const tags = require('./public/js/tags.js');
+
+/**
+ * The tag selection to store, from a request body. `undefined` (the field was
+ * not sent at all — every pre-tags client) clears the selection.
+ *
+ * A shape that is not a selection (a string, a category that is not a list) is
+ * rejected so a broken client is caught; unknown tag ids are dropped instead,
+ * so a member whose page still lists a retired tag can still save their
+ * profile rather than being stuck behind a 400.
+ */
+function readTagSelection(value) {
+  const normalized = tags.normalize(value);
+  if (!normalized.ok) return normalized;
+  return { ok: true, tags: normalized.tags };
+}
+
+// A user document's tags, always the full four-category shape — accounts
+// created before this existed (and any document edited by hand) read as empty
+// rather than `undefined`.
+function userTags(user) {
+  return tags.selection(user && user.tags);
+}
+
 // ---------- SCHEMAS ----------
 const userSchema = new mongoose.Schema({
   username: { type: String, unique: true, required: true, index: true },
@@ -1259,6 +1289,19 @@ const userSchema = new mongoose.Schema({
     }
   },
   discordId: { type: String, default: null },
+  // Fighter tags: four arrays of catalogue ids (see public/js/tags.js).
+  // Stored as ids, not labels, so a tag can be renamed without rewriting
+  // every user document. The validator only guards documents written outside
+  // the API — /api/register and /api/update-profile normalise first.
+  tags: {
+    type: new mongoose.Schema({
+      style: { type: [String], default: [] },
+      fetish: { type: [String], default: [] },
+      role: { type: [String], default: [] },
+      position: { type: [String], default: [] }
+    }, { _id: false }),
+    default: () => ({})
+  },
   blockedUsers: { type: [String], default: [] },
   // Per-conversation DM read markers: { [partnerUsername]: ISO date string }.
   // The unread badge used to be purely client-side (localStorage, fed by live
@@ -2391,7 +2434,7 @@ app.use('/api/admin', adminLimiter);
 app.get("/api/admin/users", requireAdmin, async (req, res) => {
   try {
     const users = await User.find()
-      .select("username display email imageUrl extraPhotos info stats color language age height weight atk def role banned online createdAt")
+      .select("username display email imageUrl extraPhotos info stats color language age height weight atk def role banned online tags createdAt")
       .sort({ username: 1 })
       .lean();
 
@@ -2957,6 +3000,17 @@ app.post('/api/update-profile', sessions.requireUser, async (req, res) => {
     }
   }
 
+  // Fighter tags. An empty selection (or `null`) clears them; unknown ids are
+  // dropped, so an old page left open across a catalogue change can still
+  // save the rest of the profile.
+  if (Object.prototype.hasOwnProperty.call(safeUpdates, 'tags')) {
+    const tagSelection = readTagSelection(safeUpdates.tags);
+    if (!tagSelection.ok) {
+      return res.status(400).json({ ok: false, error: 'invalid_tags' });
+    }
+    safeUpdates.tags = tagSelection.tags;
+  }
+
   // The saved combat stats must track the physique — recompute them
   // whenever the height or weight field is part of this update (including
   // clearing it, which resets the stats to null).
@@ -3185,6 +3239,14 @@ app.post('/api/register', async (req, res) => {
     }
   }
 
+  // Fighter tags are optional too, and unknown ids inside an otherwise valid
+  // selection are dropped rather than rejected.
+  const tagSelection = readTagSelection(req.body.tags);
+  if (!tagSelection.ok) {
+    await logIp(req, { action: 'register_fail', username });
+    return res.status(400).json({ ok: false, error: 'invalid_tags' });
+  }
+
   try {
     const existing = await User.findOne({ $or: [{ username }, { email }] }).lean();
     if (existing) {
@@ -3215,7 +3277,8 @@ app.post('/api/register', async (req, res) => {
       info: info || '',
       color: color || '',
       language: language || 'en',
-      imageUrl: imageUrl || ''
+      imageUrl: imageUrl || '',
+      tags: tagSelection.tags
     });
 
     await user.save();
@@ -3253,7 +3316,8 @@ app.post('/api/register', async (req, res) => {
         weight: user.weight ?? undefined,
         atk: combat ? combat.atk : null,
         def: combat ? combat.def : null,
-        discordId: user.discordId ?? null
+        discordId: user.discordId ?? null,
+        tags: userTags(user)
       }
     });
   } catch (e) {
@@ -3283,7 +3347,8 @@ function sessionUserPayload(user) {
     weight: user.weight ?? undefined,
     atk: user.atk ?? null,
     def: user.def ?? null,
-    discordId: user.discordId ?? null
+    discordId: user.discordId ?? null,
+    tags: userTags(user)
   };
 }
 
@@ -3668,15 +3733,53 @@ app.post("/api/dm/clear", sessions.requireUser, async (req, res) => {
   }
 });
 
+// The tag catalogue, for API consumers and anything that would rather fetch it
+// than load the page script. The page scripts use public/js/tags.js directly.
+app.get('/api/tags', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=3600');
+  return res.json({ ok: true, categories: tags.catalogue() });
+});
+
 // The member directory. Requires a session: it is the roster behind the arena,
 // and it exposes every member's profile, physique and record.
+//
+// Optional filters, used by the roster's search box and available to any
+// client that wants to search the directory itself:
+//   ?search=heel        names AND tags (label / alias / id) — "vers" finds
+//                       Vers Top, "jobber" finds Heel Jobber
+//   ?tags=heel,singlet  tag ids, matched with `tagMode`
+//   ?tagMode=any|all    any tag (default) or every tag
 app.get("/api/allUsers", sessions.requireUser, async (req, res) => {
   try {
-    const users = await User.find()
-      .select("username display imageUrl extraPhotos info wins losses color language age height weight atk def createdAt")
+    // Both filters can be present at once, and each one is itself an $or, so
+    // they are combined with $and rather than merged into one query object.
+    const clauses = [];
+
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    if (search) {
+      const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const nameMatch = new RegExp(escaped, 'i');
+      const conditions = [{ username: nameMatch }, { display: nameMatch }];
+
+      const matchedTags = tags.matchingTagIds(search);
+      if (matchedTags.length) conditions.push(tags.mongoFilter(matchedTags, 'any'));
+
+      clauses.push({ $or: conditions });
+    }
+
+    const wanted = tags.parseTagList(req.query.tags);
+    if (wanted.length) {
+      const tagCondition = tags.mongoFilter(wanted, req.query.tagMode);
+      if (Object.keys(tagCondition).length) clauses.push(tagCondition);
+    }
+
+    const filter = clauses.length === 1 ? clauses[0] : (clauses.length ? { $and: clauses } : {});
+
+    const users = await User.find(filter)
+      .select("username display imageUrl extraPhotos info wins losses color language age height weight atk def tags createdAt")
       .lean();
 
-    res.json({ success: true, users });
+    res.json({ success: true, users: users.map(user => ({ ...user, tags: userTags(user) })) });
   } catch (err) {
     console.error("Error fetching all users:", err);
     res.status(500).json({ success: false });

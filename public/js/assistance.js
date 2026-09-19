@@ -326,7 +326,8 @@
       id: 'roster-search',
       title: 'Searching the roster',
       keywords: ['search roster', 'filter roster', 'find user roster', 'search members'],
-      answer: 'The User Roster has a search box at the top: type any part of a username or display name and the list filters as you type, back at page one.\n' +
+      answer: 'The User Roster has a search box at the top: type any part of a username, a display name or one of their tags and the list filters as you type, back at page one.\n' +
+        'Type "heel", "singlet" or "vers" and you get the members who tagged themselves that way. The Tag menu beside it filters by one tag exactly.\n' +
         'The same kind of search sits in your DMs and in the story Archives, where it looks through titles, story text and both names.\n' +
         'Searches ignore capitals, so "Jax" and "jax" find the same people.',
       action: {
@@ -334,6 +335,21 @@
         buttonId: 'btnRoster',
         popupId: 'modalRoster',
         done: 'Opening the User Roster — type in the search box at the top.'
+      }
+    },
+    {
+      id: 'fighter-tags',
+      title: 'Fighter tags',
+      keywords: ['tags', 'tag', 'fighter tags', 'my tags', 'wrestling style', 'fetish', 'gear', 'heel', 'jobber', 'face', 'dom', 'sub', 'top', 'bottom', 'vers', 'position'],
+      answer: 'Fighter Tags are the labels that say what you are into: a wrestling style, gear and fetishes, whether you play heel, jobber or face, and what you are into out of the ring.\n' +
+        'Pick them when you register, or any time afterwards in Edit Profile — each group has its own limit and you can change them as often as you like.\n' +
+        'They appear as chips on your profile, one line of them on your roster row, and anyone can find you by them: search the roster for "heel" or use the Tag menu there.',
+      requiresLogin: true,
+      action: {
+        label: 'Open Edit Profile',
+        buttonId: 'btnEditProfile',
+        popupId: 'modalEditProfile',
+        done: 'Opening Edit Profile — the tag groups are in the middle.'
       }
     },
     {
@@ -354,7 +370,7 @@
       title: 'Viewing a profile',
       keywords: ['view profile', 'open profile', 'see profile', 'profile card', 'user profile', 'someones profile'],
       answer: 'Open a profile from the User Roster, from the online list in the Arena, or by clicking a username in chat.\n' +
-        'You see their photo, name, age, height, weight, favourite colour, language, bio, wins and losses, their photos, their published stories, their relationships and the timeline of them.\n' +
+        'You see their photo, name, age, height, weight, favourite colour, language, bio, their tags, wins and losses, their photos, their published stories, their relationships and the timeline of them.\n' +
         'On someone else\'s profile there are Message User and Block User buttons; your own profile has Edit Profile and Account Settings instead.',
       action: {
         label: 'Open the User Roster',
