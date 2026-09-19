@@ -151,7 +151,7 @@
       id: 'login',
       title: 'Signing in',
       keywords: ['login', 'log in', 'sign in', 'signing in', 'log on', 'sign on'],
-      answer: 'Press Login in the action row and enter your username and password.\n' +
+      answer: 'Press Login (under Account in the action menu) and enter your username and password.\n' +
         'Once you are in, your profile card appears, you show as online, and your DMs and Rooms come to life.\n' +
         'If you have forgotten your password, use the "Forgot password?" link at the bottom of that window.',
       action: {
@@ -165,7 +165,7 @@
       id: 'register',
       title: 'Registering a new account',
       keywords: ['register', 'sign up', 'signup', 'create account', 'new account', 'make an account', 'join the site', 'registration'],
-      answer: 'Press Register in the action row and fill in the form: username, email, password, display name, age (18+), a short bio, your favourite colour, language, wins and losses, height and weight, and a profile photo if you like.\n' +
+      answer: 'Press Register (under Account in the action menu) and fill in the form: username, email, password, display name, age (18+), a short bio, your favourite colour, language, wins and losses, height and weight, and a profile photo if you like.\n' +
         'Press Create Account and you are in. Everything can be changed later from Edit Profile, and you get a welcome email if the site\'s email is set up.\n' +
         'Height runs from 3\'5" to 8\'0" in one-inch steps and weight is whole pounds, 60 to 700; those two set your fighter stats.',
       action: {
@@ -240,7 +240,7 @@
       title: 'The Arena (public chat)',
       keywords: ['arena', 'public chat', 'main chat', 'chatroom', 'chat room', 'main room', 'public room', 'open arena'],
       answer: 'The Arena is the main public chatroom, shared live with the United Gay Cyber Wrestling Discord server, so what you say here can be seen there too.\n' +
-        'Press Open Arena in the action row, type in the box at the bottom and press Send. The online list sits on the right and clicking a name opens that person\'s profile.\n' +
+        'Press Open Arena (under Chatrooms in the action menu), type in the box at the bottom and press Send. The online list sits on the right and clicking a name opens that person\'s profile.\n' +
         '"_" minimises the window and "X" closes it — closing marks you offline but keeps you signed in, so refreshing will not log you out.\n' +
         'Messages are translated into each member\'s own language; you always see what you wrote in your own words.',
       action: {
@@ -313,7 +313,7 @@
       title: 'User roster',
       keywords: ['roster', 'user roster', 'user list', 'members', 'find a user', 'search users', 'all users', 'who is on', 'user directory'],
       answer: 'The User Roster lists everyone on the site, with a search box and 12 members to a page.\n' +
-        'Press User Roster in the action row, then click a name to open that profile.\n' +
+        'Press User Roster (under Community in the action menu), then click a name to open that profile.\n' +
         'The home page shows the six newest members in Quick Roster, and a New Members card below it.',
       action: {
         label: 'Open the User Roster',
@@ -490,7 +490,7 @@
       title: 'Direct messages',
       keywords: ['dm', 'dms', 'direct message', 'direct messages', 'private message', 'message someone', 'whisper', 'pm', 'private chat'],
       answer: 'The DMs window lists every conversation you have, newest first, with a search box at the top.\n' +
-        'Press DMs in the action row, then click a name to open that chat. You can also start one from Message User on a profile, from the PM button in the Arena\'s online list, or by clicking a username in chat.\n' +
+        'Press DMs (under Chatrooms in the action menu), then click a name to open that chat. You can also start one from Message User on a profile, from the PM button in the Arena\'s online list, or by clicking a username in chat.\n' +
         'Each chat can be moved around your screen by its header. Inside a chat you get images, GIFs and clips, emoji, voice calling, a Story button for writing up your matches, and Clear.',
       action: {
         label: 'Open DMs',
@@ -517,7 +517,7 @@
       id: 'dm-unread',
       title: 'DM unread badges and server sync',
       keywords: ['unread dm', 'dm badge', 'unread count', 'dm unread', 'badge', 'unread messages', 'dm count'],
-      answer: 'Unread private messages show as a count on the DMs button in the action row, and beside each conversation in the list, up to 99+.\n' +
+      answer: 'Unread private messages show as a count on the Chatrooms button in the action menu and on the DMs button inside it, and beside each conversation in the list, up to 99+.\n' +
         'Opening a chat clears its count. Messages you receive while the tab is asleep, or through the Discord bridge, are counted too, so nothing is quietly missed.',
       action: {
         label: 'Open DMs',
@@ -627,7 +627,7 @@
       id: 'rooms',
       title: 'Rooms list and sorting',
       keywords: ['rooms', 'room', 'room list', 'custom rooms', 'private room', 'room sort', 'open rooms'],
-      answer: 'Rooms are chat windows of their own, some public and some private. Press Rooms in the action row to see the list.\n' +
+      answer: 'Rooms are chat windows of their own, some public and some private. Press Rooms (under Chatrooms in the action menu) to see the list.\n' +
         'Sort them with the menu at the top: newest, oldest, A to Z or Z to A. Private rooms show a 🔒, and a small count shows unread messages.\n' +
         'Click a room to open it. Private rooms only appear for their owner and the people they invited.',
       action: {
@@ -742,7 +742,7 @@
       title: 'Forums',
       keywords: ['forums', 'forum', 'forum post', 'discussion', 'thread', 'forum list'],
       answer: 'Forums are the long-form side of the site: posts and replies that stay put, unlike the Arena.\n' +
-        'Press Forums in the action row to see the list, most recently active first, showing the title, author, how many replies it has and when it was last active. The list updates live as people post.\n' +
+        'Press Forums (under Community in the action menu) to see the list, most recently active first, showing the title, author, how many replies it has and when it was last active. The list updates live as people post.\n' +
         'Click a post to read it, or use New Forum to start your own. The home page shows the latest posts.',
       action: {
         label: 'Open Forums',
@@ -800,7 +800,7 @@
       title: 'Story archives overview',
       keywords: ['archives', 'archive', 'story list', 'public stories', 'read stories', 'story archives', 'all stories'],
       answer: 'Archives holds every published story on the site, newest first.\n' +
-        'Press Archives in the action row to browse them: search, sort, page through the list, and click any story to read it.\n' +
+        'Press Archives (under Community in the action menu) to browse them: search, sort, page through the list, and click any story to read it.\n' +
         'You can read other members\' stories as well as your own, and stories you own show Edit and Delete buttons in the list.',
       action: {
         label: 'Open the Archives',
@@ -1021,7 +1021,7 @@
       title: 'Support and reports',
       keywords: ['support', 'report', 'report a user', 'report a problem', 'bug', 'issue', 'complaint', 'harassment', 'harassing', 'toxic', 'broken', 'not working', 'suggestion', 'feature request', 'help', 'abuse'],
       answer: 'The Support window is how you report a member, report something wrong with the site, or ask for something new.\n' +
-        'Press Support in the action row, choose the type of report, say who it is about and where it happened, add when it happened and describe it, then submit.\n' +
+        'Press Support (under Help in the action menu), choose the type of report, say who it is about and where it happened, add when it happened and describe it, then submit.\n' +
         'Your report goes straight to the admins, with the option of being contacted for details. Toxicity is taken seriously here, so use it whenever something is not right.',
       action: {
         label: 'Open a support report',
@@ -1294,7 +1294,7 @@
       title: 'Sounds and notifications',
       keywords: ['notification', 'notifications', 'sound', 'sounds', 'alert', 'badge', 'unread', 'popup notification', 'dm notification'],
       answer: 'New Arena messages, DMs and calls each play a short sound, and DMs also show a popup at the top of the screen with who wrote to you.\n' +
-        'Unread counts appear on the DMs button in the action row and beside each room, and clear as you open them.\n' +
+        'Unread counts appear on the Chatrooms button in the action menu, on the DMs button inside it and beside each room, and clear as you open them.\n' +
         'There is nothing to switch on — it all works while the site is open in a tab.',
       action: {
         label: 'Open DMs',
@@ -1759,7 +1759,7 @@
       open();
       addMessage(
         'assistant',
-        'I could not reach that window from here. Try the button for it in the action row, or send a support report and the admins will pick it up.',
+        'I could not reach that window from here. Try the button for it in the action menu, or send a support report and the admins will pick it up.',
         {
           label: 'Open a support report',
           buttonId: 'openSupport',

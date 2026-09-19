@@ -2585,7 +2585,9 @@ h3{
    The main navigation controls use a beveled face, a solid lower edge,
    and a cast shadow so they feel raised and visibly depress on click.
    ============================================================ */
-.actions > button {
+.actions > button,
+.actions .nav-group-toggle,
+.actions .nav-group-menu > button {
   --action-depth: #00394c;
   --action-shadow: rgba(0, 0, 0, 0.58);
   --action-glow: rgba(0, 229, 255, 0.42);
@@ -2621,7 +2623,8 @@ h3{
   -webkit-tap-highlight-color: transparent;
 }
 
-.actions > button.ghost {
+.actions > button.ghost,
+.actions .nav-group-menu > button.ghost {
   --action-depth: #020a18;
   --action-glow: rgba(83, 195, 255, 0.28);
   border-color: #459bc3;
@@ -2635,7 +2638,9 @@ h3{
 }
 
 @media (hover: hover) {
-  .actions > button:hover:not(:disabled) {
+  .actions > button:hover:not(:disabled),
+  .actions .nav-group-toggle:hover:not(:disabled),
+  .actions .nav-group-menu > button:hover:not(:disabled) {
     filter: brightness(1.13) saturate(1.12);
     background-position: -35% 0, 0 0;
     transform: translateY(-5px);
@@ -2650,7 +2655,9 @@ h3{
   }
 }
 
-.actions > button:active:not(:disabled) {
+.actions > button:active:not(:disabled),
+.actions .nav-group-toggle:active:not(:disabled),
+.actions .nav-group-menu > button:active:not(:disabled) {
   filter: brightness(0.94);
   transform: translateY(3px);
   box-shadow:
@@ -2661,12 +2668,16 @@ h3{
     0 0 10px var(--action-glow);
 }
 
-.actions > button:focus-visible {
+.actions > button:focus-visible,
+.actions .nav-group-toggle:focus-visible,
+.actions .nav-group-menu > button:focus-visible {
   outline: 2px solid #e5fcff;
   outline-offset: 5px;
 }
 
-.actions > button:disabled {
+.actions > button:disabled,
+.actions .nav-group-toggle:disabled,
+.actions .nav-group-menu > button:disabled {
   transform: none;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.22),
@@ -2675,7 +2686,182 @@ h3{
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .actions > button {
+  .actions > button,
+  .actions .nav-group-toggle,
+  .actions .nav-group-menu > button {
+    transition: none;
+  }
+}
+
+/* ============================================================
+   ACTION BUTTON CATEGORIES
+   The action column is grouped into categories (Account, Chatrooms,
+   Community, Matches, Help). Each .nav-group is a toggle plus a
+   .nav-group-menu holding the original buttons. On desktop the menu
+   flies out to the right of its toggle, so the fixed, vertically
+   centred column never grows or shifts when a category opens.
+   Behaviour lives in /js/nav-groups.js.
+   ============================================================ */
+
+/* Above the page content the flyout overlaps (.grid and friends sit at
+   z-index auto), below every popup and modal (those start at 9998). */
+.container .actions {
+  z-index: 40;
+}
+
+/* The arena and room windows had no z-index and relied on document order
+   to paint over the column; give them one so dragging a window across the
+   column still lands it on top. PM windows start at 1050 and stay above. */
+.chat-popup {
+  z-index: 50;
+}
+
+.actions .nav-group {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.actions .nav-group-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding-right: 30px;
+  padding-left: 30px;
+}
+
+/* Chevron: points right at the flyout, turns down while it is open. */
+.actions .nav-caret {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -5px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  opacity: 0.8;
+  transition: transform 160ms ease;
+}
+
+.actions .nav-group-open > .nav-group-toggle .nav-caret {
+  transform: translateY(-2px) rotate(45deg);
+}
+
+/* The open category sits pressed in, so it reads as the active one. */
+.actions .nav-group-open > .nav-group-toggle {
+  filter: brightness(1.16) saturate(1.15);
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 3px 6px rgba(0, 20, 34, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 2px 0 var(--action-depth),
+    0 4px 8px rgba(0, 0, 0, 0.45),
+    0 0 22px var(--action-glow);
+}
+
+/* Unread count / activity dot mirrored from the buttons inside the menu. */
+.actions .nav-group-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  text-shadow: none;
+  box-shadow: 0 0 0 2px rgba(0, 10, 20, 0.45);
+}
+
+.actions .nav-group-badge.nav-group-badge-dot {
+  min-width: 10px;
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  background: #ffce5a;
+}
+
+.actions .nav-group-badge[hidden] {
+  display: none;
+}
+
+/* The flyout panel */
+.container .actions .nav-group-menu {
+  position: absolute;
+  left: calc(100% + 18px);
+  top: -12px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-sizing: border-box;
+  min-width: 100%;
+  width: max-content;
+  max-width: 320px;
+  padding: 16px 14px 20px;
+  background: rgba(4, 12, 28, 0.94);
+  border: 1px solid rgba(0, 229, 255, 0.5);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 3px rgba(0, 2, 10, 0.9),
+    0 0 18px 1px rgba(0, 229, 255, 0.35),
+    0 24px 60px rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(12px);
+  animation: navMenuFlyIn 160ms ease-out;
+}
+
+/* Pointer back at the toggle that opened the panel */
+.container .actions .nav-group-menu::before {
+  content: "";
+  position: absolute;
+  left: -7px;
+  top: 26px;
+  width: 12px;
+  height: 12px;
+  background: inherit;
+  border-left: 1px solid rgba(0, 229, 255, 0.5);
+  border-bottom: 1px solid rgba(0, 229, 255, 0.5);
+  transform: rotate(45deg);
+}
+
+.container .actions .nav-group-menu > button {
+  width: 100%;
+  margin: 0;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+/* hidden must win over the display:flex above */
+.actions .nav-group-menu[hidden] {
+  display: none;
+}
+
+@keyframes navMenuFlyIn {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .container .actions .nav-group-menu {
+    animation: none;
+  }
+  .actions .nav-caret {
     transition: none;
   }
 }

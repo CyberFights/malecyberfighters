@@ -2062,7 +2062,9 @@ h3{
    The main navigation controls use a beveled face, a solid lower edge,
    and a cast shadow so they feel raised and visibly depress on tap.
    ============================================================ */
-.actions > button {
+.actions > button,
+.actions .nav-group-toggle,
+.actions .nav-group-menu > button {
   --action-depth: #00394c;
   --action-shadow: rgba(0, 0, 0, 0.58);
   --action-glow: rgba(0, 229, 255, 0.42);
@@ -2098,7 +2100,8 @@ h3{
   -webkit-tap-highlight-color: transparent;
 }
 
-.actions > button.ghost {
+.actions > button.ghost,
+.actions .nav-group-menu > button.ghost {
   --action-depth: #020a18;
   --action-glow: rgba(83, 195, 255, 0.28);
   border-color: #459bc3;
@@ -2112,7 +2115,9 @@ h3{
 }
 
 @media (hover: hover) {
-  .actions > button:hover:not(:disabled) {
+  .actions > button:hover:not(:disabled),
+  .actions .nav-group-toggle:hover:not(:disabled),
+  .actions .nav-group-menu > button:hover:not(:disabled) {
     filter: brightness(1.13) saturate(1.12);
     background-position: -35% 0, 0 0;
     transform: translateY(-5px);
@@ -2127,7 +2132,9 @@ h3{
   }
 }
 
-.actions > button:active:not(:disabled) {
+.actions > button:active:not(:disabled),
+.actions .nav-group-toggle:active:not(:disabled),
+.actions .nav-group-menu > button:active:not(:disabled) {
   filter: brightness(0.94);
   transform: translateY(3px);
   box-shadow:
@@ -2138,12 +2145,16 @@ h3{
     0 0 10px var(--action-glow);
 }
 
-.actions > button:focus-visible {
+.actions > button:focus-visible,
+.actions .nav-group-toggle:focus-visible,
+.actions .nav-group-menu > button:focus-visible {
   outline: 2px solid #e5fcff;
   outline-offset: 5px;
 }
 
-.actions > button:disabled {
+.actions > button:disabled,
+.actions .nav-group-toggle:disabled,
+.actions .nav-group-menu > button:disabled {
   transform: none;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.22),
@@ -2152,7 +2163,140 @@ h3{
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .actions > button {
+  .actions > button,
+  .actions .nav-group-toggle,
+  .actions .nav-group-menu > button {
+    transition: none;
+  }
+}
+
+/* ============================================================
+   ACTION BUTTON CATEGORIES
+   The action list is grouped into categories (Account, Chatrooms,
+   Community, Matches, Help). Each .nav-group is a toggle plus a
+   .nav-group-menu holding the original buttons. On phones the menu
+   drops open in-flow, directly under its category button.
+   Behaviour lives in /js/nav-groups.js.
+   ============================================================ */
+.actions .nav-group {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.actions .nav-group-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 0;
+  padding-right: 36px;
+  padding-left: 36px;
+}
+
+/* Chevron: points down at the menu, flips up while it is open. */
+.actions .nav-caret {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin-top: -7px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.8;
+  transition: transform 160ms ease;
+}
+
+.actions .nav-group-open > .nav-group-toggle .nav-caret {
+  transform: translateY(4px) rotate(-135deg);
+}
+
+/* The open category sits pressed in, so it reads as the active one. */
+.actions .nav-group-open > .nav-group-toggle {
+  filter: brightness(1.16) saturate(1.15);
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 3px 6px rgba(0, 20, 34, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 2px 0 var(--action-depth),
+    0 4px 8px rgba(0, 0, 0, 0.45),
+    0 0 22px var(--action-glow);
+}
+
+/* Unread count / activity dot mirrored from the buttons inside the menu. */
+.actions .nav-group-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  text-shadow: none;
+  box-shadow: 0 0 0 2px rgba(0, 10, 20, 0.45);
+}
+
+.actions .nav-group-badge.nav-group-badge-dot {
+  min-width: 10px;
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  background: #ffce5a;
+}
+
+.actions .nav-group-badge[hidden] {
+  display: none;
+}
+
+/* The drop-down: an indented panel hanging off the category button */
+.actions .nav-group-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 2px 0 8px 12px;
+  padding: 16px 12px 18px 14px;
+  background: rgba(15, 23, 42, 0.6);
+  border-left: 2px solid rgba(0, 229, 255, 0.5);
+  border-radius: 0 12px 12px 0;
+  animation: navMenuDropIn 160ms ease-out;
+}
+
+.actions .nav-group-menu > button {
+  width: 100%;
+  margin-top: 0;
+}
+
+/* hidden must win over the display:flex above */
+.actions .nav-group-menu[hidden] {
+  display: none;
+}
+
+@keyframes navMenuDropIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .actions .nav-group-menu {
+    animation: none;
+  }
+  .actions .nav-caret {
     transition: none;
   }
 }
