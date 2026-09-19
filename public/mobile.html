@@ -226,6 +226,14 @@
       <textarea id="regInfo" rows="3" placeholder="Tell the arena about your fighter"></textarea>
     </div>
 
+    <!-- FIGHTER TAGS: wrestling style / gear & fetish / heel-jobber-face / sexual position -->
+    <div class="field">
+      <span class="tag-picker-heading-label">Fighter Tags</span>
+      <div class="small muted">Optional — pick what fits your fighter. They show on your
+        profile and the roster can be searched by them.</div>
+      <div id="regTags" class="tag-picker-slot"></div>
+    </div>
+
     <div class="field">
       <label for="regImageFile">Profile image</label>
       <input id="regImageFile" type="file" accept="image/*">
@@ -284,6 +292,13 @@
     <div class="field">
       <label for="editInfo">Bio</label>
       <textarea id="editInfo" rows="3" placeholder="Bio"></textarea>
+    </div>
+
+    <!-- FIGHTER TAGS: the same four groups as the register modal -->
+    <div class="field">
+      <span class="tag-picker-heading-label">Fighter Tags</span>
+      <div class="small muted">Shown on your profile and searchable in the roster.</div>
+      <div id="editTags" class="tag-picker-slot"></div>
     </div>
 
     <div class="field">
@@ -488,7 +503,14 @@
       <button id="rosterClose" class="ghost" type="button">✕</button>
     </div>
 
-    <input id="rosterSearch" type="text" placeholder="Search users...">
+    <input id="rosterSearch" type="text" placeholder="Search users or tags...">
+
+    <!-- TAG FILTER — every tag, grouped by category -->
+    <div class="roster-tag-filter">
+      <label for="rosterTagFilter" class="small muted">Tag</label>
+      <select id="rosterTagFilter"></select>
+      <button id="rosterTagClear" class="small-btn secondary" type="button" style="display:none">Clear</button>
+    </div>
 
     <div id="rosterList" class="roster-list"></div>
 
@@ -527,6 +549,11 @@
     <div class="profile-block">
       <div class="muted small">Bio</div>
       <div id="vpBio"></div>
+    </div>
+
+    <div class="profile-block">
+      <div class="muted small">Tags</div>
+      <div id="vpTags" class="tag-list"></div>
     </div>
 
     <div class="profile-stats">
@@ -918,6 +945,8 @@ Moderator decisions are final. </p>
 <script src="/js/audio-calls.js?v=5"></script>
 <script src="/js/emoji-picker.js"></script>
 <script src="/js/physique.js"></script>
+<script src="/js/tags.js"></script>
+<script src="/js/profile-tags.js"></script>
 <script src="/js/unread-badge.js"></script>
 <script src="/js/scroll-back.js"></script>
 <script src="/js/mobile.js"></script>

@@ -184,7 +184,9 @@ function renderRosterPopup() {
   if (!list) return;
 
   const searchEl = $('rosterSearch');
-  const search = (searchEl?.value || '').toLowerCase();
+  const search = searchEl?.value || '';
+  const tagFilter = $('rosterTagFilter');
+  const tag = tagFilter ? tagFilter.value : '';
   const pageLabel = $('rosterPageNumber');
 
   list.innerHTML = '';
@@ -194,12 +196,19 @@ function renderRosterPopup() {
   // SORT NEWEST FIRST
   sorted.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
-  // SEARCH FILTER
-  sorted = sorted.filter(u => {
-    const name = (u.username || '').toLowerCase();
-    const display = (u.display || '').toLowerCase();
-    return name.includes(search) || display.includes(search);
-  });
+  // SEARCH FILTER — members' names and their tags ("heel", "singlet", "vers"),
+  // plus the exact-tag dropdown. ProfileTags keeps this identical to mobile.js.
+  if (window.ProfileTags) {
+    sorted = window.ProfileTags.filterRoster(sorted, { query: search, tag });
+  } else {
+    const needle = search.trim().toLowerCase();
+    sorted = sorted.filter(u => {
+      if (!needle) return true;
+      const name = (u.username || '').toLowerCase();
+      const display = (u.display || '').toLowerCase();
+      return name.includes(needle) || display.includes(needle);
+    });
+  }
 
   // PAGINATION
   const total = sorted.length;
@@ -230,6 +239,15 @@ function renderRosterPopup() {
       </div>
     `;
 
+    // The member's tags, one compact line — what the search above matches on.
+    const summary = window.ProfileTags ? window.ProfileTags.tagSummary(u.tags, 3) : '';
+    if (summary) {
+      const tagLine = document.createElement('div');
+      tagLine.className = 'roster-tags small';
+      tagLine.textContent = summary;
+      div.appendChild(tagLine);
+    }
+
     div.addEventListener('click', () => openUserProfile(u.username));
     list.appendChild(div);
   });
@@ -237,9 +255,33 @@ function renderRosterPopup() {
   if (pageLabel) pageLabel.textContent = `Page ${rosterPage} / ${totalPages}`;
 }
 
+// TAG FILTER — every catalogue tag, grouped by category, plus the Clear
+// button that only shows while a tag is selected. Built on first open so the
+// page does not pay for 60 <option>s nobody has asked to see yet.
+function fillRosterTagFilter() {
+  const select = $('rosterTagFilter');
+  if (!select || !window.ProfileTags) return;
+
+  if (!select.options.length) window.ProfileTags.fillTagFilter(select);
+
+  const clear = $('rosterTagClear');
+  if (clear) clear.style.display = select.value ? '' : 'none';
+}
+
+function resetRosterTagFilter() {
+  const select = $('rosterTagFilter');
+  if (select) select.value = '';
+  const clear = $('rosterTagClear');
+  if (clear) clear.style.display = 'none';
+  rosterPage = 1;
+  renderRosterPopup();
+}
+
 async function openRosterModal() {
   const modal = $('modalRoster');
   if (modal) modal.style.display = 'flex';
+
+  fillRosterTagFilter();
 
   try {
     const res = await authFetch('/api/allUsers');
@@ -284,6 +326,12 @@ function openUserProfile(username) {
   if ($('vpAvatar')) $('vpAvatar').src = chatImgSrc(user.imageUrl) || "/images/mcf-192.png";
   if (window.renderProfilePhotoGallery) {
     window.renderProfilePhotoGallery($('vpExtraPhotos'), user.extraPhotos);
+  }
+  // Fighter tags, as chips. A member who has not picked any gets the empty
+  // note rather than an empty gap (they may not be a member we know about —
+  // the profile can be opened from a chat row before /api/allUsers lands).
+  if (window.ProfileTags) {
+    window.ProfileTags.renderChips($('vpTags'), user.tags, { empty: 'No tags yet' });
   }
 
   const currentUser = typeof getSession === 'function' ? getSession() : null;
@@ -377,11 +425,21 @@ $('rosterClose')?.addEventListener('click', () => {
   if ($('modalRoster')) $('modalRoster').style.display = 'none';
 });
 
-// SEARCH FILTER
+// SEARCH FILTER — names and tags ("heel", "singlet", "vers")
 $('rosterSearch')?.addEventListener('input', () => {
   rosterPage = 1;
   renderRosterPopup();
 });
+
+// TAG FILTER — one exact tag from the dropdown, or Clear to drop it
+$('rosterTagFilter')?.addEventListener('change', () => {
+  const clear = $('rosterTagClear');
+  if (clear) clear.style.display = $('rosterTagFilter').value ? '' : 'none';
+  rosterPage = 1;
+  renderRosterPopup();
+});
+
+$('rosterTagClear')?.addEventListener('click', resetRosterTagFilter);
 
 // PAGINATION BUTTONS
 $('rosterPrev')?.addEventListener('click', () => {

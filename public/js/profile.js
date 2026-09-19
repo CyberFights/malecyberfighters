@@ -152,9 +152,36 @@ async function removeExtraProfilePhoto(photoUrl, button) {
   }
 }
 
+/* ------------------------------------------------\
+   FIGHTER TAGS (edit modal)
+   The picker is built on first open, then filled from the member's saved
+   selection. Saving sends the ticked tags with the rest of the profile.
+\------------------------------------------------ */
+let editTagPicker = null;
+
+function ensureEditTagPicker() {
+  if (editTagPicker) return editTagPicker;
+  const slot = $("editTags");
+  if (!slot || !window.ProfileTags) return null;
+  editTagPicker = window.ProfileTags.renderPicker(slot, { idPrefix: "editTags" });
+  return editTagPicker;
+}
+
+function editTagSelection() {
+  const slot = $("editTags");
+  if (!slot || !window.ProfileTags) return undefined;
+  return window.ProfileTags.pickerSelection(slot);
+}
+
 /* Called by utils.js when user clicks Edit Profile */
 window.openEditProfileModal = function(user) {
   if (!user) return;
+
+  // Tags first: the picker is filled from the record being edited.
+  const tagPicker = ensureEditTagPicker();
+  if (tagPicker && window.ProfileTags) {
+    tagPicker.setSelection(window.ProfileTags.selectionOf(user));
+  }
 
   $("editDisplay").value = user.display || user.displayName || user.username;
   $("editAge").value = user.age || "";
@@ -328,7 +355,8 @@ $("editSubmit").addEventListener("click", async () => {
       wins: Number($("editWins").value),
       losses: Number($("editLosses").value)
     },
-    imageUrl: editImageUrl
+    imageUrl: editImageUrl,
+    tags: editTagSelection()
   };
 
   try {

@@ -57,6 +57,28 @@ function mobileImgSrc(value) {
   function showId(id) { show($(id)); }
   function hideId(id) { hide($(id)); }
 
+  /* ---------------------------------------------------------------------
+     Fighter tags (window.Tags + window.ProfileTags)
+     The pickers are built when a modal opens and read back on save, so a
+     member's picks travel with every register / profile-update payload.
+     --------------------------------------------------------------------- */
+  function buildTagPicker(containerId, selected) {
+    const slot = $(containerId);
+    if (!slot || !window.ProfileTags) return null;
+    return window.ProfileTags.renderPicker(slot, { selected: selected, idPrefix: containerId });
+  }
+
+  function tagSelection(containerId) {
+    const slot = $(containerId);
+    if (!slot || !window.ProfileTags) return undefined;
+    return window.ProfileTags.pickerSelection(slot);
+  }
+
+  function tagChips(containerId, selection, empty) {
+    if (!window.ProfileTags) return;
+    window.ProfileTags.renderChips($(containerId), selection, { empty: empty });
+  }
+
   function escapeHtml(value) {
     if (value === null || value === undefined) return "";
     return String(value).replace(/[&<>"']/g, c => ({
@@ -736,7 +758,8 @@ function mobileImgSrc(value) {
         info: ($("regInfo") && $("regInfo").value || "").trim(),
         color: ($("regColor") && $("regColor").value) || "",
         language: ($("regLanguage") && $("regLanguage").value) || "en",
-        imageUrl: registerImageUrl || ""
+        imageUrl: registerImageUrl || "",
+        tags: tagSelection("regTags")
       };
 
       const data = await postJSON("/api/register", payload);
@@ -1005,7 +1028,9 @@ function mobileImgSrc(value) {
   }
 
   function filteredRoster() {
-    const search = (($("rosterSearch") && $("rosterSearch").value) || "").trim().toLowerCase();
+    const search = ($("rosterSearch") && $("rosterSearch").value) || "";
+    const tagFilter = $("rosterTagFilter");
+    const tag = tagFilter ? tagFilter.value : "";
 
     const users = [...state.allUsers].sort((a, b) => {
       const ta = a && a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -1013,11 +1038,29 @@ function mobileImgSrc(value) {
       return tb - ta;
     });
 
-    if (!search) return users;
+    // Names AND tags ("heel", "singlet", "vers") plus the exact-tag dropdown.
+    // ProfileTags is the same filter the desktop roster uses.
+    if (window.ProfileTags) {
+      return window.ProfileTags.filterRoster(users, { query: search, tag });
+    }
+
+    const needle = search.trim().toLowerCase();
+    if (!needle) return users;
     return users.filter(u =>
-      String(u.username || "").toLowerCase().includes(search) ||
-      String(u.display || "").toLowerCase().includes(search)
+      String(u.username || "").toLowerCase().includes(needle) ||
+      String(u.display || "").toLowerCase().includes(needle)
     );
+  }
+
+  /** Every catalogue tag, grouped by category, on the roster's dropdown. */
+  function fillRosterTagFilter() {
+    const select = $("rosterTagFilter");
+    if (!select || !window.ProfileTags) return;
+
+    if (!select.options.length) window.ProfileTags.fillTagFilter(select);
+
+    const clear = $("rosterTagClear");
+    if (clear) clear.style.display = select.value ? "" : "none";
   }
 
   function renderRoster() {
@@ -1054,6 +1097,16 @@ function mobileImgSrc(value) {
           <button type="button" class="small-btn secondary roster-view-btn" data-user="${escapeHtml(u.username)}">View</button>
         </div>
       `;
+
+      // The member's tags, one compact line — what the search above matches on.
+      const summary = window.ProfileTags ? window.ProfileTags.tagSummary(u.tags, 3) : "";
+      if (summary) {
+        const tagLine = document.createElement("div");
+        tagLine.className = "roster-tags small";
+        tagLine.textContent = summary;
+        row.appendChild(tagLine);
+      }
+
       list.appendChild(row);
     });
 
@@ -1090,6 +1143,7 @@ function mobileImgSrc(value) {
     state.rosterPage = 1;
     const search = $("rosterSearch");
     if (search) search.value = "";
+    fillRosterTagFilter();
     loadAllUsers();
   }
 
@@ -1127,6 +1181,7 @@ function mobileImgSrc(value) {
     const vpAvatar = $("vpAvatar");
     if (vpAvatar) vpAvatar.innerHTML = avatarHtml(user, 96);
     renderProfilePhotoGallery($("vpExtraPhotos"), user.extraPhotos);
+    tagChips("vpTags", user.tags, "No tags yet");
 
     const colorBox = $("vpColorBox");
     if (colorBox) colorBox.style.background = user.color || "transparent";
@@ -1491,6 +1546,8 @@ function mobileImgSrc(value) {
     if (heightSelect) populateHeightSelect(heightSelect, user.height || "");
     setVal("editWeight", user.weight != null && user.weight !== "" ? user.weight : "");
 
+    buildTagPicker("editTags", user.tags);
+
     editImageUrl = user.imageUrl || "";
     editingProfileUsername = user.username;
     editExtraPhotos = normalizeProfilePhotos(user.extraPhotos);
@@ -1538,7 +1595,8 @@ function mobileImgSrc(value) {
         wins: Number(($("editWins") && $("editWins").value) || 0),
         losses: Number(($("editLosses") && $("editLosses").value) || 0)
       },
-      imageUrl: editImageUrl
+      imageUrl: editImageUrl,
+      tags: tagSelection("editTags")
     };
 
     try {
@@ -2458,7 +2516,7 @@ function mobileImgSrc(value) {
 
     /* auth screen */
     on($("btnLogin"), "click", e => { e.preventDefault(); showId("modalLogin"); });
-    on($("btnRegister"), "click", e => { e.preventDefault(); showId("modalRegister"); });
+    on($("btnRegister"), "click", e => { e.preventDefault(); buildTagPicker("regTags"); showId("modalRegister"); });
     on($("btnDiscordLogin"), "click", e => {
       e.preventDefault();
       alert("Discord login is not available yet. Please use a username and password.");
@@ -2497,6 +2555,21 @@ function mobileImgSrc(value) {
     on($("btnRoster"), "click", openRoster);
     on($("rosterClose"), "click", () => hideId("modalRoster"));
     on($("rosterSearch"), "input", debounce(() => { state.rosterPage = 1; renderRoster(); }, 200));
+    on($("rosterTagFilter"), "change", () => {
+      const clear = $("rosterTagClear");
+      const select = $("rosterTagFilter");
+      if (clear) clear.style.display = select && select.value ? "" : "none";
+      state.rosterPage = 1;
+      renderRoster();
+    });
+    on($("rosterTagClear"), "click", () => {
+      const select = $("rosterTagFilter");
+      if (select) select.value = "";
+      const clear = $("rosterTagClear");
+      if (clear) clear.style.display = "none";
+      state.rosterPage = 1;
+      renderRoster();
+    });
     on($("rosterPrev"), "click", () => { state.rosterPage--; renderRoster(); });
     on($("rosterNext"), "click", () => { state.rosterPage++; renderRoster(); });
     bindRosterDelegation();
@@ -2907,7 +2980,7 @@ window.logout = logout;
    All API paths preserved.
 ============================================================ */
 
-$('btnRegister').addEventListener('click', () => show($('modalRegister')));
+$('btnRegister').addEventListener('click', () => { buildTagPicker('regTags'); show($('modalRegister')); });
 $('regCancel').addEventListener('click', () => hide($('modalRegister')));
 
 let uploadedImageUrl = '';
@@ -3003,7 +3076,8 @@ $('regSubmit').addEventListener('click', async () => {
     weight: normalizeWeight(weight) ?? undefined,
     stats:{wins,losses},
     info, color, language,
-    imageUrl: uploadedImageUrl
+    imageUrl: uploadedImageUrl,
+    tags: tagSelection('regTags')
   };
 
   const resp = await fetch('/api/register', {
@@ -3016,6 +3090,7 @@ $('regSubmit').addEventListener('click', async () => {
 
   if(data.ok){
     hide($('modalRegister'));
+    buildTagPicker('regTags');   // start the next registration from a clean slate
     // MOBILE: show login modal after registration
     show($('modalLogin'));
     alert('Account created. Please login.');
@@ -4030,6 +4105,8 @@ window.openEditProfileModal = function(user) {
   if (!user) return;
 
   // Pre-fill modal fields
+  buildTagPicker("editTags", user.tags);
+
   $("editDisplay").value = user.display || user.displayName || user.username;
   $("editAge").value = user.age || "";
   if ($("editDiscordId")) $("editDiscordId").value = user.discordId || "";
@@ -4128,7 +4205,8 @@ $("editSubmit").addEventListener("click", async () => {
       wins: Number($("editWins").value),
       losses: Number($("editLosses").value)
     },
-    imageUrl: editImageUrl
+    imageUrl: editImageUrl,
+    tags: tagSelection('editTags')
   };
 
   try {
