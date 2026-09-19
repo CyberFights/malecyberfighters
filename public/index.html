@@ -94,6 +94,7 @@
 
 <link rel="stylesheet" href="/css/desktop.css?v=9">
 <link rel="stylesheet" href="/css/slash-commands.css?v=1">
+<link rel="stylesheet" href="/css/features.css?v=1">
 <link rel="stylesheet" href="/css/audio-calls.css?v=4">
 <!-- ProfileCard — the 3D member card opened from the online list in the
      public chat (see /js/profile-card.js) -->
@@ -196,6 +197,12 @@
     </button>
     <button id="btnRooms" class="ghost" type="button">Custom Rooms</button>
     <button id="btnForums" class="ghost" type="button">Forums</button>
+    <button id="btnLfg" class="ghost" type="button">Find a Match</button>
+    <button id="btnChallenges" class="ghost" type="button">Challenges</button>
+    <button id="btnRecord" class="ghost" type="button">Record</button>
+    <button id="btnAchievements" class="ghost" type="button">Achievements</button>
+    <button id="btnBookmarks" class="ghost" type="button">Bookmarks</button>
+    <button id="btnPreferences" class="ghost" type="button">Preferences</button>
     <button id="openSupport" type="button">Report</button>
     <button id="btnAssistance" class="ghost" type="button">Assistance</button>
     <button id="btnGuide" class="ghost" type="button">Beginner's Guide</button>
@@ -293,6 +300,12 @@
 </button>
     <button id="btnRooms" class="ghost">Rooms</button>
     <button id="btnForums" class="ghost">Forums</button>
+    <button id="btnLfg" class="ghost">Find a Match</button>
+    <button id="btnChallenges" class="ghost">Challenges</button>
+    <button id="btnRecord" class="ghost">Record</button>
+    <button id="btnAchievements" class="ghost">Achievements</button>
+    <button id="btnBookmarks" class="ghost">Bookmarks</button>
+    <button id="btnPreferences" class="ghost">Preferences</button>
 <button id="openSupport">Support</button>
 <button id="btnAssistance">Assistance</button>
 <button id="btnGuide" class="ghost">Beginner's Guide</button>
@@ -496,11 +509,6 @@
         </select>
       </div>
 
-      <div style="display:flex;gap:8px">
-        <input id="editWins" type="number" placeholder="Wins">
-        <input id="editLosses" type="number" placeholder="Losses">
-      </div>
-
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <input id="editImageFile" type="file" accept="image/*">
         <button id="btnEditUploadImage" class="small-btn" type="button">Upload Main Image</button>
@@ -571,8 +579,6 @@
           <option value="fr">French</option>
           <option value="de">German</option>
         </select>
-        <input id="regWins" type="number" placeholder="Wins" />
-        <input id="regLosses" type="number" placeholder="Losses" />
       </div>
 
       <!-- FIGHTER PHYSIQUE: height menu (3'5" – 8'0") + weight in lbs -->
@@ -889,6 +895,14 @@
         color:white;
       ">
         Block User
+      </button>
+      <button id="vpReportButton" class="small-btn ghost" style="
+        flex:1;
+        padding:14px 12px;
+        font-size:16px;
+        font-weight:700;
+      " title="Report this member to the moderators">
+        ⚠ Report
       </button>
     </div>
 
@@ -1656,6 +1670,16 @@ Moderator decisions are final. </p>
 <script src="/js/download.js"></script>
 <script src="/js/pwa-install.js"></script>
 <script src="/js/push.js"></script>
+<script src="/js/match-styles.js?v=1"></script>
+<script src="/js/features-core.js?v=1"></script>
+<script src="/js/i18n.js?v=1"></script>
+<script src="/js/preferences.js?v=1"></script>
+<script src="/js/lfg.js?v=1"></script>
+<script src="/js/challenges.js?v=1"></script>
+<script src="/js/match-history.js?v=1"></script>
+<script src="/js/achievements.js?v=1"></script>
+<script src="/js/message-extras.js?v=1"></script>
+<script src="/js/room-moderation.js?v=1"></script>
 
 </body>
 </html>

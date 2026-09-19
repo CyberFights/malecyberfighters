@@ -22,7 +22,8 @@ function matches(doc, query) {
     if (key === '$or') return expected.some(clause => matches(doc, clause));
     if (key === '$and') return expected.every(clause => matches(doc, clause));
 
-    const actual = doc[key];
+    const actual = key in doc ? doc[key] : key.split('.').reduce((node, part) =>
+      (node && typeof node === 'object') ? node[part] : undefined, doc);
 
     if (expected instanceof RegExp) return expected.test(String(actual == null ? '' : actual));
 
@@ -31,6 +32,7 @@ function matches(doc, query) {
       // { $gte, $lte }), so every one of them has to hold.
       return Object.entries(expected).every(([operator, operand]) => {
         if (operator === '$ne') return String(actual) !== String(operand);
+        if (operator === '$in') return operand.some(value => String(actual) === String(value));
         if (operator === '$gte') return actual != null && new Date(actual) >= new Date(operand);
         if (operator === '$lte') return actual != null && new Date(actual) <= new Date(operand);
         throw new Error(`fakeModels: unsupported query operator "${operator}" on "${key}"`);
@@ -41,11 +43,17 @@ function matches(doc, query) {
   });
 }
 
+/** Read a (possibly dotted) path off a document, the way matches() does. */
+function readPath(doc, path) {
+  return path.split('.').reduce((node, part) =>
+    (node && typeof node === 'object') ? node[part] : undefined, doc);
+}
+
 function sortDocs(docs, spec) {
   const [field, direction] = Object.entries(spec)[0];
   return docs.slice().sort((a, b) => {
-    const left = a[field] == null ? 0 : a[field];
-    const right = b[field] == null ? 0 : b[field];
+    const left = readPath(a, field) == null ? 0 : readPath(a, field);
+    const right = readPath(b, field) == null ? 0 : readPath(b, field);
     if (left === right) return 0;
     return (left > right ? 1 : -1) * (direction < 0 ? -1 : 1);
   });
@@ -122,6 +130,44 @@ class Collection {
     return { deletedCount: before - this.docs.length };
   }
 
+  async updateOne(query, update = {}) {
+    const doc = this.docs.find(d => matches(d, query));
+    if (!doc) return { matchedCount: 0 };
+
+    const setPath = (path, value) => {
+      const parts = path.split('.');
+      let node = doc;
+      while (parts.length > 1) {
+        const part = parts.shift();
+        if (!node[part] || typeof node[part] !== 'object') node[part] = {};
+        node = node[part];
+      }
+      node[parts[0]] = value;
+    };
+
+    if (update.$set) {
+      for (const [path, value] of Object.entries(update.$set)) setPath(path, value);
+    }
+    if (update.$inc) {
+      // $inc over a dotted path needs the current value, so read through the
+      // same walker matches() uses.
+      for (const [path, amount] of Object.entries(update.$inc)) {
+        const current = Number(path.split('.').reduce((node, part) =>
+          (node && typeof node === 'object') ? node[part] : undefined, doc)) || 0;
+        setPath(path, current + Number(amount));
+      }
+    }
+    if (update.$push) {
+      for (const [path, value] of Object.entries(update.$push)) {
+        const current = path.split('.').reduce((node, part) =>
+          (node && typeof node === 'object') ? node[part] : undefined, doc);
+        if (!Array.isArray(current)) setPath(path, [value]);
+        else current.push(value);
+      }
+    }
+    return { matchedCount: 1 };
+  }
+
   all() {
     return this.docs.slice();
   }
@@ -145,6 +191,9 @@ function makeModels() {
 
   const User = {
     findOne: query => users.findOne(query),
+    find: query => users.find(query),
+    updateOne: (query, update) => users.updateOne(query, update),
+    countDocuments: query => users.countDocuments(query),
     _all: () => users.all(),
     _add: fields => users.create(fields)
   };

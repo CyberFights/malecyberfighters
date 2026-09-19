@@ -187,7 +187,8 @@ test('openProfileCard fills the popup from a member record', () => {
     height: "6'1\"",
     weight: 205,
     wins: 12,
-    losses: 3
+    losses: 3,
+    online: true
   });
 
   const popup = doc.getElementById('profileCardPopup');
@@ -323,13 +324,13 @@ test('the PM button still opens the conversation without opening the card', () =
 test('a member going offline flips the open card\'s status line', () => {
   const { win, doc, socket } = loadChat();
 
-  socket.fire('presence', [{ username: 'bob', display: 'Bob' }]);
+  socket.fire('presence', [{ username: 'bob', display: 'Bob', online: true, lastSeenAt: new Date().toISOString() }]);
   doc.querySelector('#onlineList .online-row').click();
   assert.equal(doc.querySelector('.pc-status').textContent, 'Online');
 
   socket.fire('presence', []);
   assert.equal(doc.querySelector('.pc-status').textContent, 'Offline', 'the card stays open, the status is honest');
 
-  socket.fire('presence', [{ username: 'bob', display: 'Bob' }]);
+  socket.fire('presence', [{ username: 'bob', display: 'Bob', online: true, lastSeenAt: new Date().toISOString() }]);
   assert.equal(doc.querySelector('.pc-status').textContent, 'Online');
 });

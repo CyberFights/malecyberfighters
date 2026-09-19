@@ -35,6 +35,11 @@ const GONE_STATUSES = new Set([404, 410]);
  * @param {string} [deps.publicKey]      VAPID public key
  * @param {string} [deps.privateKey]     VAPID private key
  * @param {string} [deps.subject]        mailto: or https: contact for VAPID
+ * @param {Function} [deps.getUser]      async username → the member's document
+ *                                       (for per-kind prefs + quiet hours)
+ * @param {Function} [deps.gate]         shouldPush({ kind, user, now }) — the
+ *                                       preference/quiet-hours gate from
+ *                                       notificationPrefs.js
  * @param {function} [deps.log]
  */
 function createPushNotifier({
@@ -43,6 +48,8 @@ function createPushNotifier({
   publicKey = '',
   privateKey = '',
   subject = '',
+  getUser = null,
+  gate = null,
   log = console.log
 }) {
   /** Push only works with a VAPID key pair and the library present. */
@@ -122,28 +129,51 @@ function createPushNotifier({
     }
   }
 
-  /**
-   * Build the payload. Deliberately content-free: see the note at the top.
-   *
-   * @param {object} args
-   * @param {string} args.from  who wrote (a display name is nicer than a handle)
-   * @param {string} [args.kind] 'dm' (default) or 'system'
-   */
+/**
+ * Build the payload. Deliberately content-free: see the note at the top.
+ *
+ * @param {object} args
+ * @param {string} args.from  who wrote (a display name is nicer than a handle)
+ * @param {string} [args.kind] 'dm' (default) | 'system' | 'mention' |
+ *                            'story' | 'forum' | 'match' | 'challenge'
+ */
   function buildPayload({ from, kind = 'dm', url = '/' } = {}) {
     const isSystem = kind === 'system' || !from || String(from).toUpperCase() === 'SYSTEM';
     const title = 'Male Cyber Fighters';
+
+    // One body per kind, and never the message text itself — a lock screen is
+    // a public surface and the push service is a third party.
+    const bodyByKind = {
+      system: 'You have a new notification.',
+      mention: `You were mentioned by ${from}.`,
+      story: 'A story is waiting for your approval.',
+      forum: 'New reply in a forum you follow.',
+      match: 'A match needs your attention.',
+      challenge: `A match challenge from ${from} is waiting.`
+    };
+
     const body = isSystem
-      ? 'You have a new notification.'
-      : `New direct message from ${from}.`;
+      ? bodyByKind.system
+      : (bodyByKind[kind] || `New direct message from ${from}.`);
+
+    const tagByKind = {
+      system: 'mcf-system',
+      mention: 'mcf-mention',
+      story: 'mcf-story',
+      forum: 'mcf-forum',
+      match: 'mcf-match',
+      challenge: 'mcf-challenge',
+      dm: `mcf-dm-${from}`
+    };
 
     return JSON.stringify({
       title,
       body,
       // Everything the click handler needs, and nothing it does not.
-      data: { url, kind: isSystem ? 'system' : 'dm' },
-      tag: isSystem ? 'mcf-system' : `mcf-dm-${from}`,
-      // Replace an unread notification from the same sender rather than stacking
-      // one per message.
+      data: { url, kind: isSystem ? 'system' : kind },
+      tag: tagByKind[kind] || tagByKind.dm,
+      // Replace an unread notification of the same kind rather than stacking
+      // one per event.
       renotify: false
     });
   }
@@ -155,6 +185,19 @@ function createPushNotifier({
    */
   async function notify({ to, from, kind = 'dm', url = '/' }) {
     if (!configured || !to) return 0;
+
+    // Per-kind preferences + quiet hours. A member who switched match pings
+    // off (or is inside their 22:00–08:00 window) hears nothing, exactly as
+    // if they had no subscription.
+    if (getUser && gate) {
+      try {
+        const user = await getUser(to);
+        if (user && !gate({ kind, user, now: new Date() })) return 0;
+      } catch (err) {
+        console.error('push: preference lookup failed:', err?.message || err);
+        // A preference lookup failure must not silently eat the notification.
+      }
+    }
 
     let subs;
     try {

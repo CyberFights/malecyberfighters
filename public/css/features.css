@@ -1,0 +1,590 @@
+/* ============================================================
+   features.css — styles for the feature modules
+   ------------------------------------------------------------
+   One stylesheet for everything the new feature scripts
+   render: the popup scaffold and toasts (features-core.js),
+   the LFG board, challenges, the match record, achievements,
+   preferences, message extras (reactions / mentions / unread
+   marker / DM actions) and room moderation.
+
+   Also carries the two page-wide switches those features own:
+
+     • the light theme   — html[data-mcf-theme="light"] overrides
+                           the root variables (the site already
+                           drives most surfaces through them) plus
+                           the handful of hardcoded darks that
+                           predate the variables
+     • the chat text size — html[data-mcf-font] scales message
+                            text only, not the whole layout
+============================================================ */
+
+/* ---------- popup scaffold ---------- */
+
+.mcf-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 12000;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  padding: 16px;
+}
+
+.mcf-modal.mcf-open { opacity: 1; }
+
+.mcf-modal-panel {
+  background: #0d1220;
+  border: 1px solid rgba(127, 216, 255, 0.3);
+  border-radius: 14px;
+  box-shadow: 0 0 40px rgba(0, 120, 220, 0.25);
+  width: 440px;
+  max-width: 100%;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.mcf-modal-wide .mcf-modal-panel { width: 720px; }
+
+.mcf-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(127, 216, 255, 0.18);
+}
+
+.mcf-modal-title { margin: 0; font-size: 17px; }
+
+.mcf-modal-close {
+  background: transparent;
+  border: 1px solid rgba(127, 216, 255, 0.3);
+  color: inherit;
+  border-radius: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.mcf-modal-close:hover { background: rgba(127, 216, 255, 0.12); }
+
+.mcf-modal-body {
+  padding: 14px 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ---------- toasts ---------- */
+
+.mcf-toast-root {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 13000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+  max-width: min(360px, calc(100vw - 28px));
+}
+
+.mcf-toast {
+  background: #101a2e;
+  border: 1px solid rgba(127, 216, 255, 0.35);
+  border-left: 4px solid var(--accent, #7fd8ff);
+  border-radius: 10px;
+  color: #eaf6ff;
+  padding: 10px 14px;
+  font-size: 14px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transform: translateX(12px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.mcf-toast.mcf-toast-in { opacity: 1; transform: translateX(0); }
+.mcf-toast-error { border-left-color: #ff7a9c; }
+.mcf-toast-success { border-left-color: #6dffe7; }
+.mcf-toast-info { border-left-color: #9db8ff; }
+
+/* ---------- shared bits ---------- */
+
+.mcf-input,
+.mcf-modal select,
+.mcf-modal input[type="text"],
+.mcf-modal textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(6, 12, 24, 0.85);
+  border: 1px solid rgba(127, 216, 255, 0.25);
+  border-radius: 8px;
+  color: inherit;
+  padding: 8px 10px;
+  font-size: 14px;
+}
+
+.mcf-field { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.mcf-field > label { font-size: 13px; color: var(--muted, #b8c7d9); }
+
+.mcf-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.mcf-section-heading {
+  margin: 14px 0 4px;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent, #7fd8ff);
+}
+
+.mcf-chip {
+  background: rgba(127, 216, 255, 0.08);
+  border: 1px solid rgba(127, 216, 255, 0.25);
+  border-radius: 999px;
+  color: inherit;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  cursor: default;
+}
+
+button.mcf-chip { cursor: pointer; }
+button.mcf-chip:hover { background: rgba(127, 216, 255, 0.16); }
+.mcf-chip-on {
+  background: rgba(127, 216, 255, 0.25);
+  border-color: var(--accent, #7fd8ff);
+  box-shadow: 0 0 8px rgba(127, 216, 255, 0.35);
+}
+
+.mcf-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+.mcf-toggle-row input { width: auto; }
+
+.mcf-seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.mcf-seg-btn {
+  background: rgba(127, 216, 255, 0.08);
+  border: 1px solid rgba(127, 216, 255, 0.25);
+  border-radius: 8px;
+  color: inherit;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.mcf-seg-btn.mcf-seg-on {
+  background: rgba(127, 216, 255, 0.25);
+  border-color: var(--accent, #7fd8ff);
+}
+
+.mcf-btn-badge {
+  display: inline-block;
+  margin-left: 6px;
+  color: #ffce5a;
+  font-weight: 700;
+}
+
+.mcf-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+.mcf-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(127, 216, 255, 0.15);
+  color: var(--accent, #7fd8ff);
+  font-weight: 700;
+}
+
+.mcf-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted, #b8c7d9);
+}
+.mcf-dot-on { background: var(--success, #6dffe7); box-shadow: 0 0 6px rgba(109, 255, 231, 0.7); }
+
+.mcf-snippet {
+  margin: 6px 0;
+  padding: 8px 10px;
+  border-left: 3px solid rgba(127, 216, 255, 0.4);
+  background: rgba(127, 216, 255, 0.06);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---------- LFG board ---------- */
+
+.mcf-lfg-mine {
+  border: 1px solid rgba(127, 216, 255, 0.2);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mcf-lfg-styles { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.mcf-lfg-board-heading { margin-top: 14px; }
+
+.mcf-lfg-board { display: flex; flex-direction: column; gap: 10px; }
+
+.mcf-lfg-entry {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  border: 1px solid rgba(127, 216, 255, 0.18);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.mcf-lfg-main { flex: 1; min-width: 0; }
+.mcf-lfg-name { font-weight: 700; }
+.mcf-lfg-presence { display: flex; align-items: center; gap: 6px; margin: 2px 0 6px; }
+.mcf-lfg-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.mcf-lfg-note { color: var(--muted, #b8c7d9); }
+.mcf-lfg-actions { display: flex; flex-direction: column; gap: 6px; }
+
+/* ---------- challenges ---------- */
+
+.mcf-challenge-row {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid rgba(127, 216, 255, 0.18);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.mcf-challenge-main { flex: 1; min-width: 0; }
+.mcf-challenge-actions { display: flex; flex-direction: column; gap: 6px; }
+.mcf-term-row { font-size: 13.5px; }
+
+/* ---------- match record ---------- */
+
+.mcf-record-bar {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  border: 1px solid rgba(127, 216, 255, 0.2);
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+.mcf-record-stat { font-size: 14px; color: var(--muted, #b8c7d9); }
+.mcf-record-stat b { color: var(--accent, #7fd8ff); font-size: 16px; }
+
+.mcf-match-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(127, 216, 255, 0.14);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+.mcf-match-main { display: flex; gap: 12px; align-items: center; flex: 1; min-width: 0; }
+.mcf-match-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.mcf-outcome {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 13px;
+  flex: none;
+}
+.mcf-outcome-win { background: rgba(109, 255, 231, 0.16); color: #6dffe7; border: 1px solid rgba(109, 255, 231, 0.4); }
+.mcf-outcome-loss { background: rgba(255, 122, 156, 0.14); color: #ff7a9c; border: 1px solid rgba(255, 122, 156, 0.4); }
+.mcf-outcome-draw { background: rgba(157, 184, 255, 0.14); color: #9db8ff; border: 1px solid rgba(157, 184, 255, 0.4); }
+
+.mcf-rival-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 2px;
+  border-bottom: 1px dashed rgba(127, 216, 255, 0.14);
+}
+
+/* ---------- achievements ---------- */
+
+.mcf-badge {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid rgba(127, 216, 255, 0.18);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.mcf-badge-locked { opacity: 0.55; filter: grayscale(0.7); }
+.mcf-badge-icon { font-size: 26px; }
+.mcf-badge-title { font-weight: 700; }
+
+/* ---------- message extras ---------- */
+
+.mcf-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.mcf-reaction-chip {
+  background: rgba(127, 216, 255, 0.08);
+  border: 1px solid rgba(127, 216, 255, 0.25);
+  border-radius: 999px;
+  color: inherit;
+  font-size: 12.5px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.mcf-reaction-chip:hover { background: rgba(127, 216, 255, 0.16); }
+.mcf-reaction-mine {
+  background: rgba(127, 216, 255, 0.25);
+  border-color: var(--accent, #7fd8ff);
+}
+
+.mcf-emoji-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 6px;
+  border: 1px solid rgba(127, 216, 255, 0.25);
+  border-radius: 10px;
+  background: rgba(10, 16, 30, 0.95);
+  position: relative;
+  z-index: 5;
+  width: fit-content;
+}
+.mcf-emoji-picker button {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.mcf-emoji-picker button:hover { background: rgba(127, 216, 255, 0.15); }
+
+.mcf-mention {
+  background: rgba(127, 216, 255, 0.12);
+  border-radius: 6px;
+  padding: 0 3px;
+  font-weight: 600;
+}
+.mcf-mention-me {
+  background: rgba(255, 206, 90, 0.22);
+  color: #ffce5a;
+  box-shadow: 0 0 0 1px rgba(255, 206, 90, 0.4);
+}
+
+.mcf-unread-divider {
+  text-align: center;
+  color: #ffce5a;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 0;
+  border-top: 1px solid rgba(255, 206, 90, 0.45);
+  border-bottom: 1px solid rgba(255, 206, 90, 0.45);
+  margin: 6px 0;
+}
+
+.mcf-jump-btn {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 206, 90, 0.15);
+  border: 1px solid rgba(255, 206, 90, 0.55);
+  color: #ffce5a;
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 12.5px;
+  cursor: pointer;
+  z-index: 6;
+  backdrop-filter: blur(6px);
+}
+
+/* DM hover actions */
+.mcf-dm-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  font-size: 12px;
+}
+.message-row:hover .mcf-dm-actions,
+.message:hover .mcf-dm-actions,
+.mcf-dm-actions:focus-within { opacity: 1; }
+
+.mcf-dm-action {
+  background: transparent;
+  border: none;
+  color: var(--muted, #b8c7d9);
+  cursor: pointer;
+  font-size: 11.5px;
+  padding: 2px 4px;
+  text-decoration: underline dotted;
+}
+.mcf-dm-action:hover { color: var(--accent, #7fd8ff); }
+.mcf-dm-delete:hover { color: #ff7a9c; }
+
+.mcf-dm-editor { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+.mcf-dm-tombstone { opacity: 0.55; font-style: italic; }
+.mcf-edited-marker { color: var(--muted, #b8c7d9); font-size: 12px; }
+
+/* ---------- room moderation ---------- */
+
+.mcf-mod-member {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 2px;
+  border-bottom: 1px dashed rgba(127, 216, 255, 0.14);
+  flex-wrap: wrap;
+}
+.mcf-mod-name { font-weight: 600; }
+.mcf-mod-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ---------- bookmarks ---------- */
+
+.mcf-bookmark-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid rgba(127, 216, 255, 0.14);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+.mcf-bookmark-main { flex: 1; min-width: 0; word-break: break-word; }
+
+/* ---------- quiet hours ---------- */
+
+.mcf-quiet-times { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.mcf-quiet-times select { width: auto; }
+
+.mcf-room-mute-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 2px;
+  border-bottom: 1px dashed rgba(127, 216, 255, 0.14);
+}
+
+/* ============================================================
+   CHAT TEXT SIZE (accessibility)
+   Message text only — the chrome stays put so the layout does
+   not reflow out from under the reader.
+============================================================ */
+
+html[data-mcf-font="sm"] .message-text,
+html[data-mcf-font="sm"] .public-feed .message > div:not(.message-actions):not(.mcf-reactions),
+html[data-mcf-font="sm"] .pm-body .message,
+html[data-mcf-font="sm"] #dmMessages .message { font-size: 12.5px; }
+
+html[data-mcf-font="lg"] .message-text,
+html[data-mcf-font="lg"] .public-feed .message > div:not(.message-actions):not(.mcf-reactions),
+html[data-mcf-font="lg"] .pm-body .message,
+html[data-mcf-font="lg"] #dmMessages .message { font-size: 16.5px; }
+
+html[data-mcf-font="xl"] .message-text,
+html[data-mcf-font="xl"] .public-feed .message > div:not(.message-actions):not(.mcf-reactions),
+html[data-mcf-font="xl"] .pm-body .message,
+html[data-mcf-font="xl"] #dmMessages .message { font-size: 19px; }
+
+/* ============================================================
+   LIGHT THEME
+   The site drives most surfaces through the :root variables
+   (desktop.css / mobile.css), so overriding those carries the
+   bulk. The rules after them cover the hardcoded darks that
+   predate the variables (modals with background:#111, dark
+   panels and borders).
+============================================================ */
+
+html[data-mcf-theme="light"] {
+  --bg: #eef3fa;
+  --card: #ffffff;
+  --accent: #0a6aa5;
+  --muted: #51617a;
+  --glass: rgba(10, 60, 110, 0.06);
+  --success: #0a8f6e;
+  --danger: #c23c5f;
+  --panel: rgba(255, 255, 255, 0.9);
+  --panel-border: rgba(10, 60, 110, 0.25);
+  --accent-glow: 0 0 10px rgba(10, 106, 165, 0.25);
+  color-scheme: light;
+}
+
+/* The hardcoded darks: popups and panels written before the variables. */
+html[data-mcf-theme="light"] .mcf-modal { background: rgba(15, 30, 55, 0.35); }
+html[data-mcf-theme="light"] .mcf-modal-panel { background: #ffffff; border-color: rgba(10, 60, 110, 0.25); box-shadow: 0 8px 40px rgba(15, 40, 80, 0.2); }
+html[data-mcf-theme="light"] .mcf-toast { background: #ffffff; color: #17263c; border-color: rgba(10, 60, 110, 0.3); }
+html[data-mcf-theme="light"] .mcf-emoji-picker { background: #ffffff; }
+html[data-mcf-theme="light"] body,
+html[data-mcf-theme="light"] .container,
+html[data-mcf-theme="light"] #mainUI { background: var(--bg); color: #17263c; }
+
+/* Fixed-position modals that hardcode #111 / black backgrounds. */
+html[data-mcf-theme="light"] #modalLogin,
+html[data-mcf-theme="light"] #modalForgot,
+html[data-mcf-theme="light"] #modalRegister { background: rgba(23, 38, 60, 0.45); }
+html[data-mcf-theme="light"] #modalEditProfile > div,
+html[data-mcf-theme="light"] #modalAdminPassword > div,
+html[data-mcf-theme="light"] #modalAdmin > div,
+html[data-mcf-theme="light"] #modalAccountSettings > div,
+html[data-mcf-theme="light"] #modalRoster > div,
+html[data-mcf-theme="light"] #modalArchives > div,
+html[data-mcf-theme="light"] #modalViewProfile > div {
+  background: #ffffff;
+  color: #17263c;
+  border: 1px solid rgba(10, 60, 110, 0.25);
+}
+
+/* Inputs and textareas default to a dark scheme in several places. */
+html[data-mcf-theme="light"] input,
+html[data-mcf-theme="light"] textarea,
+html[data-mcf-theme="light"] select {
+  background: #f4f8fd;
+  color: #17263c;
+  border-color: rgba(10, 60, 110, 0.3);
+}
+
+/* Chips + segment buttons follow the accent, just dimmer on white. */
+html[data-mcf-theme="light"] .mcf-chip,
+html[data-mcf-theme="light"] .mcf-seg-btn { background: rgba(10, 60, 110, 0.06); border-color: rgba(10, 60, 110, 0.25); }
+html[data-mcf-theme="light"] .mcf-chip-on,
+html[data-mcf-theme="light"] .mcf-seg-btn.mcf-seg-on { background: rgba(10, 106, 165, 0.16); border-color: var(--accent); }
+html[data-mcf-theme="light"] .mcf-mention { background: rgba(10, 60, 110, 0.1); }
+html[data-mcf-theme="light"] .mcf-lfg-entry,
+html[data-mcf-theme="light"] .mcf-challenge-row,
+html[data-mcf-theme="light"] .mcf-match-row,
+html[data-mcf-theme="light"] .mcf-badge { border-color: rgba(10, 60, 110, 0.18); }
+html[data-mcf-theme="light"] .mcf-lfg-mine,
+html[data-mcf-theme="light"] .mcf-record-bar { border-color: rgba(10, 60, 110, 0.2); }

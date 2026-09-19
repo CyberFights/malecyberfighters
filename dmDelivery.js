@@ -33,6 +33,39 @@
 // names may not contain "." or "$", so the dmSeen map key is normalised.
 const dmSeenKey = name => String(name).replace(/[.$]/g, "_");
 
+/**
+ * How long after sending a DM stays editable. Public and room messages have
+ * no window at all (they are editable forever by the author), but a DM is
+ * the *other* member's conversation too: an edit that rewrites an hour-old
+ * exchange changes what both sides believe was said. Fifteen minutes fixes
+ * a typo without rewriting history.
+ */
+const DM_EDIT_WINDOW_MS = 15 * 60 * 1000;
+
+/**
+ * Whether `username` may edit this DM right now. Author-only, inside the
+ * window, and never for image/clip messages (there is no text to fix) or
+ * already-deleted tombstones.
+ */
+function canEditDM(message, username, now = Date.now()) {
+  if (!message || !username) return false;
+  if (message.from !== username) return false;
+  if (message.deleted) return false;
+  if (message.imageUrl || message.clipUrl) return false;
+  const sentAt = message.time ? new Date(message.time).getTime() : 0;
+  if (!sentAt || now - sentAt > DM_EDIT_WINDOW_MS || sentAt > now + 60 * 1000) return false;
+  return true;
+}
+
+/**
+ * Whether `username` may delete this DM for both sides. Author-only, with no
+ * time limit: on an 18+ site "take that back" is a safety feature, and the
+ * tombstone keeps the thread honest about a message having existed.
+ */
+function canDeleteDM(message, username) {
+  return !!(message && username && message.from === username && !message.deleted);
+}
+
 const createDmDelivery = ({ User, DM, io }) => {
   const userRoom = username => `user:${username}`;
 
@@ -121,4 +154,4 @@ const createDmDelivery = ({ User, DM, io }) => {
   return { userRoom, liveSocketCount, emitToUser, markDMRead, getUnreadDMCounts, dmSeenKey };
 };
 
-module.exports = { createDmDelivery, dmSeenKey };
+module.exports = { createDmDelivery, dmSeenKey, canEditDM, canDeleteDM, DM_EDIT_WINDOW_MS };

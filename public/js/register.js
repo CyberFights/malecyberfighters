@@ -67,8 +67,6 @@ $('regSubmit').addEventListener('click', async () => {
   const password = $('regPass').value;
   const display = $('regDisplay').value.trim() || username;
   const age = $('regAge').value;
-  const wins = Number($('regWins').value || 0);
-  const losses = Number($('regLosses').value || 0);
   const info = $('regInfo').value.trim();
   const color = $('regColor').value;
   const language = $('regLanguage').value;
@@ -111,7 +109,6 @@ $('regSubmit').addEventListener('click', async () => {
     username, email, password, display, age,
     height: normalizeHeight(height),
     weight: normalizeWeight(weight) ?? undefined,
-    stats:{wins,losses},
     info, color, language,
     imageUrl: uploadedImageUrl,
     tags: registerTagSelection()
