@@ -560,7 +560,8 @@ function mobileImgSrc(value) {
       const current = popup ? popup.dataset.room : null;
       if (!current || !msg || String(msg.room) !== String(current)) {
         const s = getSession();
-        if (msg && msg.room && msg.type !== "system" && (!s || msg.from !== s.username)) {
+        const roomMuted = !!(window.MCFPreferences && window.MCFPreferences.isRoomMuted(msg && msg.room));
+        if (!roomMuted && msg && msg.room && msg.type !== "system" && (!s || msg.from !== s.username)) {
           state.roomUnread[msg.room] = (state.roomUnread[msg.room] || 0) + 1;
           renderRoomsSidebar();
           if (window.MCFUnreadBadge) window.MCFUnreadBadge.refresh();
@@ -751,10 +752,7 @@ function mobileImgSrc(value) {
         age: age || undefined,
         height: normalizeHeight(height),
         weight: normalizeWeight(weight) ?? undefined,
-        stats: {
-          wins: Number(($("regWins") && $("regWins").value) || 0),
-          losses: Number(($("regLosses") && $("regLosses").value) || 0)
-        },
+
         info: ($("regInfo") && $("regInfo").value || "").trim(),
         color: ($("regColor") && $("regColor").value) || "",
         language: ($("regLanguage") && $("regLanguage").value) || "en",
@@ -893,6 +891,8 @@ function mobileImgSrc(value) {
 
     const row = document.createElement("div");
     row.className = "message-row" + (isMe ? " me" : "");
+    if (msg._id) row.dataset.id = String(msg._id);
+    if (msg.time) row.dataset.time = String(new Date(msg.time).getTime());
     row.innerHTML = `
       <div class="message-avatar">${avatarHtml(avatarSource)}</div>
       <div class="message">
@@ -900,7 +900,7 @@ function mobileImgSrc(value) {
           ${escapeHtml(display)}
           <span class="small muted">@${escapeHtml(msg.from || "")} • ${escapeHtml(timeLabel(msg.time))}</span>
         </div>
-        ${msg.text ? `<div>${escapeHtml(msg.text)}</div>` : ""}
+        ${msg.text ? `<div class="message-text">${escapeHtml(msg.text)}</div>` : ""}
         ${imageHtml}
       </div>
     `;
@@ -1538,8 +1538,6 @@ function mobileImgSrc(value) {
     setVal("editInfo", user.info || "");
     setVal("editColor", user.color || "#38bdf8");
     setVal("editLanguage", user.language || "en");
-    setVal("editWins", statOf(user, "wins"));
-    setVal("editLosses", statOf(user, "losses"));
 
     // Fighter physique: height menu (3'5"–8'0") + weight in lbs
     const heightSelect = $("editHeight");
@@ -1591,10 +1589,7 @@ function mobileImgSrc(value) {
       info: ($("editInfo") && $("editInfo").value || "").trim(),
       color: ($("editColor") && $("editColor").value) || "",
       language: ($("editLanguage") && $("editLanguage").value) || "en",
-      stats: {
-        wins: Number(($("editWins") && $("editWins").value) || 0),
-        losses: Number(($("editLosses") && $("editLosses").value) || 0)
-      },
+
       imageUrl: editImageUrl,
       tags: tagSelection("editTags")
     };
@@ -1880,7 +1875,9 @@ function mobileImgSrc(value) {
       const author = directoryUser(msg.from) || { username: msg.from, display: msg.display || msg.from };
 
       const row = document.createElement("div");
-      row.className = "message-row" + (isMe ? " me" : "") + ((msg.type === "storyApproval" || msg.type === "relationshipApproval") ? " system" : "");
+      row.className = "message-row" + (isMe ? " me" : "") + ((msg.type === "storyApproval" || msg.type === "relationshipApproval" || msg.type === "matchApproval") ? " system" : "");
+      if (msg._id || msg.id) row.dataset.dmId = String(msg._id || msg.id);
+      if (msg.time) row.dataset.dmTime = String(new Date(msg.time).getTime());
 
       let content = "";
       if (msg.type === "storyApproval") {
@@ -1901,10 +1898,19 @@ function mobileImgSrc(value) {
             <button type="button" class="small-btn approveRelBtn" data-id="${escapeHtml(rid)}">Approve</button>
           </div>
         `;
+      } else if (msg.type === "matchApproval") {
+        const mid = escapeHtml(msg.matchId || msg._id || "");
+        content = `
+        <div class="system-msg">
+          <div>${escapeHtml(msg.text || "")}</div>
+            <button type="button" class="small-btn approveMatchBtn" data-id="${mid}">Approve</button>
+            <button type="button" class="small-btn ghost declineMatchBtn" data-id="${mid}">Decline</button>
+        </div>
+      `;
       } else if (msg.imageUrl) {
       content = `<img src="${escapeHtml(mobileImgSrc(msg.imageUrl))}" class="chat-image" alt="attachment">`;
     } else {
-      content = `<div>${escapeHtml(msg.text || "")}</div>`;
+      content = `<div>${escapeHtml(msg.deleted ? "message deleted" : (msg.text || ""))}</div>`;
     }
 
     row.innerHTML = `
@@ -2152,6 +2158,8 @@ function mobileImgSrc(value) {
 
     const div = document.createElement("div");
     div.className = "message-row" + (isMe ? " me" : "");
+    if (msg._id) div.dataset.id = String(msg._id);
+    if (msg.time) div.dataset.time = String(new Date(msg.time).getTime());
     div.innerHTML = `
       <div class="message-avatar">${avatarHtml(author)}</div>
       <div class="message">
@@ -2883,6 +2891,10 @@ socket.on("forceLogout", ({ reason } = {}) => {
 
 // Re-export for modules that expect a global
 window.socket = socket;
+// Shared feature scripts (challenges, LFG, match record) open the room chat
+// and DM windows through these.
+window.openRoomPopup = openRoomPopup;
+window.openPrivateWindow = openPrivateWindow;
 
 
 /* ===================== auth-mobile.js (unique contributions) ===================== */

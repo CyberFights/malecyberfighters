@@ -39,7 +39,11 @@ function createStoryRouter({
   Story, User, DM, mongoose, emitToUser, forwardDMToDiscord, isLocalClipUrl,
   // Tests hand in a pass-through so a suite is not throttled; production gets
   // the real limiter below.
-  writeLimiter
+  writeLimiter,
+  // Optional: called with the story the moment it first goes public, so the
+  // host can run side effects (achievements, a digest, …) without the router
+  // knowing about any of them.
+  onPublished
 } = {}) {
   const router = express.Router();
 
@@ -243,6 +247,16 @@ function createStoryRouter({
           action: "published",
           title: story.title
         }, statusDmText(story, "published"));
+
+        // A story going public is the event several side effects key on
+        // (badges for both writers, …). Failure is logged, never fatal.
+        if (typeof onPublished === "function") {
+          try {
+            await onPublished(story);
+          } catch (err) {
+            console.error("story published hook error:", err?.message || err);
+          }
+        }
       }
 
       res.json({ ok: true, approved: story.approved === true, title: story.title });

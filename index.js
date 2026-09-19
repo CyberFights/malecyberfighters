@@ -31,6 +31,23 @@ const {
   avatarInitial,
   renderInitialsAvatarPng
 } = require('./discordWebhook');
+// ---------- FEATURE MODULES ----------
+// Each is split out of this file the way dmDelivery.js / storyRoutes.js were,
+// so its rules can run under tests without a server: the LFG board, formal
+// challenges, the match record, message reactions, mention pings, bookmarks,
+// moderation reports, achievements, and per-kind notification preferences.
+const { createLfgRouter } = require('./lfg');
+const { createChallengeRouter } = require('./challenges');
+const { createMatchHistoryRouter } = require('./matchHistory');
+const reactions = require('./reactions');
+const { resolveMentions } = require('./mentions');
+const { createReportsRouter, summarizeForDispatch } = require('./reports');
+const achievements = require('./achievements');
+const notificationPrefs = require('./notificationPrefs');
+const { canEditDM, canDeleteDM } = require('./dmDelivery');
+// The match style catalogue lives in public/js so the browser pickers and the
+// API validation can never drift apart — same rule as physique.js / tags.js.
+const matchStyles = require('./public/js/match-styles.js');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -820,6 +837,23 @@ async function hpEmbeddedAction(action, body) {
       if (!game) return { status: 404, body: { error: 'Game not found.' } };
       const outcome = await hpResolveMove(game, body.playerId, body);
       if (!outcome.success) return { status: 400, body: { success: false, error: outcome.error } };
+
+      // The move decided the match: record it once (the flag keeps a second
+      // finishing move — a race between two tabs — from double-counting) and
+      // move both fighters' W/L counters. See recordEngineMatch for why only
+      // engine-decided finishes are recorded.
+      if (game.state.finished && !game.recorded) {
+        game.recorded = true;
+        recordEngineMatch(game, outcome.result);
+      } else if (!game.state.finished) {
+        // The turn passed: whoever moves next gets a nudge (a push too, if
+        // they are not sitting on a live session).
+        const playerIds = Array.from(game.players);
+        if (playerIds.length === 2) {
+          notifyMatchTurn(playerIds[game.state.turnIndex % playerIds.length], body.playerId);
+        }
+      }
+
       return { status: 200, body: { result: outcome.result, game: hpGameView(game) } };
     }
 
@@ -1303,6 +1337,41 @@ const userSchema = new mongoose.Schema({
     default: () => ({})
   },
   blockedUsers: { type: [String], default: [] },
+  // ---------- MATCH RECORD ----------
+  // Wins / losses used to be two numbers a member typed into their own
+  // profile; they are now real counters moved only by the match-record flow
+  // (engine-finished matches and opponent-confirmed logged matches), so the
+  // numbers on a profile are backed by rows in the MatchRecord collection.
+  wins: { type: Number, default: 0, min: 0 },
+  losses: { type: Number, default: 0, min: 0 },
+  // ---------- LFG (looking for a match) ----------
+  // The member's own flag for the live LFG board — see lfg.js. Flipping it
+  // off clears the styles and the note with it, so nothing stale lingers.
+  lfg: {
+    type: new mongoose.Schema({
+      looking: { type: Boolean, default: false },
+      styles: { type: [String], default: [] },
+      note: { type: String, default: '' },
+      updatedAt: { type: Date, default: Date.now }
+    }, { _id: false }),
+    default: () => ({})
+  },
+  // ---------- ACHIEVEMENTS ----------
+  // Unlocked catalogue ids with their timestamps; anything the catalogue no
+  // longer lists simply stops being displayed.
+  achievements: {
+    type: [{ _id: false, id: String, unlockedAt: Date }],
+    default: []
+  },
+  // ---------- NOTIFICATION PREFERENCES ----------
+  // Per-kind push switches + a quiet window; the shape and the defaults live
+  // in notificationPrefs.js so this stays dumb storage.
+  notificationPrefs: { type: Object, default: {} },
+  quietHours: { type: Object, default: {} },
+  // ---------- PRESENCE ----------
+  // "Online" only exists while a socket is attached; lastSeenAt is what makes
+  // "active 2h ago" possible on profile cards once the member is gone.
+  lastSeenAt: { type: Date, default: Date.now },
   // Per-conversation DM read markers: { [partnerUsername]: ISO date string }.
   // The unread badge used to be purely client-side (localStorage, fed by live
   // socket events), so a DM that arrived while the recipient had no live
@@ -1355,8 +1424,103 @@ const RoomSchema = new mongoose.Schema({
   private: { type: Boolean, default: false },
   owner: { type: String, required: true },
   invitedUsers: { type: [String], default: [] },
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  // ---------- OWNER MODERATION ----------
+  // The room owner's tools, all enforced server-side in the roomMessage /
+  // joinRoom handlers: slow mode (minimum gap between one member's messages),
+  // mutes (map of member key → ISO instant the mute ends) and the kick list
+  // (a kicked member cannot rejoin until the owner reverses it).
+  // Usernames may contain "." and "$", which Mongo field names may not, so
+  // the map key is normalised the same way dmSeen keys are.
+  slowModeMs: { type: Number, default: 0, min: 0, max: 60 * 1000 },
+  muted: { type: Object, default: {} },
+  kicked: { type: [String], default: [] }
 });
+
+// ---------- CHALLENGES / MATCH RECORD / REACTIONS / BOOKMARKS / REPORTS ----------
+// One formal match offer between two members. See challenges.js for the flow.
+const challengeSchema = new mongoose.Schema({
+  from: { type: String, required: true, index: true },
+  to: { type: String, required: true, index: true },
+  status: { type: String, default: 'pending', index: true }, // pending|accepted|declined|cancelled
+  styles: { type: [String], default: [] },
+  terms: { type: [String], default: [] },
+  bestOf: { type: Number, default: 1 },
+  stakes: { type: String, default: '' },
+  note: { type: String, default: '' },
+  room: { type: mongoose.Schema.Types.ObjectId, ref: 'Room', default: null },
+  rematchOf: { type: String, default: null },
+  respondedAt: { type: Date }
+}, { timestamps: true });
+challengeSchema.index({ from: 1, to: 1, status: 1 });
+
+// One recorded match. `status` is only meaningful for member-logged matches
+// ('pending' until the named opponent confirms); engine matches are born
+// 'confirmed'. See matchHistory.js.
+const matchRecordSchema = new mongoose.Schema({
+  winner: { type: String, index: true },
+  loser: { type: String, index: true },
+  draw: { type: Boolean, default: false },
+  styles: { type: [String], default: [] },
+  bestOf: { type: Number, default: 1 },
+  source: { type: String, default: 'engine' }, // engine|logged
+  status: { type: String, default: 'confirmed', index: true }, // confirmed|pending|declined
+  reporter: { type: String, default: null },
+  room: { type: mongoose.Schema.Types.ObjectId, ref: 'Room', default: null },
+  notes: { type: String, default: '' },
+  // The winner's HP when the bell rang — feeds the Ironman achievement.
+  closingHp: { type: Number, default: null },
+  confirmedAt: { type: Date }
+}, { timestamps: true });
+matchRecordSchema.index({ winner: 1, loser: 1, createdAt: -1 });
+matchRecordSchema.index({ status: 1, createdAt: -1 });
+
+// One emoji from one member on one message. The compound unique index is the
+// "one reaction per member per message" rule, enforced by the database.
+const reactionSchema = new mongoose.Schema({
+  scope: { type: String, required: true }, // public|room
+  room: { type: String, default: '' },
+  messageId: { type: String, required: true },
+  username: { type: String, required: true },
+  emoji: { type: String, required: true },
+  time: { type: Date, default: Date.now }
+});
+reactionSchema.index({ scope: 1, room: 1, messageId: 1, username: 1 }, { unique: true });
+reactionSchema.index({ time: 1 });
+
+// A member's saved message. The snippet is copied at save time because the
+// message itself will eventually be pruned by the retention sweep — the
+// bookmark is the member's copy and is meant to outlive it.
+const bookmarkSchema = new mongoose.Schema({
+  username: { type: String, required: true, index: true },
+  scope: { type: String, required: true }, // public|room
+  room: { type: String, default: '' },
+  messageId: { type: String, required: true },
+  from: { type: String, default: '' },
+  text: { type: String, default: '' },
+  time: { type: Date, default: null }
+}, { timestamps: true });
+bookmarkSchema.index({ username: 1, createdAt: -1 });
+// The same message saved twice by the same member is one bookmark.
+bookmarkSchema.index({ username: 1, scope: 1, room: 1, messageId: 1 }, { unique: true });
+
+// A moderation report. See reports.js — the snippet exists because chat
+// history is pruned and evidence should not be.
+const reportSchema = new mongoose.Schema({
+  reporter: { type: String, required: true, index: true },
+  kind: { type: String, default: 'user' }, // user|issue
+  targetUser: { type: String, default: null, index: true },
+  reason: { type: String, required: true },
+  scope: { type: String, default: 'other' }, // public|room|dm|profile|forum|other
+  room: { type: String, default: null },
+  messageId: { type: String, default: null },
+  snippet: { type: String, default: null },
+  details: { type: String, default: '' },
+  status: { type: String, default: 'open', index: true }, // open|resolved|dismissed
+  resolution: { type: String, default: '' },
+  resolvedAt: { type: Date }
+}, { timestamps: true });
+reportSchema.index({ status: 1, createdAt: -1 });
 
 roomMessageSchema.index({ room: 1, time: 1 });
 // The retention sweep prunes by age across every room at once, which the
@@ -1418,14 +1582,25 @@ const dmSchema = new mongoose.Schema({
 
   relationshipId: { type: String },
   storyId: { type: String },
+  // challenge / matchApproval system notices carry the id of the thing to act on
+  challengeId: { type: String },
+  matchId: { type: String },
   // system / approval / normal
-  type: { type: String, default: "normal" }, 
+  type: { type: String, default: "normal" },
   // values:
   // "normal"        → regular DM
   // "image"         → image DM
   // "clip"          → GIF / short video DM
   // "storyApproval" → approval request DM
+  // "challenge"     → match challenge notice (challengeId)
+  // "matchApproval" → logged-match confirmation (matchId)
   // "system"        → system notifications
+
+  // true once the author has edited the text (see canEditDM for the window)
+  edited: { type: Boolean, default: false },
+  // a deletion tombstone: the row stays so both feeds agree a message existed,
+  // but the content is gone for both sides
+  deleted: { type: Boolean, default: false },
 
   // timestamp
   time: { type: Date, default: Date.now }
@@ -1493,6 +1668,11 @@ const IpLog = mongoose.model('IpLog', ipLogSchema);
 const Room = mongoose.model('Room', RoomSchema);
 const Forum = mongoose.model('Forum', forumSchema);
 const ForumReply = mongoose.model('ForumReply', forumReplySchema);
+const Challenge = mongoose.model('Challenge', challengeSchema);
+const MatchRecord = mongoose.model('MatchRecord', matchRecordSchema);
+const Reaction = mongoose.model('Reaction', reactionSchema);
+const Bookmark = mongoose.model('Bookmark', bookmarkSchema);
+const Report = mongoose.model('Report', reportSchema);
 
 // ---------- COMBAT STATS (shared dice-match resolver) ----------
 // Single source of truth for a fighter's atk / def plus the same values
@@ -1595,7 +1775,11 @@ const push = createPushNotifier({
   webpush: require('web-push'),
   publicKey: (process.env.VAPID_PUBLIC_KEY || '').trim(),
   privateKey: (process.env.VAPID_PRIVATE_KEY || '').trim(),
-  subject: (process.env.VAPID_SUBJECT || '').trim()
+  subject: (process.env.VAPID_SUBJECT || '').trim(),
+  // Per-kind preferences + quiet hours. Fetched here (not passed from the
+  // caller) so every notify() call site gets the gate without remembering it.
+  getUser: username => User.findOne({ username }).select('username notificationPrefs quietHours'),
+  gate: notificationPrefs.shouldPush
 });
 if (!push.configured) {
   console.log('Web push disabled: set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY to enable notifications (see .env.example)');
@@ -2204,7 +2388,19 @@ app.use("/api/story", createStoryRouter({
   mongoose,
   isLocalClipUrl,
   emitToUser: (...args) => deliverToUser(...args),
-  forwardDMToDiscord: (...args) => forwardDMToDiscord(...args)
+  forwardDMToDiscord: (...args) => forwardDMToDiscord(...args),
+  // The moment a story first goes public, both writers get their publishing
+  // achievements checked (first story / five stories).
+  onPublished: async story => {
+    for (const name of [story.owner, story.partner]) {
+      if (!name) continue;
+      const storyCount = await Story.countDocuments({
+        approved: true,
+        $or: [{ owner: name }, { partner: name }]
+      }).catch(() => 0);
+      await awardAchievements(name, "story_published", { storyCount });
+    }
+  }
 }));
 
 app.post("/api/relationship/request", sessions.requireUser, async (req, res) => {
@@ -2271,6 +2467,12 @@ app.post("/api/relationship/approve", sessions.requireUser, async (req, res) => 
   }
 
   await rel.save();
+
+  // A first approved relationship is an achievement for both sides.
+  if (rel.approved) {
+    awardAchievements(rel.requester, "relationship_approved", { relationship: rel });
+    awardAchievements(rel.target, "relationship_approved", { relationship: rel });
+  }
 
   res.json({ ok: true, approved: rel.approved });
 });
@@ -2401,7 +2603,7 @@ function requireAdmin(req, res, next) {
 
 async function broadcastPresence() {
   const onlineUsers = await User.find({ online: true })
-    .select("username display imageUrl extraPhotos info wins losses color language age height weight createdAt -_id")
+    .select("username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt lfg achievements createdAt -_id")
     .lean();
 
   io.emit("presence", onlineUsers);
@@ -2960,9 +3162,24 @@ app.post('/api/update-profile', sessions.requireUser, async (req, res) => {
     return res.status(400).json({ ok: false, error: 'missing_updates' });
   }
 
+  // Only these fields may be written by the member. The object used to be
+  // passed through wholesale, so a hand-crafted request could set ANY user
+  // field — role, banned, even someone's saved counters. An allowlist makes
+  // that impossible instead of unlikely. (Wins and losses are no longer
+  // member-writable at all: they are match-record counters now.)
+  const PROFILE_FIELDS = [
+    'display', 'age', 'discordId', 'height', 'weight', 'info', 'color',
+    'language', 'imageUrl', 'tags'
+  ];
+  const safeUpdates = {};
+  for (const field of PROFILE_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(updates, field)) {
+      safeUpdates[field] = updates[field];
+    }
+  }
+
   // Physique fields get normalised before they reach Mongo so clients can
   // send 5'11", 5'11 or raw inches and get the same stored value back.
-  const safeUpdates = Object.assign({}, updates);
 
   if (Object.prototype.hasOwnProperty.call(safeUpdates, 'discordId')) {
     const discordId = normalizeDiscordId(safeUpdates.discordId);
@@ -3776,7 +3993,7 @@ app.get("/api/allUsers", sessions.requireUser, async (req, res) => {
     const filter = clauses.length === 1 ? clauses[0] : (clauses.length ? { $and: clauses } : {});
 
     const users = await User.find(filter)
-      .select("username display imageUrl extraPhotos info wins losses color language age height weight atk def tags createdAt")
+      .select("username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt atk def tags createdAt")
       .lean();
 
     res.json({ success: true, users: users.map(user => ({ ...user, tags: userTags(user) })) });
@@ -3827,6 +4044,7 @@ app.post('/api/forums', async (req, res) => {
     const savedForum = serializeForum(forum.toObject(), 0);
     io.emit('forumCreated', savedForum);
     void broadcastForumsList();
+    awardAchievements(author.username, 'forum_posted', { forum });
 
     return res.status(201).json({ ok: true, forum: savedForum });
   } catch (err) {
@@ -3909,6 +4127,18 @@ app.post('/api/forums/:forumId/replies', async (req, res) => {
     });
     void broadcastForumsList();
 
+    // The thread's author hears about a reply the moment it lands — live on
+    // any session, and as a (content-free) push when they have none. They can
+    // switch this off per-kind in their notification preferences.
+    if (forum.author && forum.author !== author.username) {
+      const reached = emitToUser(forum.author, 'forumReply', {
+        forumId: String(forum._id),
+        title: forum.title,
+        by: author.username
+      });
+      if (reached === 0) pushIfOffline(forum.author, 'forum', author.display || author.username);
+    }
+
     return res.status(201).json({ ok: true, reply: savedReply });
   } catch (err) {
     console.error('create forum reply error:', err);
@@ -3916,6 +4146,361 @@ app.post('/api/forums/:forumId/replies', async (req, res) => {
   }
 });
 
+
+/* ============================================================
+   API: LFG / CHALLENGES / MATCH RECORD / REACTIONS / BOOKMARKS
+   / ACHIEVEMENTS / NOTIFICATION PREFERENCES / REPORTS
+   ------------------------------------------------------------
+   All of the new community features mount here. Every router is a factory
+   (models and helpers injected) so each one runs under tests without a
+   database, exactly like the story router above.
+============================================================ */
+
+/**
+ * Push a non-DM notification, but only when the member has no live session.
+ * Live sockets already got the event; a push on top of that is noise, and a
+ * member sitting in the arena does not need their phone to tell them about a
+ * mention they just read.
+ */
+function pushIfOffline(username, kind, from, url = '/') {
+  if (!push.configured || !username) return;
+  try {
+    if (typeof liveSocketCount === 'function' && liveSocketCount(username) > 0) return;
+  } catch (err) { /* presence is best-effort; never block the notification */ }
+  push
+    .notify({ to: username, from: from || username, kind, url })
+    .catch(err => console.error('push notify error:', err.message || err));
+}
+
+/**
+ * Evaluate and award achievements for one member after an event.
+ *
+ * Never throws and never blocks its caller: a badge is a nicety, and a failed
+ * award must not fail the match / story / challenge it decorates.
+ */
+async function awardAchievements(username, event, context = {}) {
+  if (!username) return;
+  try {
+    const user = await User.findOne({ username }).select('username wins achievements');
+    if (!user) return;
+
+    // Rivalry needs a fact the caller does not have handy: how many times
+    // these two have now met. Computed here so every call site stays dumb.
+    if (event === 'match_recorded' && context.opponentMatches == null) {
+      const match = context.match || {};
+      const opponent = match.winner === username ? match.loser : match.winner;
+      if (opponent) {
+        context.opponentMatches = await MatchRecord.countDocuments({
+          status: 'confirmed',
+          $or: [
+            { winner: username, loser: opponent },
+            { winner: opponent, loser: username }
+          ]
+        });
+      }
+    }
+
+    const fresh = achievements.evaluate({ user, event, context });
+    if (!fresh.length) return;
+
+    const now = new Date();
+    const entries = fresh.map(id => ({ id, unlockedAt: now }));
+    await User.updateOne({ username }, { $push: { achievements: { $each: entries } } });
+
+    emitToUser(username, 'achievementUnlocked', {
+      achievements: fresh.map(id => achievements.catalogueEntry(id))
+    });
+    // The member may well be offline (a story published while they slept) —
+    // the push says a badge happened, never what it is for.
+    pushIfOffline(username, 'system', 'SYSTEM');
+  } catch (err) {
+    console.error('achievement award error:', err?.message || err);
+  }
+}
+
+// ---------- LFG ----------
+const lfg = createLfgRouter({
+  User,
+  matchStyles,
+  requireUser: sessions.requireUser,
+  // The board is ambient: everyone's copy refreshes the moment anybody flips
+  // a toggle, like presence does.
+  broadcast: entries => io.emit('lfgBoard', entries)
+});
+app.use('/api/lfg', lfg.router);
+
+// ---------- CHALLENGES ----------
+app.use('/api/challenge', createChallengeRouter({
+  Challenge,
+  User,
+  Room,
+  DM,
+  mongoose,
+  matchStyles,
+  requireUser: sessions.requireUser,
+  emitToUser: (...args) => emitToUser(...args),
+  deliverToUser: (...args) => deliverToUser(...args),
+  forwardDMToDiscord,
+  io,
+  onAchievement: awardAchievements
+}).router);
+
+// ---------- MATCH RECORD ----------
+// The engine hook below needs the same "persist + move the counters" path the
+// confirmation flow uses, so the router hands it back.
+const matchHistoryApi = createMatchHistoryRouter({
+  MatchRecord,
+  User,
+  DM,
+  matchStyles,
+  requireUser: sessions.requireUser,
+  emitToUser: (...args) => emitToUser(...args),
+  deliverToUser: (...args) => deliverToUser(...args),
+  onAchievement: awardAchievements
+});
+app.use('/api/matches', matchHistoryApi.router);
+
+/**
+ * Record a match the embedded dice engine just decided, and tell both
+ * fighters. Only engine-decided finishes are recorded automatically: the
+ * winner of a manually ended game is a caller-supplied name, and a record
+ * nobody can vouch for is exactly what the confirmation flow exists to
+ * prevent.
+ */
+function recordEngineMatch(game, result) {
+  const players = Array.from(game.players);
+  if (players.length !== 2) return Promise.resolve(null);
+
+  let winner = null;
+  let loser = null;
+  const draw = !!result.tie;
+  if (draw) {
+    // both survived to a double KO
+  } else if (result.won) {
+    winner = result.playerId;
+    loser = players.find(p => p !== result.playerId) || null;
+  } else if (result.lost) {
+    loser = result.playerId;
+    winner = players.find(p => p !== result.playerId) || null;
+  } else {
+    return Promise.resolve(null);
+  }
+
+  const match = {
+    winner,
+    loser,
+    draw,
+    styles: ['dice'],
+    bestOf: 1,
+    source: 'engine',
+    status: 'confirmed',
+    room: game.id && mongoose.Types.ObjectId.isValid(game.id) ? game.id : null,
+    notes: 'HP dice match',
+    // The winner's HP when the match ended — the Ironman achievement reads it.
+    closingHp: winner === result.playerId && hpIsNumber(result.updatedHealth) ? result.updatedHealth : null
+  };
+
+  return matchHistoryApi.recordConfirmedMatch(match)
+    .then(recorded => {
+      const view = matchHistoryApi.serializeMatch(recorded, winner);
+      [winner, loser].forEach(name => {
+        if (!name) return;
+        emitToUser(name, 'matchRecorded', matchHistoryApi.serializeMatch(recorded, name));
+      });
+      return view;
+    })
+    .catch(err => console.error('engine match record error:', err?.message || err));
+}
+
+/** Nudge the player whose turn a dice match just became. */
+function notifyMatchTurn(username, mover) {
+  if (!username || username === mover) return;
+  const reached = emitToUser(username, 'matchTurn', { mover });
+  if (reached === 0) pushIfOffline(username, 'match', mover);
+}
+
+// ---------- REACTIONS ----------
+app.use('/api/reactions', reactions.createReactionsRouter({
+  Reaction,
+  requireUser: sessions.requireUser,
+  io
+}).router);
+
+// Reactions are metadata on messages, and messages are pruned on a retention
+// window; a reaction that outlives its message is garbage, so it gets the
+// same window (mirroring the sweep retention.js runs, on its own timer
+// because the retention job's model list is fixed at creation).
+setInterval(() => {
+  Reaction.deleteMany({ time: { $lt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) } })
+    .catch(err => console.error('reaction sweep error:', err?.message || err));
+}, 6 * 60 * 60 * 1000).unref();
+
+// ---------- BOOKMARKS ----------
+// A bookmark saves the message's text at save time: the retention sweep will
+// eventually delete the message itself, and the member's copy is meant to
+// outlive it.
+app.get('/api/bookmarks', sessions.requireUser, async (req, res) => {
+  try {
+    const bookmarks = await Bookmark.find({ username: req.username })
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .lean();
+    res.json({ ok: true, bookmarks });
+  } catch (err) {
+    console.error('bookmark list error:', err?.message || err);
+    res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+app.post('/api/bookmarks', sessions.requireUser, async (req, res) => {
+  const scope = req.body?.scope === 'room' ? 'room' : 'public';
+  const room = scope === 'room' ? String(req.body?.room || '') : '';
+  const messageId = String(req.body?.messageId || '');
+  if (!reactions.validTarget({ scope, room, messageId })) {
+    return res.status(400).json({ ok: false, error: 'invalid_target' });
+  }
+
+  try {
+    // The saved text is read from the stored message, never trusted from the
+    // request — a bookmark is evidence the member chose to keep, and the
+    // client's copy of the text is not authoritative.
+    let message = null;
+    if (scope === 'public') {
+      message = await PublicMessage.findById(messageId).lean();
+    } else {
+      const roomRecord = await Room.findById(room).lean();
+      if (!canAccessRoom(roomRecord, req.username)) {
+        return res.status(403).json({ ok: false, error: 'not_your_room' });
+      }
+      message = await RoomMessage.findOne({ _id: messageId, room }).lean();
+    }
+    if (!message) return res.status(404).json({ ok: false, error: 'not_found' });
+
+    const bookmark = await Bookmark.findOneAndUpdate(
+      { username: req.username, scope, room, messageId },
+      {
+        $set: {
+          from: message.from || '',
+          text: String(message.text || '').slice(0, 300),
+          time: message.time || null
+        }
+      },
+      { upsert: true, new: true }
+    ).lean();
+
+    res.status(201).json({ ok: true, bookmark });
+  } catch (err) {
+    console.error('bookmark save error:', err?.message || err);
+    res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+app.delete('/api/bookmarks/:id', sessions.requireUser, async (req, res) => {
+  try {
+    const result = await Bookmark.deleteOne({ _id: req.params.id, username: req.username });
+    res.json({ ok: true, removed: result.deletedCount || 0 });
+  } catch (err) {
+    console.error('bookmark delete error:', err?.message || err);
+    res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// ---------- ACHIEVEMENTS ----------
+app.get('/api/achievements', sessions.requireUser, async (req, res) => {
+  try {
+    const user = await User.findOne({ username: req.username })
+      .select('username wins losses achievements')
+      .lean();
+    if (!user) return res.status(404).json({ ok: false, error: 'not_found' });
+    res.json({
+      ok: true,
+      ...achievements.catalogueView(user),
+      record: { wins: user.wins || 0, losses: user.losses || 0 }
+    });
+  } catch (err) {
+    console.error('achievements error:', err?.message || err);
+    res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// ---------- NOTIFICATION PREFERENCES ----------
+app.get('/api/notification-prefs', sessions.requireUser, async (req, res) => {
+  try {
+    const user = await User.findOne({ username: req.username }).select('notificationPrefs quietHours').lean();
+    if (!user) return res.status(404).json({ ok: false, error: 'not_found' });
+    res.json({
+      ok: true,
+      prefs: notificationPrefs.effectivePrefs(user),
+      quietHours: notificationPrefs.effectiveQuietHours(user)
+    });
+  } catch (err) {
+    console.error('notification-prefs read error:', err?.message || err);
+    res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+app.post('/api/notification-prefs', sessions.requireUser, async (req, res) => {
+  const prefs = notificationPrefs.normalizePrefs(req.body?.prefs);
+  if (!prefs.ok) return res.status(400).json({ ok: false, error: prefs.error });
+  const quiet = notificationPrefs.normalizeQuietHours(req.body?.quietHours);
+  if (!quiet.ok) return res.status(400).json({ ok: false, error: quiet.error });
+
+  try {
+    await User.updateOne(
+      { username: req.username },
+      { $set: { notificationPrefs: prefs.prefs, quietHours: quiet.quiet } }
+    );
+    res.json({ ok: true, prefs: prefs.prefs, quietHours: quiet.quiet });
+  } catch (err) {
+    console.error('notification-prefs save error:', err?.message || err);
+    res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+// ---------- REPORTS ----------
+// Reports are filed by members, so they are throttled like the other
+// member-facing write paths rather than left open to flooding. Mounted before
+// the router so a flood is cut off before any handler runs.
+const reportLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+app.use('/api/report', reportLimiter);
+
+// Reports land in the admin queue and — when the support webhook is
+// configured — in the same Discord channel the assistance popup documents.
+// The dispatch must never fail the filing: the queue row is already saved.
+app.use('/api/report', createReportsRouter({
+  Report,
+  requireUser: sessions.requireUser,
+  requireAdmin,
+  dispatchReport: async report => {
+    const summary = summarizeForDispatch(report);
+    if (DISCORD_SUPPORT_URL) {
+      await fetch(DISCORD_SUPPORT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: 'MCF Reports',
+          content: [
+            `**${summary}**`,
+            report.snippet ? `> ${report.snippet}` : '',
+            report.details ? report.details : ''
+          ].filter(Boolean).join('\n')
+        })
+      });
+    }
+    await sendAdminEmail(`Report: ${summary}`, {
+      text: [
+        summary,
+        report.snippet ? `Snippet: ${report.snippet}` : '',
+        report.details ? `Details: ${report.details}` : ''
+      ].filter(Boolean).join('\n')
+    });
+  }
+}).router);
 
 // ---------- SOCKET.IO ----------
 
@@ -3952,7 +4537,7 @@ function deliverToUser(username, event, payload) {
   return reached;
 }
 
-const { userRoom, emitToUser, markDMRead, getUnreadDMCounts } =
+const { userRoom, emitToUser, markDMRead, getUnreadDMCounts, liveSocketCount } =
   createDmDelivery({ User, DM, io });
 
 // Room access is enforced on the server. The room list is only a UI aid and
@@ -4041,7 +4626,7 @@ async function attachSocketSession(socket) {
   try {
     user = await User.findOneAndUpdate(
       { username },
-      { online: true, socketId: socket.id },
+      { online: true, socketId: socket.id, lastSeenAt: new Date() },
       { new: true }
     );
   } catch (err) {
@@ -4163,7 +4748,9 @@ io.on("connection", async (socket) => {
         const survivor = [...io.sockets.sockets.values()].find(s => s.username === username);
         await User.findOneAndUpdate(
           { username },
-          survivor ? { socketId: survivor.id } : { online: false, socketId: null }
+          survivor
+            ? { socketId: survivor.id, lastSeenAt: new Date() }
+            : { online: false, socketId: null, lastSeenAt: new Date() }
         );
         await broadcastPresence();
       } catch (err) {
@@ -4193,11 +4780,11 @@ io.on("connection", async (socket) => {
 
     await User.findOneAndUpdate(
       { username },
-      { online: false }
+      { online: false, lastSeenAt: new Date() }
     );
 
     const onlineUsers = await User.find({ online: true })
-      .select("username display imageUrl extraPhotos info wins losses color language age height weight createdAt -_id")
+      .select("username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt lfg achievements createdAt -_id")
       .lean();
 
     io.emit("presence", onlineUsers);
@@ -4217,11 +4804,13 @@ io.on("connection", async (socket) => {
     const survivor = [...io.sockets.sockets.values()].find(s => s.username === username);
     await User.findOneAndUpdate(
       { username },
-      survivor ? { socketId: survivor.id } : { online: false, socketId: null }
+      survivor
+        ? { socketId: survivor.id, lastSeenAt: new Date() }
+        : { online: false, socketId: null, lastSeenAt: new Date() }
     );
 
     const onlineUsers = await User.find({ online: true })
-      .select("username display imageUrl extraPhotos info wins losses color language age height weight createdAt -_id")
+      .select("username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt lfg achievements createdAt -_id")
       .lean();
 
     io.emit("presence", onlineUsers);
@@ -4277,6 +4866,25 @@ socket.on('publicMessage', async (msg) => {
         }
       })
     );
+
+    // ⭐ @name in the arena pings that member
+    // A mention is a notification, so the block rules apply: a member who
+    // blocked the sender is skipped (resolveMentions checks), and the sender
+    // never pings themselves. The push stays content-free like every push.
+    try {
+      const mentioned = await resolveMentions({ text: enriched.text, from, User });
+      mentioned.forEach(name => {
+        const reached = emitToUser(name, 'mentioned', {
+          by: from,
+          byDisplay: display,
+          where: 'arena',
+          messageId: String(created._id)
+        });
+        if (reached === 0) pushIfOffline(name, 'mention', display);
+      });
+    } catch (err) {
+      console.error('mention notify error:', err?.message || err);
+    }
 
     // ⭐ Fetch fresh online users right before emitting
     const onlineUsers = await User.find({ online: true }).lean();
@@ -4515,6 +5123,16 @@ socket.on("editPublicMessage", async (data) => {
       return;
     }
 
+    // A kicked member cannot come straight back in — only the owner's
+    // un-kick reopens the door. (The owner themselves can never be kicked.)
+    if (
+      roomRecord.owner !== socket.username &&
+      (roomRecord.kicked || []).some(name => String(name).toLowerCase() === String(socket.username).toLowerCase())
+    ) {
+      socket.emit("roomJoinDenied", { room: roomId, reason: "kicked" });
+      return;
+    }
+
     // A socket can only be a member of the room it currently has open.
     // Leave the previous room before joining another one so its member list
     // is updated immediately instead of retaining a stale user.
@@ -4585,6 +5203,43 @@ socket.on("editPublicMessage", async (data) => {
     const roomRecord = await Room.findById(roomId).lean();
     if (!canAccessRoom(roomRecord, socket.username)) return;
 
+    // ---------- OWNER MODERATION, enforced server-side ----------
+    // The owner's mute / slow-mode settings are checked on every message, so
+    // a client that ignores the UI still cannot shout over them. Usernames
+    // may contain "." / "$" which Mongo map keys may not — same normalisation
+    // the dmSeen map uses.
+    const moderationKey = name => String(name).replace(/[.$]/g, '_');
+    const mutedUntil = roomRecord.muted ? roomRecord.muted[moderationKey(socket.username)] : null;
+    if (mutedUntil && new Date(mutedUntil) > new Date()) {
+      socket.emit('roomMessageRejected', {
+        room: roomId,
+        reason: 'muted',
+        until: mutedUntil
+      });
+      return;
+    }
+    if (roomRecord.slowModeMs > 0) {
+      // The member's previous message in this room decides the wait — one
+      // indexed query, not a per-room timer the server has to maintain.
+      const last = await RoomMessage.findOne({ room: roomId, from: socket.username })
+        .sort({ time: -1 })
+        .limit(1)
+        .select('time')
+        .lean();
+      if (last) {
+        const elapsed = Date.now() - new Date(last.time).getTime();
+        if (elapsed < roomRecord.slowModeMs) {
+          socket.emit('roomMessageRejected', {
+            room: roomId,
+            reason: 'slow_mode',
+            retryAfterMs: roomRecord.slowModeMs - elapsed
+          });
+          return;
+        }
+      }
+    }
+
+
     // Clips may only be attached when the browser uploaded them through
     // /api/upload-clip, which always returns same-origin /clips URLs.
     const clipUrl = isLocalClipUrl(msg.clipUrl) ? msg.clipUrl : null;
@@ -4609,6 +5264,24 @@ socket.on("editPublicMessage", async (data) => {
       created = await RoomMessage.create(enriched);
     } catch (err) {
       console.error("Failed to save room message:", err);
+    }
+
+    // Same mention rules as the arena, scoped to the room the message landed
+    // in — a match room is exactly where "@jobber get up" belongs.
+    try {
+      const mentioned = await resolveMentions({ text: enriched.text || '', from: socket.username, User });
+      mentioned.forEach(name => {
+        const reached = emitToUser(name, 'mentioned', {
+          by: socket.username,
+          byDisplay: enriched.display,
+          where: roomRecord.name || roomId,
+          room: roomId,
+          messageId: created ? String(created._id) : null
+        });
+        if (reached === 0) pushIfOffline(name, 'mention', enriched.display);
+      });
+    } catch (err) {
+      console.error('room mention notify error:', err?.message || err);
     }
 
     const members = await io.in(roomId).fetchSockets();
@@ -4766,6 +5439,217 @@ socket.on("editPublicMessage", async (data) => {
   });
 
 
+  // ---------- REACTIONS ----------
+  // Toggle one member's emoji on one message. The toggle resolves on the
+  // server (reactions.js) so the broadcast is the shared truth, and the
+  // message has to exist — otherwise reaction rows could be minted against
+  // ids that were never messages.
+  socket.on('setReaction', async (data = {}) => {
+    const username = requireActor(socket, 'setReaction');
+    if (!username) return;
+
+    const scope = data.scope === 'room' ? 'room' : 'public';
+    const room = scope === 'room' ? String(data.room || '') : '';
+    const messageId = String(data.id || data.messageId || '');
+    if (!reactions.validTarget({ scope, room, messageId })) return;
+
+    try {
+      if (scope === 'public') {
+        const message = await PublicMessage.findById(messageId).select('_id').lean();
+        if (!message) return;
+      } else {
+        const roomRecord = await Room.findById(room).lean();
+        if (!canAccessRoom(roomRecord, username)) return;
+        const message = await RoomMessage.findOne({ _id: messageId, room }).select('_id').lean();
+        if (!message) return;
+      }
+
+      const filter = { scope, room, messageId, username };
+      const existing = await Reaction.findOne(filter).lean();
+      const toggle = reactions.resolveToggle({
+        current: existing ? existing.emoji : '',
+        emoji: data.emoji
+      });
+
+      if (toggle.op === 'invalid') {
+        socket.emit('actionRejected', { action: 'setReaction', reason: 'invalid_emoji' });
+        return;
+      }
+      if (toggle.op === 'remove') await Reaction.deleteOne(filter);
+      else if (toggle.op === 'set') {
+        await Reaction.updateOne(filter, { $set: { emoji: toggle.emoji } }, { upsert: true });
+      } else {
+        return; // nothing to remove, nothing changed
+      }
+
+      const rows = await Reaction.find({ scope, room, messageId }).select('emoji username').lean();
+      const payload = {
+        scope,
+        room,
+        messageId,
+        counts: reactions.aggregate(rows).counts,
+        reactor: username
+      };
+      if (scope === 'room') io.to(room).emit('reactionUpdate', payload);
+      else io.emit('reactionUpdate', payload);
+    } catch (err) {
+      console.error('setReaction error:', err?.message || err);
+    }
+  });
+
+  // ---------- DM EDIT / DELETE ----------
+  // Public and room messages have been editable by their author for a while;
+  // DMs had no such control. Editing is bounded to a short window (a DM is
+  // the other member's conversation too — see dmDelivery.js), deletion is
+  // not: on an 18+ site "take that back" is a safety feature, and the
+  // tombstone keeps both feeds honest that a message existed.
+  socket.on('editDM', async (data = {}) => {
+    const username = requireActor(socket, 'editDM');
+    if (!username) return;
+
+    try {
+      const msg = await DM.findById(String(data.id || ''));
+      if (!msg || !canEditDM(msg, username)) {
+        socket.emit('dmError', { action: 'editDM', reason: 'cannot_edit' });
+        return;
+      }
+
+      const text = rewriteDiscordInvites(String(data.text || '').trim());
+      if (!text) return;
+
+      const partner = msg.to === username ? msg.from : msg.to;
+      const partnerUser = await User.findOne({ username: partner }).lean();
+
+      // The recipient reads the translation, the author their own words —
+      // exactly how a fresh DM is delivered.
+      const translated = await translateText(text, partnerUser?.language || 'en');
+      msg.text = translated;
+      msg.originalText = text;
+      msg.edited = true;
+      await msg.save();
+
+      const base = { id: String(msg._id), from: msg.from, to: msg.to, edited: true };
+      emitToUser(partner, 'dmEdited', { ...base, text: translated });
+      emitToUser(username, 'dmEdited', { ...base, text });
+    } catch (err) {
+      console.error('editDM error:', err?.message || err);
+    }
+  });
+
+  socket.on('deleteDM', async (data = {}) => {
+    const username = requireActor(socket, 'deleteDM');
+    if (!username) return;
+
+    try {
+      const msg = await DM.findById(String(data.id || ''));
+      if (!msg || !canDeleteDM(msg, username)) {
+        socket.emit('dmError', { action: 'deleteDM', reason: 'cannot_delete' });
+        return;
+      }
+
+      msg.deleted = true;
+      msg.text = null;
+      msg.originalText = null;
+      msg.imageUrl = null;
+      msg.clipUrl = null;
+      await msg.save();
+
+      const payload = { id: String(msg._id), from: msg.from, to: msg.to, deleted: true };
+      emitToUser(msg.to, 'dmDeleted', payload);
+      emitToUser(msg.from, 'dmDeleted', payload);
+    } catch (err) {
+      console.error('deleteDM error:', err?.message || err);
+    }
+  });
+
+  // ---------- ROOM OWNER MODERATION ----------
+  // kick / unkick / mute / unmute / slow mode. Every action is owner-only,
+  // enforced here — the client UI is just a convenience.
+  socket.on('roomModerate', async (data = {}) => {
+    const username = requireActor(socket, 'roomModerate');
+    if (!username) return;
+
+    try {
+      const roomId = String(data.room || '');
+      if (!roomId || !mongoose.Types.ObjectId.isValid(roomId)) return;
+
+      const room = await Room.findById(roomId);
+      if (!room) return;
+      if (room.owner !== username) {
+        socket.emit('actionRejected', { action: 'roomModerate', reason: 'not_room_owner' });
+        return;
+      }
+
+      const action = String(data.action || '');
+      const target = String(data.target || '').trim();
+      // Usernames may contain "." / "$" which Mongo map keys may not.
+      const key = String(target).replace(/[.$]/g, '_');
+      let notice = null;
+
+      if (action === 'kick' || action === 'unkick') {
+        if (!target || target === username) return; // the owner cannot kick themselves
+        if (action === 'kick' && !room.kicked.includes(target)) room.kicked.push(target);
+        if (action === 'unkick') room.kicked = room.kicked.filter(name => name !== target);
+        await room.save();
+
+        if (action === 'kick') {
+          // Every live session of the member leaves the room now, and is told
+          // why — a silent ejection looks like a bug.
+          const roomIdStr = String(room._id);
+          for (const s of io.sockets.sockets.values()) {
+            if (s.username === target && s.rooms.has(roomIdStr)) {
+              s.leave(roomIdStr);
+              if (s.currentRoom === roomIdStr) s.currentRoom = null;
+              s.emit('roomKicked', { room: roomIdStr, roomName: room.name, by: username });
+            }
+          }
+          io.to(roomIdStr).emit('roomMessage', {
+            room: roomIdStr,
+            from: 'SYSTEM',
+            display: null,
+            text: `${target} was removed from the room by the owner`,
+            type: 'system',
+            time: new Date()
+          });
+          updateRoomMembers(roomIdStr);
+        }
+        notice = { action, target };
+      } else if (action === 'mute' || action === 'unmute') {
+        if (!target) return;
+        const muted = { ...(room.muted || {}) };
+        if (action === 'mute') {
+          const seconds = Math.min(Math.max(Number(data.seconds) || 300, 60), 24 * 60 * 60);
+          muted[key] = new Date(Date.now() + seconds * 1000);
+        } else {
+          delete muted[key];
+        }
+        room.muted = muted;
+        await room.save();
+        notice = { action, target, until: muted[key] || null };
+      } else if (action === 'slow') {
+        const ms = Math.min(Math.max(Number(data.slowModeMs) || 0, 0), 60 * 1000);
+        room.slowModeMs = ms;
+        await room.save();
+        notice = { action, slowModeMs: ms };
+      } else {
+        return;
+      }
+
+      io.to(String(room._id)).emit('roomModeration', { room: String(room._id), by: username, ...notice });
+
+      // The owner's panel (and everyone's rooms sidebar) caches room docs off
+      // the roomsList broadcast — refresh it so kicked lists and slow mode
+      // stay honest everywhere.
+      try {
+        io.emit('roomsList', await Room.find().lean());
+      } catch (err) {
+        console.error('room moderation rooms broadcast error:', err?.message || err);
+      }
+    } catch (err) {
+      console.error('roomModerate error:', err?.message || err);
+    }
+  });
+
   socket.on('disconnect', async () => {
     // 'disconnect' fires after socket.io has already dropped this socket from
     // its rooms, so anything still listed here is another session of the same
@@ -4779,16 +5663,16 @@ socket.on("editPublicMessage", async (data) => {
     const u = survivor
       ? await User.findOneAndUpdate(
         { username: socket.username },
-        { online: true, socketId: survivor.id }
+        { online: true, socketId: survivor.id, lastSeenAt: new Date() }
       )
       : await User.findOneAndUpdate(
         { socketId: socket.id },
-        { online: false, socketId: null }
+        { online: false, socketId: null, lastSeenAt: new Date() }
       );
 
     if (u && !survivor) {
       const onlineUsers = await User.find({ online: true })
-        .select('username display imageUrl extraPhotos info wins losses color language age height weight createdAt -_id')
+        .select('username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt lfg achievements createdAt -_id')
         .lean();
 
       io.emit('presence', onlineUsers);

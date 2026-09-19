@@ -511,9 +511,13 @@ function renderPMHistory(targetUsername, messages, options) {
 
     const div = document.createElement("div");
     div.className = "message " + (m.from === s.username ? "me" : "");
+    // Server id + time: message-extras.js keys the DM edit/delete actions and
+    // the live dmEdited/dmDeleted updates off these.
+    if (m._id || m.id) div.dataset.dmId = String(m._id || m.id);
+    if (m.time) div.dataset.dmTime = String(new Date(m.time).getTime());
     div.innerHTML = `
       <div style="font-size:13px;font-weight:700">${escapeHtml(m.from || "")}</div>
-      <div style="margin-top:6px">${escapeHtml(m.text || "")}</div>
+      <div style="margin-top:6px">${m.deleted ? "<i>message deleted</i>" : escapeHtml(m.text || "")}</div>
     `;
 
     if (m.type === "storyApproval") {
@@ -539,6 +543,19 @@ function renderPMHistory(targetUsername, messages, options) {
           <button class="small-btn approveRelBtn" data-rel-id="${m.relationshipId || ""}">
             Approve
           </button>
+        </div>
+      `;
+    }
+
+    // A match an opponent logged: it only counts toward both records once this
+    // member confirms it.
+    if (m.type === "matchApproval") {
+      div.className = "message system";
+      div.innerHTML = `
+        <div class="system-msg">
+          ${escapeHtml(m.text || "")}
+          <button class="small-btn approveMatchBtn" data-id="${m.matchId || ""}">Approve</button>
+          <button class="small-btn ghost declineMatchBtn" data-id="${m.matchId || ""}">Decline</button>
         </div>
       `;
     }
@@ -635,6 +652,34 @@ document.addEventListener("click", async (e) => {
     const story = await window.StoryUI.fetchStory(storyId, username);
     if (story) window.StoryUI.openViewer(story);
     else window.StoryUI.toast("Could not open that story", "error");
+  }
+});
+
+// Approve / decline a logged match straight from the system DM.
+document.addEventListener("click", async (e) => {
+  const button = e.target.closest && e.target.closest("button");
+  if (!button) return;
+
+  const matchId = button.dataset.id;
+  if (!matchId) return;
+  if (!button.classList.contains("approveMatchBtn") && !button.classList.contains("declineMatchBtn")) return;
+
+  const action = button.classList.contains("approveMatchBtn") ? "approve" : "decline";
+  button.disabled = true;
+
+  const res = await fetch(`/api/matches/${encodeURIComponent(matchId)}/respond`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action })
+  });
+  const data = await res.json().catch(() => null);
+
+  if (data && data.ok) {
+    button.parentElement.innerHTML = action === "approve"
+      ? "Match confirmed — it is on both records now"
+      : "Match declined — nothing was counted";
+  } else {
+    button.disabled = false;
   }
 });
 

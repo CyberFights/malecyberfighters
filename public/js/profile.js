@@ -189,8 +189,6 @@ window.openEditProfileModal = function(user) {
   $("editInfo").value = user.info || "";
   $("editColor").value = user.color || "#ffffff";
   $("editLanguage").value = user.language || "en";
-  $("editWins").value = user.stats?.wins || 0;
-  $("editLosses").value = user.stats?.losses || 0;
 
   // Fighter physique: height menu (3'5"–8'0") + weight in lbs
   const heightSelect = $("editHeight");
@@ -351,10 +349,6 @@ $("editSubmit").addEventListener("click", async () => {
     info: $("editInfo").value.trim(),
     color: $("editColor").value,
     language: $("editLanguage").value,
-    stats: {
-      wins: Number($("editWins").value),
-      losses: Number($("editLosses").value)
-    },
     imageUrl: editImageUrl,
     tags: editTagSelection()
   };

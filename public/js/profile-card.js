@@ -443,6 +443,30 @@
     return `${Number(wins) || 0}W – ${Number(losses) || 0}L`;
   }
 
+  /* "Online" while a socket is attached, "Active 2h ago" once they are gone —
+     the server tracks lastSeenAt on every presence transition. */
+  function statusFor(user) {
+    if (window.MCFI18N && typeof window.MCFI18N.presenceLabel === 'function') {
+      const label = window.MCFI18N.presenceLabel(user);
+      if (label) return label;
+    }
+    return user && user.online ? 'Online' : 'Offline';
+  }
+
+  /* Unlocked achievement icons for the card's title line (capped, with a
+     "+n" when there are more than fit). */
+  function badgesFor(user) {
+    const unlocked = Array.isArray(user && user.achievements) ? user.achievements : [];
+    if (!unlocked.length) return '';
+    const icons = unlocked
+      .map(entry => (window.MCFAchievementsIcons ? window.MCFAchievementsIcons[entry.id] : null) ||
+        (entry.icon || null))
+      .filter(Boolean);
+    if (!icons.length) return '';
+    const shown = icons.slice(0, 4).join(' ');
+    return icons.length > 4 ? shown + ' +' + (icons.length - 4) : shown;
+  }
+
   function titleFor(user) {
     /* Presence carries no role field, so use the app's own rule for the
        Administrator account and fall back to the fight record for everyone
@@ -452,7 +476,9 @@
       : String(user.username || '').trim() === 'Administrator'
         || ['admin', 'administrator'].includes(String(user.role || '').toLowerCase());
     if (isAdmin) return 'Administrator';
-    return recordLabel(user) || 'Male Cyber Fighter';
+    const badges = badgesFor(user);
+    const record = recordLabel(user) || 'Male Cyber Fighter';
+    return badges ? record + '  ' + badges : record;
   }
 
   /* Height / weight line — the `contact` prop of the component. */
@@ -501,7 +527,7 @@
         name: user.display || username || 'Fighter',
         title: titleFor(user),
         handle: username,
-        status: 'Online',
+        status: statusFor(user),
         avatarUrl: avatar,
         miniAvatarUrl: avatar,
         contact: stats || 'No height / weight set',
@@ -563,11 +589,17 @@
     profileButton.type = 'button';
     profileButton.setAttribute('data-pc-action', 'profile');
 
+    const reportButton = el('button', 'small-btn', '⚠ Report');
+    reportButton.type = 'button';
+    reportButton.setAttribute('data-pc-action', 'report');
+    reportButton.title = 'Report this member to the moderators';
+
     const closeButton = el('button', 'small-btn', 'Close');
     closeButton.type = 'button';
     closeButton.setAttribute('data-pc-close', '');
 
     actions.appendChild(profileButton);
+    actions.appendChild(reportButton);
     actions.appendChild(closeButton);
 
     panel.appendChild(host);
@@ -601,6 +633,9 @@
 
     close();
     if (name === 'profile') openFullProfile(username);
+    if (name === 'report' && window.MCFMessageExtras && window.MCFMessageExtras.reportUser) {
+      window.MCFMessageExtras.reportUser(username);
+    }
   }
 
   function handlePopupKeydown(event) {
@@ -663,10 +698,16 @@
   function syncPresence(users) {
     if (!activeUser || !activeCard) return;
     const wanted = String(activeUser.username || '').toLowerCase();
-    const online = Array.isArray(users)
-      ? users.some(u => u && String(u.username || '').toLowerCase() === wanted)
-      : false;
-    activeCard.setStatus(online ? 'Online' : 'Offline');
+    const fresh = Array.isArray(users)
+      ? users.find(u => u && String(u.username || '').toLowerCase() === wanted)
+      : null;
+    if (fresh) {
+      activeUser = fresh;
+    } else if (Array.isArray(users)) {
+      // the presence list is the online list — absence means offline
+      activeUser = { ...activeUser, online: false };
+    }
+    activeCard.setStatus(statusFor(activeUser));
   }
 
   window.ProfileCard = {

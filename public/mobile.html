@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="/css/mobile.css?v=8">
 <link rel="stylesheet" href="/css/slash-commands.css?v=1">
 <link rel="stylesheet" href="/css/audio-calls.css?v=4">
+<link rel="stylesheet" href="/css/features.css?v=1">
 </head>
 
 <body>
@@ -85,6 +86,12 @@
       DMs <span id="dmBadge" class="badge" style="display:none"></span>
     </button>
     <button id="btnRooms" class="ghost" type="button">Rooms</button>
+    <button id="btnLfg" class="ghost" type="button">Find a Match</button>
+    <button id="btnChallenges" class="ghost" type="button">Challenges</button>
+    <button id="btnRecord" class="ghost" type="button">Record</button>
+    <button id="btnAchievements" class="ghost" type="button">Achievements</button>
+    <button id="btnBookmarks" class="ghost" type="button">Bookmarks</button>
+    <button id="btnPreferences" class="ghost" type="button">Preferences</button>
     <button id="openSupport" type="button">Support</button>
   </div>
 
@@ -197,17 +204,6 @@
       </select>
     </div>
 
-    <div class="field field-row">
-      <div>
-        <label for="regWins">Wins</label>
-        <input id="regWins" type="number" min="0" value="0">
-      </div>
-      <div>
-        <label for="regLosses">Losses</label>
-        <input id="regLosses" type="number" min="0" value="0">
-      </div>
-    </div>
-
     <!-- FIGHTER PHYSIQUE: height menu (3'5" – 8'0") + weight in lbs -->
     <div class="field field-row">
       <div>
@@ -311,16 +307,6 @@
       </select>
     </div>
 
-    <div class="field field-row">
-      <div>
-        <label for="editWins">Wins</label>
-        <input id="editWins" type="number" min="0">
-      </div>
-      <div>
-        <label for="editLosses">Losses</label>
-        <input id="editLosses" type="number" min="0">
-      </div>
-    </div>
 
     <div class="field">
       <label for="editImageFile">Main profile image</label>
@@ -953,6 +939,16 @@ Moderator decisions are final. </p>
 <script src="/js/story-ui.js?v=1"></script>
 <script src="/js/pwa-install.js"></script>
 <script src="/js/push.js"></script>
+<script src="/js/match-styles.js?v=1"></script>
+<script src="/js/features-core.js?v=1"></script>
+<script src="/js/i18n.js?v=1"></script>
+<script src="/js/preferences.js?v=1"></script>
+<script src="/js/lfg.js?v=1"></script>
+<script src="/js/challenges.js?v=1"></script>
+<script src="/js/match-history.js?v=1"></script>
+<script src="/js/achievements.js?v=1"></script>
+<script src="/js/message-extras.js?v=1"></script>
+<script src="/js/room-moderation.js?v=1"></script>
 <script src="/js/account.js"></script>
 <script src="/js/popup-dissolve.js"></script>
 

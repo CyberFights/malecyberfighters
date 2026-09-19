@@ -1054,6 +1054,7 @@ function appendPublicMessage(msg, playSound = true, before = null){
   const div = document.createElement('div');
   div.className = 'message-row ' + (isMine ? 'me' : '');
   if (msg._id) div.dataset.id = msg._id;
+  if (msg.time) div.dataset.time = String(new Date(msg.time).getTime());
 
   const imageHtml = msg.imageUrl
     ? `<img src="${escapeHtml(chatImgSrc(msg.imageUrl))}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${escapeHtml(msg.imageUrl)}">`
@@ -1148,8 +1149,9 @@ socket.on('roomMessage', msg => {
 
   if (msg.room !== currentRoom) {
     // Don't badge our own outbound messages when room isn't focused, and never
-    // badge join/leave system notices.
-    if (msg.type !== 'system' && (!s || msg.from !== s.username)) {
+    // badge join/leave system notices — or anything from a muted room.
+    const roomMuted = !!(window.MCFPreferences && window.MCFPreferences.isRoomMuted(msg.room));
+    if (!roomMuted && msg.type !== 'system' && (!s || msg.from !== s.username)) {
       if (typeof incrementRoomUnread === 'function') incrementRoomUnread(msg.room);
       if (typeof updateRoomsSidebarBadges === 'function') updateRoomsSidebarBadges();
     }
@@ -1183,6 +1185,7 @@ function appendRoomMessage(msg){
   const div = document.createElement('div');
   div.className = 'message-row';
   if (msg._id) div.dataset.id = msg._id;
+  if (msg.time) div.dataset.time = String(new Date(msg.time).getTime());
 
   const textHtml = msg.text ? `<div class="message-text">${escapeHtml(msg.text)}</div>` : '';
   const imageHtml = msg.imageUrl
