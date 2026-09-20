@@ -165,9 +165,9 @@
       id: 'register',
       title: 'Registering a new account',
       keywords: ['register', 'sign up', 'signup', 'create account', 'new account', 'make an account', 'join the site', 'registration'],
-      answer: 'Press Register (under Account in the action menu) and fill in the form: username, email, password, display name, age (18+), a short bio, your favourite colour, language, wins and losses, height and weight, and a profile photo if you like.\n' +
+      answer: 'Press Register (under Account in the action menu) and fill in the form: username, email, password, display name, age (18+), a short bio, your favourite colour, language, height and weight, fighter tags and a profile photo if you like.\n' +
         'Press Create Account and you are in. Everything can be changed later from Edit Profile, and you get a welcome email if the site\'s email is set up.\n' +
-        'Height runs from 3\'5" to 8\'0" in one-inch steps and weight is whole pounds, 60 to 700; those two set your fighter stats.',
+        'Height runs from 3\'5" to 8\'0" in one-inch steps and weight is whole pounds, 60 to 700; those two set your fighter stats. Your win/loss record builds automatically from matches — you don\'t type it in.',
       action: {
         label: 'Open Register',
         buttonId: 'btnRegister',
@@ -268,9 +268,9 @@
       id: 'edit-messages',
       title: 'Editing your messages',
       keywords: ['edit message', 'edit my message', 'edit arena', 'edit room message', 'how to edit'],
-      answer: 'You can edit your own Arena and room messages — DMs cannot be edited.\n' +
-        'Hover your message, press Edit, change the text and press Save (or Enter). Escape cancels without saving.\n' +
-        'Everyone sees a small "(edited)" marker on a message that has been changed, and only the person who wrote it can edit it.',
+      answer: 'You can edit your own messages in the Arena, in rooms and in DMs.\n' +
+        'Hover your message and press Edit, change the text and press Save (or Enter) — Escape cancels without saving. In the Arena and rooms everyone sees a small "(edited)" marker on a changed message; DMs update for both sides and show “(edited)” too.\n' +
+        'In DMs you can also delete a message for both of you — it becomes “message deleted” so both feeds agree it was there. Editing works for about 15 minutes; deleting works any time. Only the person who wrote it can edit or delete it.',
       action: {
         label: 'Open the Arena',
         buttonId: 'btnOpenChat',
@@ -399,7 +399,7 @@
       title: 'Editing your profile',
       keywords: ['edit profile', 'change profile', 'update profile', 'my profile', 'profile picture', 'avatar', 'bio', 'display name', 'edit my profile'],
       answer: 'Press Edit Profile on your profile card.\n' +
-        'You can change your display name, age, Discord ID, height, weight, bio, favourite colour, language, wins and losses, your main photo and your extra photos.\n' +
+        'You can change your display name, age, Discord ID, height, weight, bio, favourite colour, language, fighter tags, your main photo and your extra photos.\n' +
         'Press Save Changes when you are done — your fighter stats are worked out again from your height and weight automatically.',
       requiresLogin: true,
       action: {
@@ -1452,6 +1452,176 @@
       }
     },
 
+    /* ---------- MATCHES — LFG / CHALLENGES / RECORD ---------- */
+    {
+      id: 'lfg',
+      title: 'Find a Match board — who is looking right now',
+      keywords: ['lfg', 'looking for match', 'looking for a match', 'find a match', 'find match', 'who is looking', 'looking for fight', 'fight board', 'lfg board', 'looking board'],
+      answer: 'The Find a Match board shows everyone who has flipped “I\'m looking for a match right now”.\n' +
+        'Press Find a Match (under Matches in the action menu) to open it. At the top is your own toggle: flip it on, pick the styles you want (pro, submission, dice, freeform …) and add a one-line note if you like, then press Save status — you appear on the live board for everyone to see, with a dot showing you are on it.\n' +
+        'While you are on the board anyone can press Challenge or Message on your row to reach you, and the board refreshes live as people join and leave. Flip the toggle off when you are done and your note goes with it.',
+      action: {
+        label: 'Open Find a Match',
+        buttonId: 'btnLfg',
+        done: 'Opening Find a Match for you.'
+      }
+    },
+    {
+      id: 'challenges',
+      title: 'Formal challenges — agree terms before the bell',
+      keywords: ['challenge', 'challenges', 'formal challenge', 'send challenge', 'challenge someone', 'match challenge', 'challenging'],
+      answer: 'A challenge is the formal “you, me, the ring” offer the beginner\'s guide insists on — it makes you agree the terms before the first move.\n' +
+        'Press Challenges (under Matches) to see yours, or start one from the Challenge button on the Find a Match board or from a profile. Pick the styles, whether it is best of 1, 3 or 5, add stakes and a note, then tick the five-point checklist — style/length, limits, stakes, how it ends, and a stop signal — and press Send challenge. Every item must be ticked or it will not send.\n' +
+        'The other fighter gets the offer in their Challenges list and as a system message in their DMs, where they can accept or decline. Accepting creates a private match room for the two of you with the agreed terms pinned in the opening line, and both of you are dropped into it. You can also withdraw a pending offer you sent.',
+      action: {
+        label: 'Open Challenges',
+        buttonId: 'btnChallenges',
+        done: 'Opening Challenges for you.'
+      }
+    },
+    {
+      id: 'match-record',
+      title: 'Match record — wins, losses, draws and rivalries',
+      keywords: ['record', 'my record', 'match record', 'win loss', 'wins', 'losses', 'draws', 'record book', 'match history', 'my matches', 'rivalry', 'rivalries', 'rematch', 'head to head', 'head-to-head', 'log a match', 'logged match', 'confirm match', 'confirm a match'],
+      answer: 'Your Record is built from real matches, not numbers you type in.\n' +
+        'Press Record (under Matches) to open it: a bar at the top shows wins, losses, draws and total matches, then your matches newest first — who, when, what style, how it ended and whether it was a dice match or a logged one. Pending logged matches say “waiting for confirmation”.\n' +
+        'Dice matches are recorded the moment the fight finishes. A match you wrestled elsewhere (freeform, Discord, anywhere) is logged with “Log a match” — name the opponent, pick styles, say who won and add a note — then your opponent confirms it from their DMs before it counts. Draws are recorded but do not move the win/loss counters.\n' +
+        'Open anyone\'s profile or use “You vs <name>” to see their public record and your head-to-head. Five matches with the same opponent builds a rivalry (⚔️) at the top of your record, and any confirmed row has a Rematch button that pre-fills a fresh challenge.',
+      action: {
+        label: 'Open My Record',
+        buttonId: 'btnRecord',
+        done: 'Opening your match record for you.'
+      }
+    },
+
+    /* ---------- MESSAGE EXTRAS — REACTIONS / BOOKMARKS / MENTIONS ---------- */
+    {
+      id: 'reactions',
+      title: 'Reactions on messages',
+      keywords: ['reaction', 'reactions', 'react', 'emoji reaction', 'like message', 'add reaction', '👍', '❤️', '🔥', 'react to message'],
+      answer: 'Any message in the Arena or a room can take one reaction from you.\n' +
+        'Hover the message and press 🙂 React (or tap the chip under it) and pick an emoji — 👍 ❤️ 😂 😮 😢 🔥 💪 😡. The chips under the message show the count for each emoji and your own is highlighted. Picking the same emoji again removes yours, and picking a different one swaps it.\n' +
+        'The bar updates live for everyone in that chat, so you can see what the room liked without scrolling.',
+      action: {
+        label: 'Open the Arena',
+        buttonId: 'btnOpenChat',
+        popupId: 'chatPopup',
+        done: 'Opening the Arena — React is under each message.'
+      }
+    },
+    {
+      id: 'bookmarks',
+      title: 'Bookmarks — save a message for later',
+      keywords: ['bookmark', 'bookmarks', 'save message', 'saved message', 'saved messages', 'keep message', '🔖', 'saved', 'bookmarked'],
+      answer: 'The 🔖 Save button under any Arena or room message keeps a copy for you — even after chat history is pruned, your copy stays.\n' +
+        'Press Bookmarks (under Account in the action menu) to open the list, newest saved first, showing who wrote it, whether it was in the arena or a room, when, and the first lines. Press Remove on a row to clear it.\n' +
+        'You save the text as it was at that moment, so the bookmark survives even when the room itself has moved on.',
+      action: {
+        label: 'Open Bookmarks',
+        buttonId: 'btnBookmarks',
+        done: 'Opening your bookmarks for you.'
+      }
+    },
+    {
+      id: 'mentions',
+      title: 'Mentions — @name pings',
+      keywords: ['mention', 'mentions', '@', 'at mention', 'ping', 'ping someone', 'tag someone', 'mention someone', '@name'],
+      answer: 'Type @username in the Arena or a room — for example “@Jax nice sell” — and that member is pinged.\n' +
+        'Their name lights up in the message (yours lights up differently when someone mentions you), they get a toast and a pop sound, and if they have no live chat open they can get a gentle push instead.\n' +
+        'Just type the name; a blocked member is quietly skipped. You never ping yourself.',
+      action: {
+        label: 'Open the Arena',
+        buttonId: 'btnOpenChat',
+        popupId: 'chatPopup',
+        done: 'Opening the Arena — try @name in chat.'
+      }
+    },
+
+    /* ---------- ACHIEVEMENTS / PREFERENCES / PUSH ---------- */
+    {
+      id: 'achievements',
+      title: 'Achievements — badges for milestones',
+      keywords: ['achievement', 'achievements', 'badge', 'badges', 'first bell', 'ten pack', 'ironman', 'storyteller', 'anthology', 'callout', 'rivalry badge', 'allies', 'mic check', 'trophy', 'unlock'],
+      answer: 'Badges are earned, never claimed.\n' +
+        'Press Achievements (under Matches) to see the full catalogue — earned ones on top with when you unlocked them, locked ones underneath as goals. Every badge has an icon, a title and what it took: first recorded match (🥊), 10 and 25 confirmed wins (🏅 👑), winning a dice match from under 10 HP (🩸 Ironman), publishing your first story and five stories (📖 📚), sending your first challenge (📮), fighting the same opponent three times (⚔️ Rivalry), having an approved relationship (🤝 Allies), and starting your first forum thread (📣).\n' +
+        'A toast pops the moment one lands, with its icon and title, and winning or finishing a match, publishing a story, sending a challenge, approving a relationship or starting a thread is what can trigger them.',
+      action: {
+        label: 'Open Achievements',
+        buttonId: 'btnAchievements',
+        done: 'Opening Achievements for you.'
+      }
+    },
+    {
+      id: 'preferences',
+      title: 'Preferences — appearance, language and room mutes',
+      keywords: ['preferences', 'preference', 'theme', 'dark mode', 'light mode', 'text size', 'font size', 'appearance', 'room mute', 'mute room', 'room notifications'],
+      answer: 'Preferences is where the site fits itself to you.\n' +
+        'Press Preferences (under Account in the action menu) and you get three sections. Appearance: switch the site between 🌙 Dark and ☀️ Light, and make chat text smaller or larger — it applies to the arena, rooms and DMs. Language: pick the language of the buttons and labels themselves (messages are already auto-translated to your profile language). Room notifications: mute any room so it never badges or beeps on this device — tap again to unmute. The choice is kept on this device, not on your profile.\n' +
+        'Theme and text size take effect immediately; language applies when you pick one.',
+      action: {
+        label: 'Open Preferences',
+        buttonId: 'btnPreferences',
+        done: 'Opening Preferences for you.'
+      }
+    },
+    {
+      id: 'notification-prefs',
+      title: 'Notification preferences and quiet hours',
+      keywords: ['notification preferences', 'notification settings', 'quiet hours', 'do not disturb', 'push settings', 'dm notifications', 'mention notifications', 'story notifications', 'forum notifications', 'match notifications', 'challenge notifications', 'silence notifications'],
+      answer: 'Under Preferences, Notifications lets you choose what can push you when you have no live chat open — never message text, only who and where.\n' +
+        'You get six switches: DMs, Mentions, Story approvals, Forum replies, Match turns/records and Challenges — flip off what you do not want to be woken for. Below them is Quiet hours: flip “Silence pushes in a daily window” on, then pick a start and end hour (for example 22:00 to 08:00) and nothing pushes in that window.\n' +
+        'Press Save notification settings and the choice is stored on your profile, so it follows you to your phone and desktop.',
+      requiresLogin: true,
+      action: {
+        label: 'Open Preferences',
+        buttonId: 'btnPreferences',
+        done: 'Opening Preferences — Notifications are near the bottom.'
+      }
+    },
+    {
+      id: 'push-notifications',
+      title: 'Web push — DMs when the tab is closed',
+      keywords: ['push', 'push notification', 'push notifications', 'web push', 'enable notifications', 'notifications on', 'notifications blocked', 'allow notifications', 'browser notification', 'notify me offline', 'offline dm'],
+      answer: 'Web push closes the gap when the tab is closed, the laptop is asleep or the phone is in a pocket — otherwise a DM that arrives with no live chat just sits there until you come back.\n' +
+        'Look for “Enable notifications” on the home page (or in the footer on a phone). Press it, allow notifications when the browser asks, and the button flips to “Notifications on” — now a DM that reaches no live chat pushes to this browser as “who wrote”, never what, so you can come back to it. Press again to turn it off.\n' +
+        'It only shows when the site can actually push: a secure page, a signed-in member, and a browser that supports pushes — otherwise the card hides itself so you never see a control that cannot work. If your browser says “Blocked”, allow the site in the address-bar site settings and try again.',
+      action: {
+        label: 'Enable notifications',
+        buttonId: 'btnNotifications',
+        done: 'Opening notifications — look for “Enable notifications” on the home page.'
+      }
+    },
+
+    /* ---------- DM EDIT / DELETE & ROOM MODERATION ---------- */
+    {
+      id: 'dm-edit-delete',
+      title: 'Editing and deleting your DMs',
+      keywords: ['edit dm', 'edit my dm', 'delete dm', 'delete my dm', 'change dm', 'remove dm', 'message deleted', 'tombstone', 'edit window dm', 'unsend dm', 'take back dm', 'dm edit', 'dm delete'],
+      answer: 'A DM is both people\'s conversation, so you can change or take back what you sent.\n' +
+        'Open the chat, hover your own DM and press Edit to change the text — it re-saves translated for the other side — or Delete to wipe it for both of you (it becomes “message deleted” so both feeds agree it was there).\n' +
+        'Edits work for about 15 minutes after you sent it; deleting works any time. Your DMs show “(edited)” when you change one, and the other person sees the update live.',
+      action: {
+        label: 'Open DMs',
+        buttonId: 'btnDMs',
+        popupId: 'dmSidebar',
+        done: 'Opening DMs — Edit and Delete are on your own messages.'
+      }
+    },
+    {
+      id: 'room-moderation',
+      title: 'Room owner tools — kick, mute, slow mode',
+      keywords: ['room moderation', 'room owner', 'moderate room', 'kick from room', 'mute in room', 'slow mode', 'room slow mode', 'room kick', 'room mute', 'remove from room', 'owner tools', 'room admin'],
+      answer: 'The member who creates a room owns it and gets the owner tools inside it.\n' +
+        'Open your room and use the moderation controls: Kick removes someone from the room right now (they cannot rejoin until you un-kick them), Mute stops someone talking for a time you set (from a minute up to a day), and Slow mode puts a gap between one member\'s messages (up to a minute) so the room can keep up.\n' +
+        'Kicks, mutes and slow mode apply immediately, so the room respects them even if someone ignores the on-screen buttons. A muted member sees “You are muted until …”, and a throttled one sees “Slow mode — wait …s”. Being kicked shows “You were removed from that room by the owner”.',
+      action: {
+        label: 'Open Rooms',
+        buttonId: 'btnRooms',
+        popupId: 'roomsSidebar',
+        done: 'Opening Rooms — moderation is in your own rooms.'
+      }
+    },
+
     /* ---------- SECURITY & EMAIL ---------- */
     {
       id: 'email',
@@ -1539,6 +1709,10 @@
     { label: 'Create a room', text: 'create a room' },
     { label: 'How do I edit my profile?', text: 'how do I edit my profile?' },
     { label: 'What are dice matches?', text: 'what are dice matches?' },
+    { label: 'Find a match', text: 'how do I find a match?' },
+    { label: 'Send a challenge', text: 'how do I send a challenge?' },
+    { label: 'My record', text: 'how do I see my record?' },
+    { label: 'Achievements', text: 'what are achievements?' },
     { label: 'Report a problem', text: 'how do I report a problem?' },
     { label: 'How do I create a story?', text: 'how do I create a story?' },
     { label: 'How do forums work?', text: 'how do forums work?' },
@@ -1851,8 +2025,8 @@
     addMessage(
       'assistant',
       'I do not have an answer for "' + text + '" yet.\n' +
-        'I can help with the Arena, DMs, Rooms, Forums, the User Roster, story Archives, profiles, dice matches, calls, the rules, and the beginner’s guide to cyber wrestling.\n' +
-        'Try asking: how do I send a DM, create a room, edit my profile, start a dice match, create a story, search archives, block a user, link Discord, change my password, install the app, report a problem, or how do I cyber wrestle.\n' +
+        'I can help with the Arena, DMs, Rooms, Forums, the User Roster, story Archives, profiles, dice matches, challenges, your match record, reactions, bookmarks, mentions, achievements, preferences, notifications, calls, the rules, and the beginner’s guide to cyber wrestling.\n' +
+        'Try asking: how do I send a DM, create a room, edit my profile, start a dice match, send a challenge, see my record, react to a message, save a message, mention someone, see my achievements, change my theme, silence notifications, enable push, find a match, report a problem, or how do I cyber wrestle.\n' +
         'If it is a bug or something you want added, send it to the admins as a support report.',
       {
         label: 'Open a support report',
@@ -1923,7 +2097,7 @@
       'assistant',
       'Hey — I am Jax, the support assistant for Male Cyber Fighters.\n' +
         'Ask me how anything on the site works and I will walk you through it, or tell me to open something and I will open that window for you.\n' +
-        'I can help with the Arena, DMs, rooms, forums, stories and the Archives, your profile and photos, dice matches, voice calls, blocking and reports, the rules, and the beginner’s guide to cyber wrestling.'
+        'I can help with the Arena, DMs, rooms, forums, stories and the Archives, your profile and photos, dice matches, challenges, your match record, reactions, bookmarks, mentions, achievements, preferences, notifications, voice calls, blocking and reports, the rules, and the beginner’s guide to cyber wrestling.'
     );
     renderQuickReplies();
   }
