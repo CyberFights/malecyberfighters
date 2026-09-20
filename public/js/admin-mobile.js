@@ -17,6 +17,33 @@
    ADMIN PANEL (CSP-SAFE VERSION — MOBILE)
 ----------------------------------------------------------- */
 
+/* The roles the Administrator account can hand out — mirrors roles.js on
+   the server. The Administrator account itself sits outside the ladder:
+   it is the one assigning roles, so its row shows a fixed badge. */
+const ADMIN_ROLE_OPTIONS = ['user', 'moderator', 'admin'];
+
+function adminRoleLabel(role) {
+  const labels = { user: 'Member', moderator: 'Moderator', admin: 'Admin' };
+  return labels[String(role || 'user').toLowerCase()] || 'Member';
+}
+
+function isRootAdminAccount(username) {
+  return String(username || '').trim().toLowerCase() === 'administrator';
+}
+
+/* The Role cell: a picker for ordinary members, a fixed badge for the
+   Administrator account (its role cannot be changed). */
+function adminRoleCellHtml(u) {
+  if (isRootAdminAccount(u && u.username)) {
+    return '<span class="role-badge role-administrator">Administrator</span>';
+  }
+  const role = String((u && u.role) || 'user').toLowerCase();
+  const options = ADMIN_ROLE_OPTIONS.map(id =>
+    `<option value="${id}"${id === role ? ' selected' : ''}>${adminRoleLabel(id)}</option>`
+  ).join('');
+  return `<select class="admin-role" aria-label="Role for ${escapeHtml((u && u.username) || '')}">${options}</select>`;
+}
+
 window.loadAdminPanel = async function loadAdminPanel() {
   try {
     const res = await fetch('/api/admin/users', {
@@ -40,7 +67,7 @@ window.loadAdminPanel = async function loadAdminPanel() {
       row.innerHTML = `
         <td>${escapeHtml(u.username || '')}</td>
         <td>${escapeHtml(u.email || '')}</td>
-        <td>${escapeHtml(u.role || 'user')}</td>
+        <td>${adminRoleCellHtml(u)}</td>
         <td>${escapeHtml(u.height || '—')}</td>
         <td>${u.weight != null && u.weight !== '' ? escapeHtml(String(u.weight) + ' lbs') : '—'}</td>
         <td>${u.online ? '🟢' : '⚪'}</td>
@@ -194,6 +221,47 @@ document.addEventListener('click', async (e) => {
     });
 
     window.loadAdminPanel();
+  }
+});
+
+/* ASSIGN / REVOKE ROLE
+   The select in each member's row posts to /api/admin/set-role, which the
+   server only honours for the signed-in Administrator account presenting
+   the admin key — the same two credentials that opened this panel. */
+document.addEventListener('change', async (e) => {
+  if (!e.target.classList || !e.target.classList.contains('admin-role')) return;
+
+  const row = e.target.closest('#adminTable tr');
+  if (!row || !row.dataset.username) return;
+  if (!window.adminSessionKey) return;
+
+  const username = row.dataset.username;
+  const role = e.target.value;
+
+  try {
+    const res = await fetch('/api/admin/set-role', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-key': window.adminSessionKey
+      },
+      body: JSON.stringify({ username, role })
+    });
+
+    const data = await res.json();
+    if (!data.ok) {
+      alert(data.error === 'cannot_modify_administrator'
+        ? 'The Administrator account cannot be re-roled.'
+        : `Failed to update role${data.error ? ` (${data.error})` : ''}`);
+      if (window.loadAdminPanel) window.loadAdminPanel();
+      return;
+    }
+
+    alert(`${username} is now ${adminRoleLabel(role)}.`);
+  } catch (err) {
+    console.error('set role error', err);
+    alert('Failed to update role');
+    if (window.loadAdminPanel) window.loadAdminPanel();
   }
 });
 

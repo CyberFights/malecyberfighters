@@ -1421,6 +1421,23 @@ button.download-btn:hover{
   text-align:left;
 }
 
+/* Role picker in the admin panel's user table (see admin.js / roles.js). */
+#adminTable select.admin-role {
+  padding:4px 6px;
+  border-radius:6px;
+  border:1px solid rgba(160,200,255,0.25);
+  background:rgba(160,200,255,0.05);
+  color:#e6f6ff;
+  font-size:12px;
+}
+
+/* The Administrator account is outside the role ladder — fixed badge. */
+.role-badge.role-administrator {
+  color:#7dd3fc;
+  font-weight:700;
+  font-size:12px;
+}
+
 #adminSearch {
   width:100%;
   margin:10px 0;

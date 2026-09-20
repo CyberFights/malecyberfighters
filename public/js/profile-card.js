@@ -468,14 +468,17 @@
   }
 
   function titleFor(user) {
-    /* Presence carries no role field, so use the app's own rule for the
-       Administrator account and fall back to the fight record for everyone
-       else (the card's `title` line). */
+    /* The root Administrator account always reads "Administrator"; members
+       the Administrator promoted carry their tier of trust (roles.js) on the
+       card's `title` line, and everyone else shows the fight record. */
     const isAdmin = typeof window.isAdministratorUser === 'function'
       ? window.isAdministratorUser(user)
       : String(user.username || '').trim() === 'Administrator'
         || ['admin', 'administrator'].includes(String(user.role || '').toLowerCase());
     if (isAdmin) return 'Administrator';
+    const role = String((user && user.role) || '').toLowerCase();
+    if (role === 'admin') return 'Admin';
+    if (role === 'moderator') return 'Moderator';
     const badges = badgesFor(user);
     const record = recordLabel(user) || 'Male Cyber Fighter';
     return badges ? record + '  ' + badges : record;

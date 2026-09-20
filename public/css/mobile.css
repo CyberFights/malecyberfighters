@@ -1212,6 +1212,23 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
 }
 #adminTable th { color: #7dd3fc; font-size: 12px; }
 
+/* Role picker in the admin panel's user table (see mobile.js / roles.js). */
+#adminTable select.admin-role {
+  padding: 5px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(56, 189, 248, .25);
+  background: rgba(56, 189, 248, .08);
+  color: #e2f3ff;
+  font-size: 12px;
+}
+
+/* The Administrator account is outside the role ladder — fixed badge. */
+.role-badge.role-administrator {
+  color: #7dd3fc;
+  font-weight: 700;
+  font-size: 12px;
+}
+
 /* ============================================================
    RESPONSIVE
    ============================================================ */

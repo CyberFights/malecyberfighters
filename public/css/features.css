@@ -455,6 +455,13 @@ button.mcf-chip:hover { background: rgba(127, 216, 255, 0.16); }
 .mcf-dm-action:hover { color: var(--accent, #7fd8ff); }
 .mcf-dm-delete:hover { color: #ff7a9c; }
 
+/* Staff moderation actions (moderation.js) — same buttons, a distinct tint so
+   members with the moderator/admin role can tell their tools apart. */
+.mcf-mod-action { color: #ffb27a; }
+.msg-action.mcf-mod-action { color: #ffb27a; }
+.mcf-mod-action:hover { color: #ff7a9c; }
+.mcf-forum-delete { margin-left: auto; font-size: 11px; align-self: center; }
+
 .mcf-dm-editor { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
 .mcf-dm-tombstone { opacity: 0.55; font-style: italic; }
 .mcf-edited-marker { color: var(--muted, #b8c7d9); font-size: 12px; }

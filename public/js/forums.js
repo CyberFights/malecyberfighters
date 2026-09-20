@@ -112,6 +112,12 @@
     const article = document.createElement('article');
     article.className = className;
 
+    // Staff moderation (moderation.js) decorates posts with delete buttons
+    // and needs the ids off the DOM: the post's own id, and the thread it
+    // belongs to (for the original card those are the same document).
+    article.dataset.postId = String(post._id || '');
+    article.dataset.forumId = String(post.forum || post._id || '');
+
     article.appendChild(createMeta(post));
 
     const body = document.createElement('div');
@@ -431,6 +437,36 @@
       }
 
       addReplyToActiveThread(payload.reply);
+      if (isPopupOpen(byId('forumsPopup'))) renderForums();
+    });
+
+    // Staff moderation removed content (moderation.js performs the delete;
+    // the server tells every client to forget it).
+    socket.on('forumReplyDeleted', payload => {
+      if (!payload) return;
+      const forumId = String(payload.forumId || '');
+      const replyId = String(payload.replyId || '');
+
+      const index = forums.findIndex(item => String(item._id) === forumId);
+      if (index !== -1) {
+        forums[index] = {
+          ...forums[index],
+          replyCount: Math.max(0, Number(forums[index].replyCount || 0) - 1)
+        };
+      }
+
+      if (String(activeForumId) === forumId) {
+        activeReplies = activeReplies.filter(reply => String(reply._id) !== replyId);
+        renderThread();
+      }
+      if (isPopupOpen(byId('forumsPopup'))) renderForums();
+    });
+
+    socket.on('forumDeleted', payload => {
+      if (!payload) return;
+      const forumId = String(payload.forumId || '');
+      forums = forums.filter(item => String(item._id) !== forumId);
+      if (String(activeForumId) === forumId) closeForumThread();
       if (isPopupOpen(byId('forumsPopup'))) renderForums();
     });
   }

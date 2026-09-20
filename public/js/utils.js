@@ -318,6 +318,24 @@ function isAdministratorUser(user){
   return !!user && String(user.username || '').trim() === 'Administrator';
 }
 
+/* Role display — mirrors roles.js on the server. Every account registers as
+   `user`; the Administrator account can promote members to `moderator` or
+   `admin` through the admin panel. */
+function userRoleName(user){
+  const labels = { user: 'Member', moderator: 'Moderator', admin: 'Admin' };
+  return labels[String((user && user.role) || 'user').toLowerCase()] || 'Member';
+}
+window.userRoleName = userRoleName;
+
+/* Staff = anyone carrying a moderation tier: the root Administrator account,
+   or a member holding the `admin` or `moderator` role. */
+function isStaffUser(user){
+  if (!user) return false;
+  const role = String(user.role || '').toLowerCase();
+  return isAdministratorUser(user) || role === 'admin' || role === 'moderator';
+}
+window.isStaffUser = isStaffUser;
+
 function updateAdminButtonVisibility(user = getSession()){
   const isAdmin = isAdministratorUser(user);
   document.querySelectorAll('[id="btnAdmin"]').forEach(btn => {

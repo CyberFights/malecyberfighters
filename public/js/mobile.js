@@ -2339,6 +2339,33 @@ function mobileImgSrc(value) {
   let adminUsers = [];
   let adminKey = null;
 
+  /* The roles the Administrator account can hand out — mirrors roles.js on
+     the server. The Administrator account itself sits outside the ladder:
+     it is the one assigning roles, so its row shows a fixed badge. */
+  const ADMIN_ROLE_OPTIONS = ["user", "moderator", "admin"];
+
+  function adminRoleLabel(role) {
+    const labels = { user: "Member", moderator: "Moderator", admin: "Admin" };
+    return labels[String(role || "user").toLowerCase()] || "Member";
+  }
+
+  function isRootAdminAccount(username) {
+    return String(username || "").trim().toLowerCase() === "administrator";
+  }
+
+  /* The Role cell: a picker for ordinary members, a fixed badge for the
+     Administrator account (its role cannot be changed). */
+  function adminRoleCellHtml(u) {
+    if (isRootAdminAccount(u && u.username)) {
+      return '<span class="role-badge role-administrator">Administrator</span>';
+    }
+    const role = String((u && u.role) || "user").toLowerCase();
+    const options = ADMIN_ROLE_OPTIONS.map(id =>
+      `<option value="${id}"${id === role ? " selected" : ""}>${adminRoleLabel(id)}</option>`
+    ).join("");
+    return `<select class="admin-role" aria-label="Role for ${escapeHtml((u && u.username) || "")}">${options}</select>`;
+  }
+
   async function adminFetch(url, options = {}) {
     const headers = Object.assign(
       { Accept: "application/json", "x-admin-key": adminKey || "" },
@@ -2417,7 +2444,7 @@ function mobileImgSrc(value) {
       tr.innerHTML = `
         <td>${escapeHtml(u.username)}</td>
         <td class="ellipsis">${escapeHtml(u.email || "")}</td>
-        <td>${escapeHtml(u.role || "user")}</td>
+        <td>${adminRoleCellHtml(u)}</td>
         <td>${u.online || isOnline(u.username) ? "yes" : "no"}</td>
         <td>${u.banned ? "yes" : "no"}</td>
         <td>
@@ -2512,6 +2539,52 @@ function mobileImgSrc(value) {
       }
     } catch (err) {
       alert("Admin action failed");
+    }
+  }
+
+  /* ASSIGN / REVOKE ROLE
+     The select in each member's row posts to /api/admin/set-role, which the
+     server only honours for the signed-in Administrator account presenting
+     the admin key — the same two credentials that opened this panel. */
+  async function handleAdminRoleChange(e) {
+    if (!e.target.classList || !e.target.classList.contains("admin-role")) return;
+    const row = e.target.closest("tr");
+    const username = row && row.dataset.username;
+    if (!username) return;
+
+    const key = adminKey || window.adminSessionKey;
+    if (!key) return;
+
+    const role = e.target.value;
+
+    try {
+      const res = await fetch("/api/admin/set-role", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-key": key,
+          Accept: "application/json"
+        },
+        body: JSON.stringify({ username, role })
+      });
+      const data = await res.json().catch(() => null);
+
+      if (!data || !data.ok) {
+        alert(!data
+          ? "Failed to update role"
+          : data.error === "cannot_modify_administrator"
+            ? "The Administrator account cannot be re-roled."
+            : `Failed to update role${data.error ? ` (${data.error})` : ""}`);
+        await loadAdminData();
+        return;
+      }
+
+      alert(`${username} is now ${adminRoleLabel(role)}.`);
+      const entry = adminUsers.find(u => u.username === username);
+      if (entry) entry.role = role;
+    } catch (err) {
+      alert("Failed to update role");
+      await loadAdminData();
     }
   }
 
@@ -2701,7 +2774,10 @@ function mobileImgSrc(value) {
     on($("tabAnalytics"), "click", () => showAdminTab("analytics"));
     on($("adminSearch"), "input", debounce(renderAdminUsers, 200));
     const adminTable = document.querySelector("#adminTable tbody");
-    if (adminTable) adminTable.addEventListener("click", handleAdminAction);
+    if (adminTable) {
+      adminTable.addEventListener("click", handleAdminAction);
+      adminTable.addEventListener("change", handleAdminRoleChange);
+    }
 
     /* logout */
     on($("btnLogout"), "click", logout);
@@ -2887,6 +2963,17 @@ socket.on("forceLogout", ({ reason } = {}) => {
   if (reason === "banned") {
     alert("Your account has been banned.");
   }
+});
+
+/* The Administrator account changed this member's tier of trust: refresh the
+   locally cached session record so the UI shows the new role without a
+   re-login. The member list itself updates through the presence rebroadcast
+   that accompanies the change. */
+socket.on("roleUpdated", ({ role } = {}) => {
+  const session = typeof getSession === "function" ? getSession() : null;
+  if (!session) return;
+  session.role = role;
+  if (typeof setSession === "function") setSession(session);
 });
 
 // Re-export for modules that expect a global
@@ -3866,7 +3953,7 @@ window.loadAdminPanel = async function loadAdminPanel() {
       row.innerHTML = `
         <td>${escapeHtml(u.username || '')}</td>
         <td>${escapeHtml(u.email || '')}</td>
-        <td>${escapeHtml(u.role || 'user')}</td>
+        <td>${adminRoleCellHtml(u)}</td>
         <td>${u.online ? '🟢' : '⚪'}</td>
         <td>${u.banned ? '🚫' : '✔'}</td>
         <td>
