@@ -60,5 +60,16 @@ socket.on("forceLogout", ({ reason } = {}) => {
   }
 });
 
+/* The Administrator account changed this member's tier of trust: refresh the
+   locally cached session record so the UI shows the new role without a
+   re-login. The member list itself updates through the presence rebroadcast
+   that accompanies the change. */
+socket.on("roleUpdated", ({ role } = {}) => {
+  const session = typeof getSession === "function" ? getSession() : null;
+  if (!session) return;
+  session.role = role;
+  if (typeof setSession === "function") setSession(session);
+});
+
 // Re-export for modules that expect a global
 window.socket = socket;

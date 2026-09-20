@@ -45,6 +45,8 @@ const { createReportsRouter, summarizeForDispatch } = require('./reports');
 const achievements = require('./achievements');
 const notificationPrefs = require('./notificationPrefs');
 const { canEditDM, canDeleteDM } = require('./dmDelivery');
+const roles = require('./roles');
+const moderation = require('./moderation');
 // The match style catalogue lives in public/js so the browser pickers and the
 // API validation can never drift apart — same rule as physique.js / tags.js.
 const matchStyles = require('./public/js/match-styles.js');
@@ -1385,7 +1387,28 @@ const userSchema = new mongoose.Schema({
   dmUnreadSince: { type: String, default: () => new Date().toISOString() },
   online:   { type: Boolean, default: false },
   socketId: { type: String, default: null },
-  role:     { type: String, default: 'user' },
+  // Tier of trust — see roles.js. Everyone registers as `user`; the
+  // Administrator account promotes members to `moderator` or `admin` through
+  // POST /api/admin/set-role. The validator only guards documents written
+  // outside that endpoint.
+  role: {
+    type: String,
+    default: roles.DEFAULT_ROLE,
+    validate: {
+      validator: roles.isKnownRole,
+      message: `Role must be one of: ${roles.ROLE_IDS.join(', ')}`
+    }
+  },
+  // ---------- STAFF MODERATION (see moderation.js) ----------
+  // A staff timeout: while this date is in the future the member cannot send
+  // any message — arena, rooms or DMs. null (or a past date) means no timeout.
+  mutedUntil: { type: Date, default: null },
+  // Warnings recorded by moderators/admins, newest appended. Capped with $slice
+  // when written so the record cannot grow without bound.
+  warnings: {
+    type: [{ _id: false, reason: String, by: String, at: Date }],
+    default: []
+  },
   banned:   { type: Boolean, default: false }
 }, { timestamps: true });
 
@@ -2603,7 +2626,7 @@ function requireAdmin(req, res, next) {
 
 async function broadcastPresence() {
   const onlineUsers = await User.find({ online: true })
-    .select("username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt lfg achievements createdAt -_id")
+    .select("username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt lfg achievements role createdAt -_id")
     .lean();
 
   io.emit("presence", onlineUsers);
@@ -2631,6 +2654,57 @@ async function signOutEverywhere(username, reason) {
   }
 }
 
+/**
+ * The site-wide staff timeout (see moderation.js). The authoritative value
+ * lives in the database rather than `socket.sessionUser`: that snapshot
+ * predates any timeout applied after this socket connected, and a lifted
+ * timeout must take effect immediately too.
+ *
+ * Returns the live `mutedUntil` Date, or null when the member may post. A
+ * lookup failure opens the gate — a database blip should not mute everyone.
+ */
+async function globalTimeoutUntil(username) {
+  try {
+    const user = await User.findOne({ username }).select('mutedUntil').lean();
+    const until = user && user.mutedUntil ? new Date(user.mutedUntil) : null;
+    return until && until.getTime() > Date.now() ? until : null;
+  } catch (err) {
+    console.error('timeout lookup error:', err?.message || err);
+    return null;
+  }
+}
+
+function rejectTimedOut(socket, scope, until) {
+  socket.emit('messageBlocked', {
+    scope,
+    reason: 'timed_out',
+    until,
+    remainingMs: until.getTime() - Date.now()
+  });
+}
+
+/**
+ * Resolve the member behind this socket and confirm they hold staff
+ * authority — the `moderator` or `admin` role, or the Administrator account.
+ * Read fresh from the database on every call so a freshly revoked role stops
+ * working immediately. Returns the lean user doc, or null.
+ */
+async function staffActor(socket) {
+  const username = socket.username;
+  if (!username) return null;
+  try {
+    const user = await User.findOne({ username })
+      .select('username display role banned')
+      .lean();
+    if (!user || user.banned) return null;
+    if (!roles.isAdministratorAccount(user.username) && !roles.isStaffRole(user.role)) return null;
+    return user;
+  } catch (err) {
+    console.error('staff actor lookup error:', err?.message || err);
+    return null;
+  }
+}
+
 app.use('/api/admin', adminLimiter);
 
 app.get("/api/admin/users", requireAdmin, async (req, res) => {
@@ -2643,6 +2717,58 @@ app.get("/api/admin/users", requireAdmin, async (req, res) => {
     res.json({ ok: true, users });
   } catch (err) {
     console.error("Admin user fetch error:", err);
+    res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
+/**
+ * Assign or revoke a member's role — the tiers of trust in roles.js.
+ *
+ * Two independent credentials must both be present: the admin panel key
+ * (`requireAdmin`) and a live session belonging to the Administrator account
+ * itself (`sessions.requireUser` plus the actor check inside
+ * `roles.validateRoleChange`). Neither a stolen key alone nor a hijacked
+ * session alone can mint a moderator.
+ *
+ * The panel the Administrator drives this from — desktop admin.js and the
+ * mobile panel in mobile.js — is only ever opened by the signed-in
+ * Administrator account, so its fetches already carry both.
+ */
+app.post("/api/admin/set-role", requireAdmin, sessions.requireUser, async (req, res) => {
+  const decision = roles.validateRoleChange({
+    actorUsername: req.username,
+    targetUsername: req.body?.username,
+    role: req.body?.role
+  });
+
+  if (!decision.ok) {
+    const status = decision.error === "admin_account_required" ? 403 : 400;
+    return res.status(status).json({ ok: false, error: decision.error });
+  }
+
+  try {
+    const user = await User.findOneAndUpdate(
+      { username: decision.targetUsername },
+      { $set: { role: decision.role } },
+      { new: true }
+    ).select("username display role -_id");
+
+    if (!user) {
+      return res.status(404).json({ ok: false, error: "not_found" });
+    }
+
+    // Tell the member's live sessions so their own UI picks up the new role
+    // without waiting for a re-login, and refresh everyone's member list so
+    // the badges update site-wide.
+    emitToUser(decision.targetUsername, "roleUpdated", {
+      role: user.role,
+      by: req.username
+    });
+    await broadcastPresence();
+
+    res.json({ ok: true, user });
+  } catch (err) {
+    console.error("Admin set role error:", err);
     res.status(500).json({ ok: false, error: "server_error" });
   }
 });
@@ -3557,6 +3683,9 @@ function sessionUserPayload(user) {
     color: user.color,
     language: user.language,
     role: user.role,
+    // Carried so a timed-out member's client can say why sending is blocked
+    // without waiting for the first rejected message.
+    mutedUntil: user.mutedUntil || null,
     stats: user.stats,
     info: user.info,
     age: user.age,
@@ -4142,6 +4271,83 @@ app.post('/api/forums/:forumId/replies', async (req, res) => {
     return res.status(201).json({ ok: true, reply: savedReply });
   } catch (err) {
     console.error('create forum reply error:', err);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+/**
+ * Staff moderation for the forums: delete a single reply, or a whole thread.
+ * The caller must hold a staff role (moderator/admin) or be the
+ * Administrator account — checked fresh from the database, the same way the
+ * chat moderation socket events do it.
+ */
+app.delete('/api/forums/:forumId/replies/:replyId', sessions.requireUser, async (req, res) => {
+  const { forumId, replyId } = req.params;
+
+  if (!mongoose.isValidObjectId(forumId) || !mongoose.isValidObjectId(replyId)) {
+    return res.status(400).json({ ok: false, error: 'invalid_id' });
+  }
+
+  try {
+    const actor = await User.findOne({ username: req.username })
+      .select('username role banned')
+      .lean();
+    if (!actor || actor.banned ||
+        (!roles.isAdministratorAccount(actor.username) && !roles.isStaffRole(actor.role))) {
+      return res.status(403).json({ ok: false, error: 'staff_required' });
+    }
+
+    const reply = await ForumReply.findOneAndDelete({ _id: replyId, forum: forumId });
+    if (!reply) {
+      return res.status(404).json({ ok: false, error: 'not_found' });
+    }
+
+    await Forum.updateOne({ _id: forumId }, { $set: { lastActivityAt: new Date() } });
+
+    io.emit('forumReplyDeleted', {
+      forumId: String(forumId),
+      replyId: String(replyId),
+      by: actor.username
+    });
+    void broadcastForumsList();
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('staff delete forum reply error:', err);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+app.delete('/api/forums/:forumId', sessions.requireUser, async (req, res) => {
+  const { forumId } = req.params;
+
+  if (!mongoose.isValidObjectId(forumId)) {
+    return res.status(400).json({ ok: false, error: 'invalid_id' });
+  }
+
+  try {
+    const actor = await User.findOne({ username: req.username })
+      .select('username role banned')
+      .lean();
+    if (!actor || actor.banned ||
+        (!roles.isAdministratorAccount(actor.username) && !roles.isStaffRole(actor.role))) {
+      return res.status(403).json({ ok: false, error: 'staff_required' });
+    }
+
+    const forum = await Forum.findOneAndDelete({ _id: forumId });
+    if (!forum) {
+      return res.status(404).json({ ok: false, error: 'not_found' });
+    }
+
+    // The thread's replies go with it.
+    await ForumReply.deleteMany({ forum: forumId });
+
+    io.emit('forumDeleted', { forumId: String(forumId), by: actor.username });
+    void broadcastForumsList();
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('staff delete forum error:', err);
     return res.status(500).json({ ok: false, error: 'server_error' });
   }
 });
@@ -4784,7 +4990,7 @@ io.on("connection", async (socket) => {
     );
 
     const onlineUsers = await User.find({ online: true })
-      .select("username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt lfg achievements createdAt -_id")
+      .select("username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt lfg achievements role createdAt -_id")
       .lean();
 
     io.emit("presence", onlineUsers);
@@ -4810,7 +5016,7 @@ io.on("connection", async (socket) => {
     );
 
     const onlineUsers = await User.find({ online: true })
-      .select("username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt lfg achievements createdAt -_id")
+      .select("username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt lfg achievements role createdAt -_id")
       .lean();
 
     io.emit("presence", onlineUsers);
@@ -4822,6 +5028,14 @@ socket.on('publicMessage', async (msg) => {
     // and told why, rather than the message being silently dropped.
     const from = requireActor(socket, 'publicMessage');
     if (!from) return;
+
+    // A member serving a staff timeout cannot post anywhere — the sender is
+    // told how long is left instead of the message silently vanishing.
+    const timedOut = await globalTimeoutUntil(from);
+    if (timedOut) {
+      rejectTimedOut(socket, 'public', timedOut);
+      return;
+    }
 
     // The display name comes from the account, not the payload, so a message
     // cannot be dressed up as somebody else's.
@@ -4989,6 +5203,14 @@ socket.on("editPublicMessage", async (data) => {
     // meant any visitor could message anyone as anyone.
     const from = requireActor(socket, "privateMessage");
     if (!from) return;
+
+    // A staff timeout blocks every channel the member can type in, DMs
+    // included — the sender hears why instead of the DM silently dying.
+    const timedOut = await globalTimeoutUntil(from);
+    if (timedOut) {
+      rejectTimedOut(socket, 'dm', timedOut);
+      return;
+    }
 
     const receiver = await User.findOne({ username: pm.to }).lean();
 
@@ -5202,6 +5424,14 @@ socket.on("editPublicMessage", async (data) => {
 
     const roomRecord = await Room.findById(roomId).lean();
     if (!canAccessRoom(roomRecord, socket.username)) return;
+
+    // A site-wide staff timeout outranks every room: the member cannot post
+    // here either until it expires.
+    const timedOut = await globalTimeoutUntil(socket.username);
+    if (timedOut) {
+      rejectTimedOut(socket, 'room', timedOut);
+      return;
+    }
 
     // ---------- OWNER MODERATION, enforced server-side ----------
     // The owner's mute / slow-mode settings are checked on every message, so
@@ -5650,6 +5880,225 @@ socket.on("editPublicMessage", async (data) => {
     }
   });
 
+  // ---------- STAFF MODERATION (moderator / admin roles) ----------
+  // Delete any message, record warnings, hand out site-wide timeouts. Every
+  // action re-checks the actor's authority against the database right here —
+  // the buttons the staff UI shows are a convenience, not authority, and the
+  // same ladder (roles.js) decides who may act on whom.
+
+  socket.on('modDeleteMessage', async (data = {}) => {
+    if (!requireActor(socket, 'modDeleteMessage')) return;
+
+    try {
+      const actor = await staffActor(socket);
+      if (!actor) {
+        socket.emit('modActionResult', { ok: false, action: 'delete', error: 'not_allowed' });
+        return;
+      }
+
+      const scope = String(data.scope || '');
+      const id = String(data.id || '');
+      if (!id || !mongoose.isValidObjectId(id)) {
+        socket.emit('modActionResult', { ok: false, action: 'delete', error: 'invalid_id' });
+        return;
+      }
+
+      if (scope === 'public') {
+        const msg = await PublicMessage.findByIdAndDelete(id);
+        if (!msg) {
+          socket.emit('modActionResult', { ok: false, action: 'delete', error: 'not_found' });
+          return;
+        }
+        // Everyone removes the row from their feed; history reloads never
+        // bring it back because the document is gone.
+        io.emit('publicMessageDeleted', { _id: String(msg._id), by: actor.username });
+      } else if (scope === 'room') {
+        const msg = await RoomMessage.findByIdAndDelete(id);
+        if (!msg) {
+          socket.emit('modActionResult', { ok: false, action: 'delete', error: 'not_found' });
+          return;
+        }
+        io.to(String(msg.room)).emit('roomMessageDeleted', {
+          _id: String(msg._id),
+          room: String(msg.room),
+          by: actor.username
+        });
+      } else if (scope === 'dm') {
+        const msg = await DM.findById(id);
+        if (!msg) {
+          socket.emit('modActionResult', { ok: false, action: 'delete', error: 'not_found' });
+          return;
+        }
+        // The same tombstone as a member deleting their own DM: the
+        // conversation shows a "message deleted" marker instead of a hole,
+        // and both participants' live windows update.
+        msg.deleted = true;
+        msg.text = null;
+        msg.originalText = null;
+        msg.imageUrl = null;
+        msg.clipUrl = null;
+        await msg.save();
+
+        const payload = {
+          id: String(msg._id),
+          from: msg.from,
+          to: msg.to,
+          deleted: true,
+          byModerator: true,
+          by: actor.username
+        };
+        emitToUser(msg.to, 'dmDeleted', payload);
+        emitToUser(msg.from, 'dmDeleted', payload);
+      } else {
+        socket.emit('modActionResult', { ok: false, action: 'delete', error: 'invalid_scope' });
+        return;
+      }
+
+      socket.emit('modActionResult', { ok: true, action: 'delete', id });
+    } catch (err) {
+      console.error('modDeleteMessage error:', err?.message || err);
+      socket.emit('modActionResult', { ok: false, action: 'delete', error: 'server_error' });
+    }
+  });
+
+  socket.on('modWarnUser', async (data = {}) => {
+    if (!requireActor(socket, 'modWarnUser')) return;
+
+    try {
+      const actor = await staffActor(socket);
+      if (!actor) {
+        socket.emit('modActionResult', { ok: false, action: 'warn', error: 'not_allowed' });
+        return;
+      }
+
+      // The target document supplies the role the authority ladder compares
+      // against, fresh from the database.
+      const targetDoc = await User.findOne({ username: String(data.target || '').trim() })
+        .select('username role banned')
+        .lean();
+      if (!targetDoc) {
+        socket.emit('modActionResult', { ok: false, action: 'warn', error: 'not_found' });
+        return;
+      }
+
+      const decision = moderation.validateWarning({ actor, target: targetDoc, reason: data.reason });
+      if (!decision.ok) {
+        socket.emit('modActionResult', { ok: false, action: 'warn', error: decision.error });
+        return;
+      }
+
+      await User.updateOne(
+        { username: decision.targetUsername },
+        {
+          $push: {
+            warnings: {
+              $each: [{ reason: decision.reason, by: actor.username, at: new Date() }],
+              $slice: -moderation.MAX_STORED_WARNINGS
+            }
+          }
+        }
+      );
+
+      // The member hears about it on every live session.
+      emitToUser(decision.targetUsername, 'moderated', {
+        type: 'warning',
+        reason: decision.reason,
+        by: actor.username
+      });
+
+      socket.emit('modActionResult', { ok: true, action: 'warn', target: decision.targetUsername });
+    } catch (err) {
+      console.error('modWarnUser error:', err?.message || err);
+      socket.emit('modActionResult', { ok: false, action: 'warn', error: 'server_error' });
+    }
+  });
+
+  socket.on('modTimeoutUser', async (data = {}) => {
+    if (!requireActor(socket, 'modTimeoutUser')) return;
+
+    try {
+      const actor = await staffActor(socket);
+      if (!actor) {
+        socket.emit('modActionResult', { ok: false, action: 'timeout', error: 'not_allowed' });
+        return;
+      }
+
+      const targetDoc = await User.findOne({ username: String(data.target || '').trim() })
+        .select('username role banned')
+        .lean();
+      if (!targetDoc) {
+        socket.emit('modActionResult', { ok: false, action: 'timeout', error: 'not_found' });
+        return;
+      }
+
+      const decision = moderation.validateTimeout({ actor, target: targetDoc, seconds: data.seconds });
+      if (!decision.ok) {
+        socket.emit('modActionResult', { ok: false, action: 'timeout', error: decision.error });
+        return;
+      }
+
+      // 0 lifts the timeout; anything else starts it now.
+      const mutedUntil = decision.seconds > 0
+        ? new Date(Date.now() + decision.seconds * 1000)
+        : null;
+
+      await User.updateOne(
+        { username: decision.targetUsername },
+        { $set: { mutedUntil } }
+      );
+
+      emitToUser(decision.targetUsername, 'moderated', {
+        type: decision.seconds > 0 ? 'timeout' : 'timeout_lifted',
+        until: mutedUntil,
+        seconds: decision.seconds,
+        by: actor.username
+      });
+
+      socket.emit('modActionResult', {
+        ok: true,
+        action: 'timeout',
+        target: decision.targetUsername,
+        until: mutedUntil
+      });
+    } catch (err) {
+      console.error('modTimeoutUser error:', err?.message || err);
+      socket.emit('modActionResult', { ok: false, action: 'timeout', error: 'server_error' });
+    }
+  });
+
+  // The staff dialog shows the member's record before acting: existing
+  // warnings and any timeout still running.
+  socket.on('modGetRecord', async (data = {}) => {
+    if (!requireActor(socket, 'modGetRecord')) return;
+
+    try {
+      const actor = await staffActor(socket);
+      if (!actor) {
+        socket.emit('modActionResult', { ok: false, action: 'record', error: 'not_allowed' });
+        return;
+      }
+
+      const username = String(data.target || '').trim();
+      const user = await User.findOne({ username })
+        .select('username mutedUntil warnings')
+        .lean();
+      if (!user) {
+        socket.emit('modActionResult', { ok: false, action: 'record', error: 'not_found' });
+        return;
+      }
+
+      socket.emit('modRecord', {
+        ok: true,
+        target: user.username,
+        mutedUntil: user.mutedUntil && new Date(user.mutedUntil) > new Date() ? user.mutedUntil : null,
+        warnings: user.warnings || []
+      });
+    } catch (err) {
+      console.error('modGetRecord error:', err?.message || err);
+      socket.emit('modActionResult', { ok: false, action: 'record', error: 'server_error' });
+    }
+  });
+
   socket.on('disconnect', async () => {
     // 'disconnect' fires after socket.io has already dropped this socket from
     // its rooms, so anything still listed here is another session of the same
@@ -5672,7 +6121,7 @@ socket.on("editPublicMessage", async (data) => {
 
     if (u && !survivor) {
       const onlineUsers = await User.find({ online: true })
-        .select('username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt lfg achievements createdAt -_id')
+        .select('username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt lfg achievements role createdAt -_id')
         .lean();
 
       io.emit('presence', onlineUsers);

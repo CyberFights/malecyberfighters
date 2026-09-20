@@ -617,6 +617,30 @@
   </div>
 </div>
 
+<!-- STAFF TIMEOUT MODAL (driven by moderation.js — moderator/admin roles) -->
+<div id="modalModTimeout" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;z-index:10000">
+  <div style="padding:20px;width:400px;max-width:92vw;background:#111;border:1px solid rgba(127,216,255,0.35);border-radius:10px;">
+    <h3>Timeout member</h3>
+    <p id="modTimeoutTarget" class="small" style="margin-top:-4px"></p>
+    <div id="modTimeoutCurrent" class="small" style="display:none;margin-bottom:10px;color:#ffd479"></div>
+
+    <div id="modTimeoutPresets" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input id="modTimeoutCustom" type="number" min="1" step="1" placeholder="Custom length in minutes" style="flex:1">
+      <button id="modTimeoutCustomApply" class="small-btn" type="button">Apply</button>
+    </div>
+
+    <div id="modTimeoutError" style="display:none;color:#ff6b6b;margin-bottom:10px"></div>
+
+    <div style="display:flex;justify-content:space-between;gap:8px">
+      <button id="modTimeoutLift" class="ghost" type="button" style="display:none">Lift timeout</button>
+      <span style="flex:1"></span>
+      <button id="modTimeoutCancel" class="ghost" type="button">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- REGISTER MODAL -->
 <div id="modalRegister" style="display:none;position:fixed;inset:0;background:black;align-items:center;justify-content:center">
   <div>
@@ -1747,6 +1771,7 @@ Moderator decisions are final. </p>
 <script src="/js/achievements.js?v=1"></script>
 <script src="/js/message-extras.js?v=1"></script>
 <script src="/js/room-moderation.js?v=1"></script>
+<script src="/js/moderation.js?v=1"></script>
 <script src="/js/nav-groups.js?v=1"></script>
 
 </body>
