@@ -2,10 +2,11 @@
  * Tests for the extra profile photo gallery (public/js/utils.js and the
  * mobile copy in public/js/mobile.js).
  *
- * Clicking an extra photo on a profile must open the image in a popup
- * window — window.open() called with sizing features — instead of a plain
- * new tab. Modified clicks (ctrl/cmd-click, middle-click) must keep the
- * browser's default link behaviour so "open in new tab" still works.
+ * Clicking an extra photo on a profile must open the image in an overlay on
+ * top of that profile, with a close button that dismisses only the photo.
+ * The unused mobile page still opens a sized window.open() popup. Modified
+ * clicks (ctrl/cmd-click, middle-click) must keep the browser's default link
+ * behaviour so "open in new tab" still works.
  *
  * utils.js is loaded standalone; the mobile gallery is exercised through the
  * real mobile.html page booted the same way mobile-client.test.js boots it.
@@ -87,8 +88,28 @@ function loadUtilsPage() {
   return { dom, win, opened };
 }
 
-test('clicking an extra profile photo opens a popup window, not a tab', () => {
-  const { dom, win, opened } = loadUtilsPage();
+function photoOverlay(win) {
+  return win.document.getElementById('profilePhotoPopup');
+}
+
+function assertPhotoOverlay(win, expectedUrl) {
+  const host = photoOverlay(win);
+  assert.ok(host, 'an in-page photo container should be created');
+  assert.equal(host.getAttribute('role'), 'dialog');
+  assert.notEqual(host.style.display, 'none', 'the photo container should be visible');
+  assert.equal(host.parentElement, win.document.body, 'the container sits over the page, not inside the profile');
+  const image = host.querySelector('.profile-photo-popup-image');
+  assert.ok(image, 'the container should show the photo');
+  assert.equal(image.getAttribute('src'), expectedUrl);
+  assert.ok(host.querySelector('.profile-photo-popup-close'), 'the container needs a close button');
+}
+
+test('clicking an extra profile photo opens it over the profile, not a new window', () => {
+  const { win, opened } = loadUtilsPage();
+  const profile = win.document.createElement('div');
+  profile.id = 'modalViewProfile';
+  profile.style.display = 'flex';
+  win.document.body.appendChild(profile);
 
   win.renderProfilePhotoGallery(win.document.getElementById('vpExtraPhotos'), PHOTO_URLS);
 
@@ -97,26 +118,32 @@ test('clicking an extra profile photo opens a popup window, not a tab', () => {
 
   const defaultAllowed = click(win, tiles[0]);
   assert.equal(defaultAllowed, false, 'the click must not fall through to the new-tab link');
-  assert.equal(opened.length, 1, 'exactly one popup should open');
-  assertPopupCall(opened[0], PHOTO_URLS[0]);
+  assert.equal(opened.length, 0, 'the photo must not open a browser window');
+  assertPhotoOverlay(win, PHOTO_URLS[0]);
+  assert.equal(profile.style.display, 'flex', 'opening the photo must leave the profile open');
+
+  photoOverlay(win).querySelector('.profile-photo-popup-close').click();
+  assert.equal(photoOverlay(win).style.display, 'none', 'Close hides the photo');
+  assert.equal(profile.style.display, 'flex', 'Close must leave the profile open');
+  assert.equal(opened.length, 0);
 });
 
-test('each photo click opens its own popup with that photo', () => {
-  const { dom, win, opened } = loadUtilsPage();
+test('each photo click shows that photo in the same overlay', () => {
+  const { win, opened } = loadUtilsPage();
 
   win.renderProfilePhotoGallery(win.document.getElementById('vpExtraPhotos'), PHOTO_URLS);
 
   const tiles = win.document.querySelectorAll('.profile-photo-tile');
   click(win, tiles[1]);
+  assertPhotoOverlay(win, PHOTO_URLS[1]);
   click(win, tiles[0]);
-
-  assert.equal(opened.length, 2);
-  assertPopupCall(opened[0], PHOTO_URLS[1]);
-  assertPopupCall(opened[1], PHOTO_URLS[0]);
+  assertPhotoOverlay(win, PHOTO_URLS[0]);
+  assert.equal(win.document.querySelectorAll('#profilePhotoPopup').length, 1, 'reuse one container');
+  assert.equal(opened.length, 0, 'neither click should open a browser window');
 });
 
 test('modified and middle clicks keep the browser default behaviour', () => {
-  const { dom, win, opened } = loadUtilsPage();
+  const { win, opened } = loadUtilsPage();
 
   win.renderProfilePhotoGallery(win.document.getElementById('vpExtraPhotos'), PHOTO_URLS);
   const tile = win.document.querySelector('.profile-photo-tile');
@@ -124,10 +151,12 @@ test('modified and middle clicks keep the browser default behaviour', () => {
   const ctrlClick = click(win, tile, { ctrlKey: true });
   assert.equal(ctrlClick, true, 'ctrl-click must keep the default link action');
   assert.equal(opened.length, 0, 'ctrl-click should not open a popup');
+  assert.equal(photoOverlay(win), null, 'ctrl-click should not open the in-page photo');
 
   const middleClick = click(win, tile, { button: 1 });
   assert.equal(middleClick, true, 'middle-click must keep the default link action');
   assert.equal(opened.length, 0, 'middle-click should not open a popup');
+  assert.equal(photoOverlay(win), null, 'middle-click should not open the in-page photo');
 });
 
 test('tiles stay real links so the context menu and middle-click still work', () => {

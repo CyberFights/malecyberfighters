@@ -602,3 +602,47 @@ html[data-mcf-theme="light"] .actions .nav-group-menu {
   border-color: rgba(10, 60, 110, 0.3);
   box-shadow: 0 12px 40px rgba(15, 40, 80, 0.25);
 }
+
+/* Profile photo viewer. Sits over the open profile (z-index 9999) so Close
+   dismisses only the photo. Display is set by script — do not force it here. */
+#profilePhotoPopup.profile-photo-popup {
+  position: fixed;
+  inset: 0;
+  z-index: 11000;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 56px 16px 16px;
+  background: rgba(1, 4, 14, 0.86);
+}
+
+#profilePhotoPopup .profile-photo-popup-close {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top, 0px));
+  right: max(12px, env(safe-area-inset-right, 0px));
+  z-index: 2;
+  width: auto;
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+#profilePhotoPopup .profile-photo-popup-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: min(920px, 100%);
+  max-height: 100%;
+}
+
+#profilePhotoPopup .profile-photo-popup-image {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(920px, 100%);
+  max-height: calc(var(--app-height, 100dvh) - 96px);
+  object-fit: contain;
+  border-radius: 12px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+}
