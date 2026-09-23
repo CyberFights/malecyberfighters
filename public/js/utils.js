@@ -151,28 +151,109 @@ function normalizeProfilePhotos(photos) {
 }
 
 /*
- * Extra profile photos open in their own popup window instead of a new
- * browser tab. Passing window features (width/height) is what makes browsers
- * open a real popup window — window.open without features behaves exactly
- * like a target="_blank" link and opens a tab.
+ * Extra profile photos open in an overlay on top of the profile, not in a
+ * new browser window. Closing that overlay leaves the profile where it was.
+ * The tile stays a real link so middle-click, modified clicks and the context
+ * menu keep the browser's normal open-in-new-tab behaviour.
  */
-function openProfilePhotoPopup(url) {
-  const screen = window.screen || {};
-  const width  = Math.max(320, Math.min(760, Math.round((screen.width  || 1024) * 0.6)));
-  const height = Math.max(400, Math.min(960, Math.round((screen.height || 800) * 0.8)));
-  const left   = Math.max(0, Math.round(((screen.width  || width)  - width)  / 2));
-  const top    = Math.max(0, Math.round(((screen.height || height) - height) / 4));
+const PROFILE_PHOTO_POPUP_ID = 'profilePhotoPopup';
 
-  window.open(url, '_blank', [
-    'popup=yes',
-    `width=${width}`,
-    `height=${height}`,
-    `left=${left}`,
-    `top=${top}`,
-    'noopener',
-    'noreferrer'
-  ].join(','));
+function closeProfilePhotoPopup() {
+  const host = document.getElementById(PROFILE_PHOTO_POPUP_ID);
+  if (host) host.style.display = 'none';
 }
+
+function ensureProfilePhotoPopup() {
+  let host = document.getElementById(PROFILE_PHOTO_POPUP_ID);
+  if (host) return host;
+
+  host = document.createElement('div');
+  host.id = PROFILE_PHOTO_POPUP_ID;
+  host.className = 'profile-photo-popup';
+  host.setAttribute('role', 'dialog');
+  host.setAttribute('aria-modal', 'true');
+  host.setAttribute('aria-label', 'Profile photo');
+  // Inline layout so the overlay is usable even before the stylesheet arrives.
+  // Display stays under script control and is never forced by CSS.
+  host.style.position = 'fixed';
+  host.style.inset = '0';
+  host.style.zIndex = '11000';
+  host.style.boxSizing = 'border-box';
+  host.style.alignItems = 'center';
+  host.style.justifyContent = 'center';
+  host.style.padding = '56px 16px 16px';
+  host.style.background = 'rgba(1, 4, 14, 0.86)';
+  host.style.display = 'none';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'profile-photo-popup-close';
+  closeBtn.setAttribute('aria-label', 'Close photo');
+  closeBtn.textContent = 'Close';
+  closeBtn.style.position = 'absolute';
+  closeBtn.style.top = 'max(12px, env(safe-area-inset-top, 0px))';
+  closeBtn.style.right = 'max(12px, env(safe-area-inset-right, 0px))';
+  closeBtn.style.zIndex = '2';
+  closeBtn.style.width = 'auto';
+  closeBtn.style.margin = '0';
+  closeBtn.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeProfilePhotoPopup();
+  });
+
+  const frame = document.createElement('div');
+  frame.className = 'profile-photo-popup-frame';
+
+  const image = document.createElement('img');
+  image.className = 'profile-photo-popup-image';
+  image.alt = 'Profile photo';
+  image.referrerPolicy = 'no-referrer';
+  image.style.display = 'block';
+  image.style.width = 'auto';
+  image.style.height = 'auto';
+  image.style.maxWidth = 'min(920px, 100%)';
+  image.style.maxHeight = 'calc(var(--app-height, 100dvh) - 96px)';
+  image.style.objectFit = 'contain';
+  image.style.borderRadius = '12px';
+  frame.appendChild(image);
+
+  host.append(closeBtn, frame);
+  host.addEventListener('click', event => {
+    if (event.target === host) closeProfilePhotoPopup();
+  });
+  document.body.appendChild(host);
+  return host;
+}
+
+function openProfilePhotoPopup(url) {
+  const photo = String(url || '').trim();
+  if (!photo) return null;
+
+  const host = ensureProfilePhotoPopup();
+  const image = host.querySelector('.profile-photo-popup-image');
+  if (image) {
+    image.src = utilsImgSrc(photo);
+    image.alt = 'Profile photo';
+  }
+  // Above the profile modal (z-index 9999) so Close only dismisses the photo.
+  host.style.zIndex = '11000';
+  host.style.display = 'flex';
+  const closeBtn = host.querySelector('.profile-photo-popup-close');
+  if (closeBtn) {
+    try { closeBtn.focus(); } catch (err) { /* focus is a nicety */ }
+  }
+  return host;
+}
+
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  const host = document.getElementById(PROFILE_PHOTO_POPUP_ID);
+  if (!host || host.style.display === 'none') return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeProfilePhotoPopup();
+}, true);
 
 function renderProfilePhotoGallery(container, photos, emptyText = 'No extra photos yet') {
   if (!container) return;
@@ -195,9 +276,9 @@ function renderProfilePhotoGallery(container, photos, emptyText = 'No extra phot
     link.rel = 'noopener noreferrer';
     link.setAttribute('aria-label', `Open profile photo ${index + 1}`);
 
-    /* A plain click opens the photo in its own popup window. The tile stays
-       a real link so middle-click, modified clicks and the context menu keep
-       the browser's normal open-in-new-tab behaviour. */
+    /* A plain click opens the photo over the profile. The tile stays a real
+       link so middle-click, modified clicks and the context menu keep the
+       browser's normal open-in-new-tab behaviour. */
     link.addEventListener('click', event => {
       if (event.defaultPrevented) return;
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -235,6 +316,7 @@ window.closeUserBrowsingPopups = closeUserBrowsingPopups;
 window.normalizeProfilePhotos = normalizeProfilePhotos;
 window.renderProfilePhotoGallery = renderProfilePhotoGallery;
 window.openProfilePhotoPopup = openProfilePhotoPopup;
+window.closeProfilePhotoPopup = closeProfilePhotoPopup;
 
 const STORAGE_SESSION = 'cw_session_v1';
 const STORAGE_PUBLIC  = 'cw_public_v1';
@@ -567,6 +649,12 @@ card.innerHTML = `
     user.extraPhotos,
     'Upload extra photos from Edit Profile'
   );
+
+  const selfAvatar = card.querySelector('.profile-avatar-img');
+  if (selfAvatar && user.imageUrl) {
+    selfAvatar.style.cursor = 'pointer';
+    selfAvatar.addEventListener('click', () => openProfilePhotoPopup(user.imageUrl));
+  }
 
   // Load stories after containers exist in the DOM
   loadSelfStories(user.username);

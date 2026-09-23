@@ -323,7 +323,16 @@ function openUserProfile(username) {
   if ($('vpHeight')) $('vpHeight').textContent = user.height || "Unknown";
   if ($('vpWeight')) $('vpWeight').textContent = (user.weight != null && user.weight !== "") ? user.weight + " lbs" : "Unknown";
   if ($('vpColorBox')) $('vpColorBox').style.background = user.color || "#7fd8ff";
-  if ($('vpAvatar')) $('vpAvatar').src = chatImgSrc(user.imageUrl) || "/images/mcf-192.png";
+  if ($('vpAvatar')) {
+    const avatar = $('vpAvatar');
+    avatar.src = chatImgSrc(user.imageUrl) || "/images/mcf-192.png";
+    // The main photo opens in the same overlay as the gallery, over this
+    // profile, so Close returns to the profile instead of a separate window.
+    avatar.style.cursor = user.imageUrl ? 'pointer' : '';
+    avatar.onclick = user.imageUrl && window.openProfilePhotoPopup
+      ? () => window.openProfilePhotoPopup(user.imageUrl)
+      : null;
+  }
   if (window.renderProfilePhotoGallery) {
     window.renderProfilePhotoGallery($('vpExtraPhotos'), user.extraPhotos);
   }

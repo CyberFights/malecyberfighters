@@ -3545,10 +3545,59 @@ app.post('/api/account/delete', sessions.requireUser, async (req, res) => {
 });
 
 // ---------- API: REGISTER ----------
-app.post('/api/register', async (req, res) => {
-  const { username, email, password, display, age, stats, info, color, language, imageUrl } = req.body;
+// Registration may include an optional profile photo. Logged-out visitors
+// cannot use /api/upload-image (that route requires a session), so the file
+// rides on this already rate-limited route. JSON clients send no file, and
+// those requests must not go through multer — the tag tests parse a JSON body.
+function receiveRegisterUpload(req, res, next) {
+  const type = String(req.headers['content-type'] || '').toLowerCase();
+  if (!type.includes('multipart/form-data')) return next();
+
+  upload.single('image')(req, res, err => {
+    if (!err) return next();
+    const tooBig = err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE';
+    return res.status(tooBig ? 413 : 400).json({
+      ok: false,
+      error: tooBig ? 'file_too_large' : 'invalid_file'
+    });
+  });
+}
+
+// Multipart fields arrive as strings. tags.normalize rejects a JSON string,
+// so parse it before readTagSelection. A bad tags string is left as-is so the
+// existing invalid_tags response still fires and no account is created.
+function coerceRegisterFields(body) {
+  if (!body || typeof body !== 'object') return;
+  if (typeof body.tags === 'string') {
+    const raw = body.tags.trim();
+    if (!raw) delete body.tags;
+    else {
+      try { body.tags = JSON.parse(raw); } catch (_) { /* readTagSelection rejects */ }
+    }
+  }
+  if (typeof body.stats === 'string') {
+    const raw = body.stats.trim();
+    if (!raw) body.stats = {};
+    else {
+      try {
+        const parsed = JSON.parse(raw);
+        body.stats = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+      } catch (_) {
+        body.stats = {};
+      }
+    }
+  }
+}
+
+app.post('/api/register', receiveRegisterUpload, async (req, res) => {
+  req.body = req.body || {};
+  coerceRegisterFields(req.body);
+  const { username, email, password, display, age, stats, info, color, language } = req.body;
   const rawHeight = req.body.height;
   const rawWeight = req.body.weight;
+  // A selected file always wins over a pasted imageUrl. JSON registrations
+  // have no file, so they keep the previous imageUrl behaviour.
+  let imageUrl = req.file ? '' : req.body.imageUrl;
 
   // Usernames become mention bodies in the Discord-DM bridge (the listener
   // reads "@username message"), so allow only letters / digits / _ / . / -.
@@ -3598,6 +3647,20 @@ app.post('/api/register', async (req, res) => {
       if (existing.email === email) conflict.email = true;
       await logIp(req, { action: 'register_conflict', username });
       return res.status(409).json({ ok: false, conflict });
+    }
+
+    // Upload only after the duplicate check, and fail the registration
+    // (no user created) if ImgBB rejects the photo.
+    if (req.file) {
+      try {
+        const uploaded = await uploadImageToImgBB(req.file);
+        imageUrl = uploaded.imageUrl;
+      } catch (uploadErr) {
+        console.error('register image upload error', uploadErr);
+        await logIp(req, { action: 'register_fail', username });
+        const status = uploadErr.code === 'no_file' || uploadErr.code === 'invalid_file_type' ? 400 : 500;
+        return res.status(status).json({ ok: false, error: uploadErr.code || 'upload_error' });
+      }
     }
 
     const hash = await bcrypt.hash(password, 10);

@@ -27,6 +27,8 @@ $('regCancel').addEventListener('click', () => hide($('modalRegister')));
 
 let uploadedImageUrl = '';
 
+const REGISTER_PHOTO_MAX = 5 * 1024 * 1024;
+
 async function checkAvailability(username, email){
   const params = new URLSearchParams();
   if(username) params.append('username', username);
@@ -39,27 +41,56 @@ const res = await fetch("/api/check-availability", {
   return res.json();
 }
 
+function selectedRegisterPhoto(){
+  const input = $('regImageFile');
+  return input && input.files && input.files[0] ? input.files[0] : null;
+}
 
+function registerPhotoProblem(file){
+  if (!file) return '';
+  if (file.type && !String(file.type).startsWith('image/')) return 'Please choose an image file.';
+  if (file.size > REGISTER_PHOTO_MAX) return 'Photo must be 5 MB or smaller.';
+  return '';
+}
 
-$('btnUploadImage').addEventListener('click', async () => {
-  const file = $('regImageFile').files[0];
+function describeRegisterPhoto(){
   const status = $('uploadStatus');
-  if(!file){ status.textContent = 'Select a file first'; return; }
-
-  const form = new FormData();
-  form.append('image', file);
-  status.textContent = 'Uploading...';
-
-  const resp = await fetch('/api/upload-image', { method:'POST', body:form });
-  const data = await resp.json();
-
-  if(data.ok){
-  uploadedImageUrl = data.imageUrl;
-  status.textContent = 'Uploaded';
-} else {
-    status.textContent = 'Upload failed';
+  if (!status) return;
+  const file = selectedRegisterPhoto();
+  const problem = registerPhotoProblem(file);
+  if (problem) {
+    status.textContent = problem;
+    return;
   }
-});
+  if (!file) {
+    status.textContent = 'Uploads when you create the account';
+    return;
+  }
+  status.textContent = file.name + ' — uploads when you create the account';
+}
+
+const regImageFile = $('regImageFile');
+if (regImageFile) {
+  regImageFile.addEventListener('change', () => {
+    uploadedImageUrl = '';
+    describeRegisterPhoto();
+  });
+}
+
+function registrationErrorText(data, status){
+  const code = data && data.error;
+  if (code === 'file_too_large' || status === 413) return 'Photo must be 5 MB or smaller.';
+  if (code === 'invalid_file_type' || code === 'invalid_file') return 'Please choose an image file.';
+  if (code === 'no_imgbb_key' || code === 'upload_error' || code === 'upload_failed') {
+    return 'The photo could not be uploaded, so the account was not created.';
+  }
+  if (code === 'invalid_username') return 'Username can only use letters, numbers, and . _ -';
+  if (code === 'missing_fields') return 'Username, email, password required';
+  if (code === 'invalid_height') return 'Select your height (3\'5" to 8\'0")';
+  if (code === 'invalid_weight') return 'Enter your weight in lbs (60-700)';
+  if (code === 'invalid_tags') return 'Those fighter tags could not be saved.';
+  return code || 'Registration failed';
+}
 
 $('regSubmit').addEventListener('click', async () => {
   const username = $('regUser').value.trim().toLowerCase();
@@ -74,6 +105,8 @@ $('regSubmit').addEventListener('click', async () => {
   const height = $('regHeight') ? $('regHeight').value : '';
   const weight = $('regWeight') ? $('regWeight').value : '';
   const err = $('regError');
+  const submit = $('regSubmit');
+  const photo = selectedRegisterPhoto();
 
   err.style.display = 'none';
 
@@ -95,6 +128,14 @@ $('regSubmit').addEventListener('click', async () => {
     return;
   }
 
+  const photoProblem = registerPhotoProblem(photo);
+  if (photoProblem) {
+    err.textContent = photoProblem;
+    err.style.display = 'block';
+    describeRegisterPhoto();
+    return;
+  }
+
   const avail = await checkAvailability(username, email);
   if(!avail.ok){
     const msgs = [];
@@ -105,6 +146,11 @@ $('regSubmit').addEventListener('click', async () => {
     return;
   }
 
+  // No file: keep the JSON body the tag tests parse. A selected photo cannot
+  // go through /api/upload-image — that route requires a session, and a new
+  // account does not have one yet — so it rides on /api/register instead.
+  // A chosen photo is sent as the file itself, not as a previously uploaded URL.
+  if (photo) uploadedImageUrl = '';
   const payload = {
     username, email, password, display, age,
     height: normalizeHeight(height),
@@ -114,21 +160,51 @@ $('regSubmit').addEventListener('click', async () => {
     tags: registerTagSelection()
   };
 
-  const resp = await fetch('/api/register', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify(payload)
-  });
+  const status = $('uploadStatus');
+  if (photo && status) status.textContent = 'Uploading photo and creating account…';
+  if (submit) submit.disabled = true;
 
-  const data = await resp.json();
+  let resp;
+  try {
+    if (photo) {
+      const form = new FormData();
+      Object.entries(payload).forEach(([key, value]) => {
+        if (value === undefined || value === null || key === 'imageUrl') return;
+        form.append(key, key === 'tags' ? JSON.stringify(value) : value);
+      });
+      form.append('image', photo);
+      resp = await fetch('/api/register', { method: 'POST', body: form });
+    } else {
+      resp = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }
+  } catch (failure) {
+    if (submit) submit.disabled = false;
+    err.textContent = 'Registration failed';
+    err.style.display = 'block';
+    describeRegisterPhoto();
+    return;
+  }
+
+  let data = {};
+  try { data = await resp.json(); } catch (failure) { data = {}; }
+  if (submit) submit.disabled = false;
 
   if(data.ok){
+    uploadedImageUrl = '';
+    const fileInput = $('regImageFile');
+    if (fileInput) fileInput.value = '';
+    describeRegisterPhoto();
     // The account exists now — start the next registration from a clean slate.
     if (registerTagPicker) registerTagPicker.clear();
     hide($('modalRegister'));
     alert('Account created. Please login.');
   } else {
-    err.textContent = data.error || 'Registration failed';
+    err.textContent = registrationErrorText(data, resp.status);
     err.style.display = 'block';
+    describeRegisterPhoto();
   }
 });

@@ -166,7 +166,7 @@
       title: 'Registering a new account',
       keywords: ['register', 'sign up', 'signup', 'create account', 'new account', 'make an account', 'join the site', 'registration'],
       answer: 'Press Register (under Account in the action menu) and fill in the form: username, email, password, display name, age (18+), a short bio, your favourite colour, language, height and weight, fighter tags and a profile photo if you like.\n' +
-        'Press Create Account and you are in. Everything can be changed later from Edit Profile, and you get a welcome email if the site\'s email is set up.\n' +
+        'Press Create Account and you are in. A photo you chose uploads with the account — there is no separate upload step. Everything can be changed later from Edit Profile, and you get a welcome email if the site\'s email is set up.\n' +
         'Height runs from 3\'5" to 8\'0" in one-inch steps and weight is whole pounds, 60 to 700; those two set your fighter stats. Your win/loss record builds automatically from matches — you don\'t type it in.',
       action: {
         label: 'Open Register',

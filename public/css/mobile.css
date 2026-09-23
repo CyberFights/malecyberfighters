@@ -3300,3 +3300,147 @@ h3{
   gap:8px;
   margin-bottom:10px;
 }
+
+/* ============================================================
+   VISIBLE-VIEWPORT DIALOGS
+   Phone browser chrome covers the bottom of a layout-viewport
+   overlay (inline inset:0 / 90vh), which hides the last control
+   in a dialog — including Create Account. Pin every dialog overlay
+   to the visible viewport and let the card scroll inside it.
+   Do not set display: these overlays are shown and hidden by script.
+   Chat windows already size themselves to --app-height and are not
+   included. #mainUI is the unused mobile shell, not a dialog.
+   ============================================================ */
+:root {
+  --mcf-dialog-max: calc(
+    var(--app-height, 100dvh) - 28px
+    - env(safe-area-inset-top, 0px)
+    - env(safe-area-inset-bottom, 0px)
+  );
+}
+
+#ageGate,
+.auth-screen,
+#modalLogin,
+#modalForgot,
+#modalRegister,
+#modalEditProfile,
+#modalAdminPassword,
+#modalModTimeout,
+#modalAdmin,
+#modalRoster,
+#modalArchives,
+#supportPopup,
+#assistancePopup,
+#modalViewProfile,
+#modalAccountSettings,
+#dmSidebar,
+#roomsSidebar,
+#forumsPopup,
+#newForumModal,
+#forumThreadPopup,
+#modalRules,
+#modalGuide,
+#modalTOS,
+#modalPrivacy,
+#storyPopup,
+#profileCardPopup,
+#profilePhotoPopup,
+.modal,
+.popup,
+.modal-overlay,
+.forum-overlay,
+.list-popup-overlay,
+.side-panel,
+.mcf-modal,
+.mcf-story-backdrop,
+.pc-popup {
+  top: var(--app-top, 0px) !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: auto !important;
+  height: var(--app-height, 100dvh) !important;
+  max-height: var(--app-height, 100dvh) !important;
+  box-sizing: border-box !important;
+  padding-top: max(12px, env(safe-area-inset-top, 0px)) !important;
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)) !important;
+  overflow: hidden !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+#ageBox,
+.auth-box,
+#modalLogin > div,
+#modalForgot > div,
+#modalRegister > div,
+#modalEditProfile > div,
+#modalAdminPassword > div,
+#modalModTimeout > div,
+#modalAdmin > div,
+#modalRoster > div,
+#modalArchives > div,
+#modalViewProfile > div,
+#modalAccountSettings > div,
+.modal-box,
+.modal-content,
+.support-mobile,
+.assistance-panel,
+.list-popup-panel,
+.forum-panel,
+.mcf-modal-panel,
+.mcf-story-panel,
+.mcf-story-viewer,
+.pc-popup-panel {
+  box-sizing: border-box !important;
+  width: auto;
+  max-width: 100% !important;
+  height: auto;
+  max-height: var(--mcf-dialog-max) !important;
+  min-height: 0 !important;
+  flex-shrink: 1 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Forced heights that still poke out of the visible viewport. */
+.forum-thread-panel {
+  height: auto !important;
+}
+.forum-list-panel {
+  min-height: 0 !important;
+}
+
+/* Assistance is top-aligned with a 3vh margin, so its send bar sits under
+   the browser chrome. Center it and let the transcript shrink. */
+#assistancePopup {
+  align-items: center !important;
+}
+#assistancePopup .assistance-panel {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+.assistance-messages {
+  min-height: 0 !important;
+  max-height: none !important;
+}
+
+/* Inner regions that reserve their own vh would push the dialog's last
+   button back under the browser bar. The card above is the scroller. */
+.modal-scroll,
+#modalRoster .roster-list,
+#modalArchives .roster-list {
+  max-height: none !important;
+}
+
+/* Feature and story panels are flex columns whose footer sits outside the
+   scrolling body. Let that body shrink so the footer stays on screen; the
+   card still scrolls if the footer itself cannot fit. */
+.mcf-modal-body,
+.mcf-story-body,
+.mcf-story-scroll,
+.forum-thread-content {
+  min-height: 0 !important;
+}
