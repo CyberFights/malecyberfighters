@@ -1,12 +1,14 @@
 /**
- * The guard that keeps JSON feeds answering 200-with-a-body (noRevalidate.js).
+ * The guard that keeps always-body responses at 200 (noRevalidate.js).
  *
- * Regression for "/api/allUsers 304 error": Express stamps every res.json()
- * with an ETag, so a client revalidating an unchanged roster — open the roster
+ * Regression for "/api/allUsers 304 error" and "/sw.js 304 error": Express
+ * stamps every res.send()/res.json() with an ETag (res.sendFile also adds
+ * Last-Modified), so a client revalidating an unchanged body — open the roster
  * modal twice with nobody registering, fighting or editing a profile in
- * between — was answered 304 Not Modified with an empty body. Whatever is then
- * handed the wire answer sees an error ("Failed to load roster", "Unable to
- * load members", `bad_response`) instead of the JSON it asked for.
+ * between; let the browser check the service worker for an update — was
+ * answered 304 Not Modified with an empty body. Whatever is then handed the
+ * wire answer sees an error ("Failed to load roster", "Unable to load
+ * members", `bad_response`, an empty script) instead of the body it asked for.
  *
  * Driven over raw node:http on purpose: Node's fetch() attaches
  * Cache-Control: no-cache to conditional requests, and Express treats that as
@@ -41,6 +43,12 @@ async function startApp() {
   const app = express();
   app.get('/unguarded', (req, res) => res.json(payload()));
   app.get('/guarded', noRevalidate, (req, res) => res.json(payload()));
+  // The real /sw.js route shape: sendFile sets Last-Modified as well as an
+  // ETag and revalidates against both itself (the `send` package reads the
+  // conditional headers straight off the request).
+  app.get('/sw.js', noRevalidate, (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', 'sw.js'));
+  });
 
   const server = http.createServer(app);
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -103,7 +111,36 @@ test('clients are told not to keep the answer around', async () => {
   }
 });
 
-test('the server guards the roster and the public history feed', () => {
+test('the service worker script always arrives in full, never 304', async () => {
+  const api = await startApp();
+  try {
+    const first = await get(api.port, '/sw.js');
+    assert.equal(first.status, 200);
+    assert.ok(first.body.length > 0, 'the worker itself, not an empty answer');
+    assert.ok(first.headers.etag, 'sendFile hands out an ETag');
+    assert.ok(first.headers['last-modified'], 'and a Last-Modified — two validators to revalidate with');
+
+    // sendFile revalidates against both validators itself; the guard must win
+    // over each of them and over the wildcard.
+    const etag = await get(api.port, '/sw.js', { 'If-None-Match': first.headers.etag });
+    assert.equal(etag.status, 200);
+    assert.equal(etag.body, first.body);
+
+    const both = await get(api.port, '/sw.js', {
+      'If-None-Match': first.headers.etag,
+      'If-Modified-Since': first.headers['last-modified']
+    });
+    assert.equal(both.status, 200);
+    assert.equal(both.body, first.body);
+
+    const star = await get(api.port, '/sw.js', { 'If-None-Match': '*' });
+    assert.equal(star.status, 200);
+  } finally {
+    await api.close();
+  }
+});
+
+test('the server guards the roster, the public history feed and the worker', () => {
   const server = fs.readFileSync(path.join(__dirname, '..', 'index.js'), 'utf8');
 
   assert.match(
@@ -115,5 +152,10 @@ test('the server guards the roster and the public history feed', () => {
     server,
     /app\.get\("\/api\/public-messages", noRevalidate/,
     'and neither does the public history feed'
+  );
+  assert.match(
+    server,
+    /app\.get\('\/sw\.js', noRevalidate/,
+    'nor the service worker script'
   );
 });

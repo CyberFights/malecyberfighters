@@ -1177,8 +1177,12 @@ app.get(BUILT_PAGES.map(name => `/${name}`), (req, res, next) => {
 // second, differently-cached copy of the app shell.
 app.get('/index.html', (req, res) => res.redirect(301, '/'));
 
-app.get('/sw.js', (req, res) => {
-  res.set('Cache-Control', 'no-cache');
+// The service worker script. noRevalidate keeps every register() and update
+// check a full 200: the browser goes to the network for this file either way,
+// and a client handed the raw 304 — no body, no Content-Type — finds an empty
+// script instead of the worker. The update flow only ever wants fresh bytes,
+// so there is nothing the revalidation was buying.
+app.get('/sw.js', noRevalidate, (req, res) => {
   res.sendFile(path.join(publicDir, 'sw.js'));
 });
 app.use(express.static(publicDir));
