@@ -16,9 +16,13 @@
  *   GET  /pending   waiting + refused       GET  /list     published, per member
  *   GET  /archives  public, searchable      GET  /:id      one story (permalinks)
  *   POST /load      the conversation a story is built from
+ *
+ * Every answer arrives in full — noRevalidate runs before anything else here,
+ * so no story endpoint is ever answered 304.
  */
 const express = require('express');
 const rateLimit = require('express-rate-limit');
+const noRevalidate = require('./noRevalidate');
 
 const {
   STORY_LIMITS,
@@ -46,6 +50,21 @@ function createStoryRouter({
   onPublished
 } = {}) {
   const router = express.Router();
+
+  // Nothing here may ever be answered 304 Not Modified. Express stamps every
+  // res.json() with an ETag, so a client revalidating an unchanged body — the
+  // pending list polled twice with nothing approved in between, a profile
+  // opened again, the archives revisited — was handed a bare 304 with no body
+  // at all, and the fetch that asked for it read a JSON parse error instead of
+  // the stories it wanted ("Unexpected end of JSON input", an empty list, a
+  // pending section that never fills). Browsers paper over that with their own
+  // cache; a WebView fetch, a proxy or the service worker's pass-through of an
+  // /api/ request surfaces the raw 304, which is exactly the shape that made
+  // /api/allUsers and /api/public-messages fail the same way. The guard strips
+  // the conditional request headers (response headers alone cannot: If-None-
+  // Match: * matches no matter what the answer says) and marks the answer
+  // no-store, and it runs for writes too — a write is never worth caching.
+  router.use(noRevalidate);
 
   // Story writes are chatty enough to deserve their own budget, but far
   // cheaper than the DM path, so the limit is generous.

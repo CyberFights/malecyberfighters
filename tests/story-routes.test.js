@@ -44,7 +44,8 @@ async function startApi() {
 
   const server = http.createServer(app);
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  const base = `http://127.0.0.1:${server.address().port}`;
+  const port = server.address().port;
+  const base = `http://127.0.0.1:${port}`;
 
   const call = async (path, options = {}) => {
     const res = await fetch(base + path, {
@@ -57,6 +58,18 @@ async function startApi() {
     return { status: res.status, json };
   };
 
+  // The wire answer, conditional request headers and all. fetch() cannot be
+  // used to check for 304s: it attaches Cache-Control: no-cache, which Express
+  // treats as an end-to-end reload, so it answers 200 even on an unguarded
+  // route. Plain http.get sends what a revalidating client actually sends.
+  const raw = (path, headers = {}) => new Promise((resolve, reject) => {
+    http.get({ host: '127.0.0.1', port, path, headers }, res => {
+      let body = '';
+      res.on('data', chunk => { body += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body }));
+    }).on('error', reject);
+  });
+
   const save = async (over = {}) => call('/api/story/save', {
     method: 'POST',
     body: { owner: 'alice', partner: 'bob', title: 'Rooftop', story: 'We met on the roof.', ...over }
@@ -66,6 +79,7 @@ async function startApi() {
 
   return {
     call,
+    raw,
     save,
     models,
     notifications,
@@ -417,6 +431,58 @@ test('a profile lists published stories and never the refused ones', async () =>
     assert.deepEqual(bob.json.stories.map(s => s.title), ['Live']);
 
     assert.equal((await api.call('/api/story/list?username=mallory')).json.stories.length, 0);
+  } finally {
+    await api.close();
+  }
+});
+
+/* Regression for "/api/story/pending 304 error" and "/api/story/list 304
+   error": both feeds are polled — a profile reopened, a pending section
+   refreshed after an approval — and the second answer used to come back 304
+   Not Modified with an empty body, so res.json() threw and the member saw
+   nothing at all. Express stamps each res.json() with an ETag and answers any
+   matching revalidation with 304, which is what noRevalidate exists to stop. */
+test('the pending and list feeds always arrive in full, never 304', async () => {
+  const api = await startApi();
+  try {
+    const waiting = await api.save({ title: 'Waiting' });
+    const live = await api.save({ title: 'Live' });
+    await api.call('/api/story/approve', { method: 'POST', body: { storyId: live.json.storyId, username: 'bob' } });
+
+    for (const path of [
+      '/api/story/pending?username=alice',
+      '/api/story/list?username=alice',
+      '/api/story/archives',
+      `/api/story/${waiting.json.storyId}?username=alice`
+    ]) {
+      const first = await api.raw(path);
+      assert.equal(first.status, 200);
+      assert.ok(first.body.length > 0, `${path} answers with the body itself`);
+
+      // The validator the client was handed last time...
+      const revalidated = await api.raw(path, { 'If-None-Match': first.headers.etag });
+      assert.equal(revalidated.status, 200, `${path} is never answered 304`);
+      assert.equal(revalidated.body, first.body, 'and the body arrives again, in full');
+
+      // ...and the wildcard, which matches whatever the answer says.
+      const star = await api.raw(path, { 'If-None-Match': '*' });
+      assert.equal(star.status, 200, `not even If-None-Match: * can 304 ${path}`);
+      assert.equal(star.body, first.body);
+
+      // A date validator cannot sneak one in either.
+      const stale = await api.raw(path, {
+        'If-Modified-Since': new Date(Date.now() + 86400000).toUTCString()
+      });
+      assert.equal(stale.status, 200, `${path} ignores If-Modified-Since`);
+
+      assert.match(first.headers['cache-control'] || '', /no-store/, 'nothing is kept to revalidate later');
+    }
+
+    // The feeds still carry what they should — a 200 with an empty body would
+    // pass every assertion above and still be useless to the client.
+    assert.equal((await api.call('/api/story/pending?username=alice')).json.stories.length, 1);
+    assert.equal((await api.call('/api/story/list?username=alice')).json.stories.length, 1);
+    assert.equal((await api.call('/api/story/archives')).json.stories.length, 1);
   } finally {
     await api.close();
   }

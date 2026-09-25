@@ -1,7 +1,8 @@
 /**
  * The guard that keeps always-body responses at 200 (noRevalidate.js).
  *
- * Regression for "/api/allUsers 304 error" and "/sw.js 304 error": Express
+ * Regression for "/api/allUsers 304 error", "/api/story/pending 304 error",
+ * "/api/story/list 304 error" and "/sw.js 304 error": Express
  * stamps every res.send()/res.json() with an ETag (res.sendFile also adds
  * Last-Modified), so a client revalidating an unchanged body — open the roster
  * modal twice with nobody registering, fighting or editing a profile in
@@ -157,5 +158,25 @@ test('the server guards the roster, the public history feed and the worker', () 
     server,
     /app\.get\('\/sw\.js', noRevalidate/,
     'nor the service worker script'
+  );
+});
+
+test('every story endpoint is guarded the same way', () => {
+  // The story routes live in their own module and are mounted wholesale, so
+  // the guard belongs on the router itself: it then covers /pending, /list,
+  // /archives and the permalink, in production and in any other host that
+  // mounts the router. Regression for "/api/story/pending 304 error" and
+  // "/api/story/list 304 error".
+  const routes = fs.readFileSync(path.join(__dirname, '..', 'storyRoutes.js'), 'utf8');
+
+  assert.match(
+    routes,
+    /router\.use\(noRevalidate\)/,
+    'the story router never answers 304'
+  );
+  assert.match(
+    routes,
+    /const noRevalidate = require\('\.\/noRevalidate'\)/,
+    'and it takes the guard from the shared middleware'
   );
 });
