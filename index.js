@@ -24,6 +24,7 @@ const { createRetentionJob, configFromEnv } = require('./retention');
 const { createPushNotifier } = require('./pushNotifications');
 const assets = require('./assets');
 const { pagingRequest, pageEnvelope } = require('./historyPaging');
+const noRevalidate = require('./noRevalidate');
 const {
   buildWebhookPayload,
   publicBaseUrlFromSocket,
@@ -3023,7 +3024,10 @@ app.post("/api/send-dm", sessions.requireUser, async (req, res) => {
 });
 
 // ---------- API: PUBLIC CHAT HISTORY ----------
-app.get("/api/public-messages", async (req, res) => {
+// noRevalidate keeps every answer a full 200: this feed used to hand
+// revalidating clients 304 with no JSON to parse whenever the page came back
+// byte-identical.
+app.get("/api/public-messages", noRevalidate, async (req, res) => {
   try {
     // Paging backwards: the client sends the `oldest` timestamp it already has
     // and receives the page immediately before it — the same contract
@@ -3043,7 +3047,6 @@ app.get("/api/public-messages", async (req, res) => {
       .lean())
       .reverse();
 
-    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
     res.json({ ok: true, ...pageEnvelope(messages, { limit }) });
   } catch (err) {
     console.error("load public messages error:", err);
@@ -4152,13 +4155,19 @@ app.get('/api/tags', (req, res) => {
 // The member directory. Requires a session: it is the roster behind the arena,
 // and it exposes every member's profile, physique and record.
 //
+// noRevalidate runs first, before the session check, so not even the 401 can
+// be cached or answered 304. The roster itself needed it most: two fetches
+// with nothing to change in between return the same bytes, and revalidating
+// clients were handed 304 with no JSON — the same failure the public history
+// feed had.
+//
 // Optional filters, used by the roster's search box and available to any
 // client that wants to search the directory itself:
 //   ?search=heel        names AND tags (label / alias / id) — "vers" finds
 //                       Vers Top, "jobber" finds Heel Jobber
 //   ?tags=heel,singlet  tag ids, matched with `tagMode`
 //   ?tagMode=any|all    any tag (default) or every tag
-app.get("/api/allUsers", sessions.requireUser, async (req, res) => {
+app.get("/api/allUsers", noRevalidate, sessions.requireUser, async (req, res) => {
   try {
     // Both filters can be present at once, and each one is itself an $or, so
     // they are combined with $and rather than merged into one query object.
