@@ -39,11 +39,15 @@ h1 {
 .muted { color: #94a3b8; }
 .small { font-size: 12px; }
 .lead  { font-size: 14px; color: #7dd3fc; }
-.lead,
-#updates,
-#completedupdates {
+.lead {
   filter: blur(.45px);
   text-shadow: 0 0 6px rgba(185, 243, 255, .78), 0 2px 9px rgba(0, 0, 0, .82);
+}
+
+#updates,
+#completedupdates {
+  text-shadow: 0 0 6px rgba(185, 243, 255, .78), 0 2px 9px rgba(0, 0, 0, .82);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .55), 0 0 10px rgba(127, 216, 255, .25);
 }
 .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 

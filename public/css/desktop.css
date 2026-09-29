@@ -23,11 +23,15 @@ h1{
   text-shadow:0 0 7px rgba(185,243,255,0.8), 0 0 18px rgba(127,216,255,0.42);
 }
 
-.lead,
-#updates,
-#completedupdates{
+.lead{
   filter:blur(0.45px);
   text-shadow:0 0 6px rgba(185,243,255,0.78), 0 2px 9px rgba(0,0,0,0.82);
+}
+
+#updates,
+#completedupdates{
+  text-shadow:0 0 6px rgba(185,243,255,0.78), 0 2px 9px rgba(0,0,0,0.82);
+  box-shadow:0 4px 14px rgba(0,0,0,0.55), 0 0 10px rgba(127,216,255,0.25);
 }
 
 html,body{
