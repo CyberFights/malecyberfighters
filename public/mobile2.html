@@ -74,8 +74,18 @@
     flex-direction: column;
     gap: 10px;
   }
-h1{margin:0;font-size:20px}
-p.lead{margin:6px 0 0;color:var(--muted)}
+h1{
+  margin:0;
+  font-size:20px;
+  -webkit-text-stroke:1px #b9f3ff;
+  text-shadow:0 0 7px rgba(185,243,255,0.8), 0 0 18px rgba(127,216,255,0.42);
+}
+p.lead{
+  margin:6px 0 0;
+  color:var(--muted);
+  filter:blur(0.45px);
+  text-shadow:0 0 6px rgba(185,243,255,0.78), 0 2px 9px rgba(0,0,0,0.82);
+}
 /* PARTICLE BACKGROUND ------------------------------------------------------ */
 body::after {
   content:"";

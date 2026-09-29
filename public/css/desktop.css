@@ -7,12 +7,27 @@
   --accent:#7fd8ff;
   --muted:#b8c7d9;
   --glass:rgba(160,200,255,0.06);
+  --ice-blue:#b9f3ff;
   --success:#6dffe7;
   --danger:#ff7aa8;
   --panel:rgba(10,14,24,0.8);
   --panel-border:rgba(160,200,255,0.25);
   --accent-glow:0 0 12px rgba(127,216,255,0.6);
   font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;
+}
+
+/* Keep the main headings crisp while giving the supporting copy a soft,
+   frosted-neon finish. */
+h1{
+  -webkit-text-stroke:1px var(--ice-blue);
+  text-shadow:0 0 7px rgba(185,243,255,0.8), 0 0 18px rgba(127,216,255,0.42);
+}
+
+.lead,
+#updates,
+#completedupdates{
+  filter:blur(0.45px);
+  text-shadow:0 0 6px rgba(185,243,255,0.78), 0 2px 9px rgba(0,0,0,0.82);
 }
 
 html,body{
