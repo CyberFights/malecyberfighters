@@ -29,10 +29,22 @@ body {
 
 img { max-width: 100%; }
 
+/* Ice-blue title stroke and a soft blurred neon shadow for supporting copy. */
+h1 {
+  -webkit-text-stroke: 1px #b9f3ff;
+  text-shadow: 0 0 7px rgba(185, 243, 255, .8), 0 0 18px rgba(127, 216, 255, .42);
+}
+
 /* Utility */
 .muted { color: #94a3b8; }
 .small { font-size: 12px; }
 .lead  { font-size: 14px; color: #7dd3fc; }
+.lead,
+#updates,
+#completedupdates {
+  filter: blur(.45px);
+  text-shadow: 0 0 6px rgba(185, 243, 255, .78), 0 2px 9px rgba(0, 0, 0, .82);
+}
 .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Shared unread pill: the "DMs" tab count and the per-thread count that
