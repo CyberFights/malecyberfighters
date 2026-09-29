@@ -322,6 +322,26 @@ function openUserProfile(username) {
   if ($('vpAge')) $('vpAge').textContent = user.age || "Unknown";
   if ($('vpHeight')) $('vpHeight').textContent = user.height || "Unknown";
   if ($('vpWeight')) $('vpWeight').textContent = (user.weight != null && user.weight !== "") ? user.weight + " lbs" : "Unknown";
+  // Last time on: "Online" while they hold a socket, otherwise "Active 2h ago"
+  // from the lastSeenAt the server stamps on every presence transition. The
+  // online list (window.users) is the live truth; /api/allUsers only carries
+  // the timestamp.
+  if ($('vpLastSeen')) {
+    const seenEl = $('vpLastSeen');
+    const onlineNow = (window.users || []).some(u => u && u.username === user.username);
+    const presence = { online: onlineNow, lastSeenAt: user.lastSeenAt || null };
+    // Marked as a presence slot so i18n.js re-translates it on language change.
+    seenEl.dataset.mcfPresence = JSON.stringify(presence);
+    let seenLabel = (window.MCFI18N && typeof window.MCFI18N.presenceLabel === 'function')
+      ? window.MCFI18N.presenceLabel(presence)
+      : '';
+    if (!seenLabel) {
+      seenLabel = onlineNow
+        ? 'Online'
+        : (presence.lastSeenAt && window.MCF ? 'Active ' + MCF.agoLabel(presence.lastSeenAt) : 'Unknown');
+    }
+    seenEl.textContent = seenLabel;
+  }
   if ($('vpColorBox')) $('vpColorBox').style.background = user.color || "#7fd8ff";
   if ($('vpAvatar')) {
     const avatar = $('vpAvatar');

@@ -1178,6 +1178,25 @@ function mobileImgSrc(value) {
     set("vpHeight", user.height || "—");
     set("vpWeight", user.weight != null && user.weight !== "" ? user.weight + " lbs" : "—");
 
+    // Last time on: the presence feed is the live truth for "Online"; when the
+    // member is gone, lastSeenAt (stamped by the server on every presence
+    // transition and returned by /api/allUsers) becomes "Active 2h ago".
+    const seenEl = $("vpLastSeen");
+    if (seenEl) {
+      const presence = { online: isOnline(user.username), lastSeenAt: user.lastSeenAt || null };
+      // Marked as a presence slot so i18n.js re-translates it on language change.
+      seenEl.dataset.mcfPresence = JSON.stringify(presence);
+      let seenLabel = (window.MCFI18N && typeof window.MCFI18N.presenceLabel === "function")
+        ? window.MCFI18N.presenceLabel(presence)
+        : "";
+      if (!seenLabel) {
+        seenLabel = presence.online
+          ? "Online"
+          : (presence.lastSeenAt && window.MCF ? "Active " + window.MCF.agoLabel(presence.lastSeenAt) : "—");
+      }
+      seenEl.textContent = seenLabel;
+    }
+
     const vpAvatar = $("vpAvatar");
     if (vpAvatar) vpAvatar.innerHTML = avatarHtml(user, 96);
     renderProfilePhotoGallery($("vpExtraPhotos"), user.extraPhotos);
