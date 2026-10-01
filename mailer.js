@@ -204,8 +204,100 @@ async function sendMail({ to, subject, text, html }) {
   }
 }
 
+/**
+ * Build the subject, plain text, and HTML content for the welcome email sent upon
+ * registration. Contains the user's login username and password along with a
+ * brief description of the arena (public chat), the user roster, DMs, audio calls,
+ * custom rooms, and dice matches.
+ */
+function buildWelcomeEmail({ username, password }) {
+  const user = String(username != null ? username : '');
+  const pass = String(password != null ? password : '');
+  const safeUser = escapeHtml(user);
+  const safePass = escapeHtml(pass);
+
+  const subject = `Welcome to Male Cyber Fighters, ${user}!`;
+
+  const text = [
+    `Hi ${user},`,
+    '',
+    'Welcome to Male Cyber Fighters! Your account is ready.',
+    '',
+    '--- Your Login Details ---',
+    `Username: ${user}`,
+    `Password: ${pass}`,
+    '',
+    '--- Getting Started: Feature Overview ---',
+    '',
+    '• The Arena (Public Chat)',
+    '  The main open public chatroom where fighters gather to talk, hang out, and interact with the community in real time.',
+    '',
+    '• User Roster',
+    '  The site-wide member directory. Browse registered fighters, search by username, filter by fighter tags (styles, fetishes, roles, and positions), view detailed profiles, and see who is online.',
+    '',
+    '• DMs (Direct Messages)',
+    '  Private one-on-one messaging to chat privately with other fighters, share photos, GIFs, and media, and arrange matches.',
+    '',
+    '• Audio Calls',
+    '  Real-time voice chat. Start private 1-on-1 voice calls directly inside DMs or join multi-user group conference calls inside chat rooms.',
+    '',
+    '• Custom Rooms',
+    '  Dedicated public and private chatrooms created for specific topics, group discussions, themed roleplay, or private fight sessions.',
+    '',
+    '• Dice Matches',
+    '  Our turn-based cyber wrestling and combat system. Challenge opponents using interactive slash commands (/create-game, /join-game, /move), executing attacks, submissions, escapes, pins, and recovery with live HP, stamina, and combat stat tracking.',
+    '',
+    'See you in the ring!',
+    '',
+    '— The Male Cyber Fighters Team'
+  ].join('\n');
+
+  const html = [
+    `<p>Hi <strong>${safeUser}</strong>,</p>`,
+    '<p>Welcome to <strong>Male Cyber Fighters</strong>! Your account is ready.</p>',
+    '<div style="background:#f1f5f9;border-left:4px solid #3b82f6;padding:12px 16px;margin:16px 0;border-radius:4px;">',
+    `  <p style="margin:4px 0;"><strong>Username:</strong> ${safeUser}</p>`,
+    `  <p style="margin:4px 0;"><strong>Password:</strong> ${safePass}</p>`,
+    '</div>',
+    '<h3 style="color:#1e293b;margin-top:20px;margin-bottom:10px;">Getting Started: Feature Overview</h3>',
+    '<ul style="padding-left:20px;line-height:1.6;">',
+    '  <li style="margin-bottom:10px;">',
+    '    <strong>The Arena (Public Chat):</strong> The main open public chatroom where fighters gather to talk, hang out, and interact with the community in real time.',
+    '  </li>',
+    '  <li style="margin-bottom:10px;">',
+    '    <strong>User Roster:</strong> The site-wide member directory. Browse registered fighters, search by username, filter by fighter tags (styles, fetishes, roles, and positions), view detailed profiles, and see who is online.',
+    '  </li>',
+    '  <li style="margin-bottom:10px;">',
+    '    <strong>DMs (Direct Messages):</strong> Private one-on-one messaging to chat privately with other fighters, share photos, GIFs, and media, and arrange matches.',
+    '  </li>',
+    '  <li style="margin-bottom:10px;">',
+    '    <strong>Audio Calls:</strong> Real-time voice chat. Start private 1-on-1 voice calls directly inside DMs or join multi-user group conference calls inside chat rooms.',
+    '  </li>',
+    '  <li style="margin-bottom:10px;">',
+    '    <strong>Custom Rooms:</strong> Dedicated public and private chatrooms created for specific topics, group discussions, themed roleplay, or private fight sessions.',
+    '  </li>',
+    '  <li style="margin-bottom:10px;">',
+    '    <strong>Dice Matches:</strong> Our turn-based cyber wrestling and combat system. Challenge opponents using interactive slash commands (<code>/create-game</code>, <code>/join-game</code>, <code>/move</code>), executing attacks, submissions, escapes, pins, and recovery with live HP, stamina, and combat stat tracking.',
+    '  </li>',
+    '</ul>',
+    '<p style="margin-top:20px;">See you in the ring,<br><strong>The Male Cyber Fighters Team</strong></p>'
+  ].join('\n');
+
+  return { subject, text, html };
+}
+
+/**
+ * Send the welcome email to a newly registered member.
+ */
+async function sendWelcomeEmail({ to, username, password }) {
+  const { subject, text, html } = buildWelcomeEmail({ username, password });
+  return sendMail({ to, subject, text, html });
+}
+
 module.exports = {
   sendMail,
+  sendWelcomeEmail,
+  buildWelcomeEmail,
   mailerConfigured: configured,
   emailProvider: EMAIL_PROVIDER,
   MAIL_FROM,

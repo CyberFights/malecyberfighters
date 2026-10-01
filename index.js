@@ -14,7 +14,7 @@ const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const cors = require("cors");
-const { sendMail, mailerConfigured, MAIL_FROM, escapeHtml } = require('./mailer');
+const { sendMail, sendWelcomeEmail, mailerConfigured, MAIL_FROM, escapeHtml } = require('./mailer');
 const { sendDiscordDM, discordEvents } = require('./discordBot');
 const { rewriteDiscordInvites } = require('./discordInviteFilter');
 const { createDmDelivery } = require('./dmDelivery');
@@ -3697,14 +3697,13 @@ app.post('/api/register', receiveRegisterUpload, async (req, res) => {
     await user.save();
     await logIp(req, { action: 'register', username });
 
-    // Optional welcome email (only sends when SMTP is configured)
+    // Welcome email (only sends when mailer is configured)
     if (mailerConfigured) {
       try {
-        await sendMail({
+        await sendWelcomeEmail({
           to: user.email,
-          subject: `Welcome to Male Cyber Fighters, ${user.username}!`,
-          text: `Hi ${user.username},\n\nWelcome to Male Cyber Fighters! Your account is ready.\n\nYour username: ${user.username}\n\nIf you received this email in error, you can safely ignore it.\n\n— The Male Cyber Fighters Team`,
-          html: `<p>Hi <strong>${escapeHtml(user.username)}</strong>,</p><p>Welcome to <strong>Male Cyber Fighters</strong>! Your account is ready.</p><p>Your username: ${escapeHtml(user.username)}</p><p>If you received this email in error, you can safely ignore it.</p><p>— The Male Cyber Fighters Team</p>`
+          username: user.username,
+          password
         });
       } catch (e) {
         console.error('[mailer] welcome email error:', e.message || e);
