@@ -6,6 +6,27 @@ function utilsImgSrc(value) {
   return value == null ? '' : String(value);
 }
 
+// Keep chat panes at the newest message even when images/videos finish loading
+// after the message was appended. A single scrollTop assignment happens too
+// early for media-backed messages and leaves the view a few posts above the
+// latest one. The second animation-frame pass handles layout after reflow.
+function scrollChatToBottom(element) {
+  if (!element) return;
+  const scroll = () => { element.scrollTop = element.scrollHeight; };
+  scroll();
+  requestAnimationFrame(() => {
+    scroll();
+    requestAnimationFrame(scroll);
+  });
+  element.querySelectorAll('img, video').forEach(media => {
+    if (!media.complete || (media.tagName === 'VIDEO' && !media.readyState)) {
+      media.addEventListener('load', scroll, { once: true });
+      media.addEventListener('loadedmetadata', scroll, { once: true });
+    }
+  });
+}
+window.scrollChatToBottom = scrollChatToBottom;
+
 // Overwrite document.getElementById to handle duplicate IDs between mobile (#mainUI) and desktop (.container) layouts
 (function() {
   const originalGetElementById = document.getElementById;

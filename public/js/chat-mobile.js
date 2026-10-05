@@ -879,7 +879,7 @@ function appendPublicMessage(msg){
   });
 
   feed.appendChild(div);
-  feed.scrollTop = feed.scrollHeight;
+  scrollChatToBottom(feed);
 }
 
 /* ============================================================
@@ -986,7 +986,7 @@ function appendRoomMessage(msg){
   });
 
   feed.appendChild(div);
-  feed.scrollTop = feed.scrollHeight;
+  scrollChatToBottom(feed);
 }
 
 // A room message was edited — update it in place on every client.

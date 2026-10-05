@@ -25,6 +25,42 @@ if (typeof window.updateAccountSettingsButtonVisibility !== 'function') {
 }
 
 
+// --- In-app notification sound preferences --------------------------
+// These are device preferences: they apply immediately to message alerts
+// without changing server-side push notification subscriptions.
+const MCF_SOUND_ENABLED_KEY = 'mcf_notification_sounds_enabled';
+const MCF_SOUND_VOLUME_KEY = 'mcf_notification_sounds_volume';
+
+window.getNotificationSoundSettings = function() {
+  let enabled = true;
+  let volume = 1;
+  try {
+    const storedEnabled = localStorage.getItem(MCF_SOUND_ENABLED_KEY);
+    if (storedEnabled !== null) enabled = storedEnabled !== 'false';
+    const storedVolume = Number(localStorage.getItem(MCF_SOUND_VOLUME_KEY));
+    if (Number.isFinite(storedVolume)) volume = Math.max(0, Math.min(1, storedVolume));
+  } catch (_) {}
+  return { enabled, volume };
+};
+
+window.setNotificationSoundSettings = function(enabled, volume) {
+  const nextVolume = Math.max(0, Math.min(1, Number(volume)));
+  try {
+    localStorage.setItem(MCF_SOUND_ENABLED_KEY, enabled ? 'true' : 'false');
+    localStorage.setItem(MCF_SOUND_VOLUME_KEY, String(nextVolume));
+  } catch (_) {}
+};
+
+function syncNotificationSoundControls() {
+  const settings = window.getNotificationSoundSettings();
+  const enabled = document.getElementById('accountNotificationSoundsEnabled');
+  const volume = document.getElementById('accountNotificationSoundVolume');
+  const label = document.getElementById('accountNotificationSoundVolumeLabel');
+  if (enabled) enabled.checked = settings.enabled;
+  if (volume) volume.value = String(Math.round(settings.volume * 100));
+  if (label) label.textContent = Math.round(settings.volume * 100) + '%';
+}
+
 // --- Modal open/close helpers --------------------------------------
 window.openAccountSettingsModal = function() {
   const modal = document.getElementById('modalAccountSettings');
@@ -44,6 +80,7 @@ window.openAccountSettingsModal = function() {
   if (cpNew) cpNew.value = '';
   if (cpConf) cpConf.value = '';
   if (delPw) delPw.value = '';
+  syncNotificationSoundControls();
 
   if (typeof show === 'function') show(modal);
   else modal.style.display = 'flex';
@@ -75,6 +112,26 @@ function bindAccountSettingsButtons() {
   if (closeBtn && !closeBtn._acctBound) {
     closeBtn._acctBound = true;
     closeBtn.addEventListener('click', () => window.closeAccountSettingsModal());
+  }
+
+  const soundToggle = document.getElementById('accountNotificationSoundsEnabled');
+  if (soundToggle && !soundToggle._acctBound) {
+    soundToggle._acctBound = true;
+    soundToggle.addEventListener('change', () => {
+      const settings = window.getNotificationSoundSettings();
+      window.setNotificationSoundSettings(soundToggle.checked, settings.volume);
+    });
+  }
+  const soundVolume = document.getElementById('accountNotificationSoundVolume');
+  if (soundVolume && !soundVolume._acctBound) {
+    soundVolume._acctBound = true;
+    soundVolume.addEventListener('input', () => {
+      const settings = window.getNotificationSoundSettings();
+      const volume = Number(soundVolume.value) / 100;
+      window.setNotificationSoundSettings(settings.enabled, volume);
+      const label = document.getElementById('accountNotificationSoundVolumeLabel');
+      if (label) label.textContent = Math.round(volume * 100) + '%';
+    });
   }
 
   const modal = document.getElementById('modalAccountSettings');

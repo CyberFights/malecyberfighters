@@ -87,11 +87,15 @@ let publicMessageSound = null;
 
 function playPublicMessageSound(){
   try {
+    const settings = typeof window.getNotificationSoundSettings === 'function'
+      ? window.getNotificationSoundSettings() : { enabled: true, volume: 1 };
+    if (!settings.enabled || settings.volume <= 0) return;
     if (!publicMessageSound){
       publicMessageSound = new Audio('/sounds/computer.mp3');
       publicMessageSound.preload = 'auto';
     }
     publicMessageSound.currentTime = 0;
+    publicMessageSound.volume = settings.volume;
     const p = publicMessageSound.play();
     if (p && typeof p.catch === 'function') p.catch(() => {});
   } catch (e) {
@@ -1132,7 +1136,7 @@ function appendPublicMessage(msg, playSound = true, before = null){
     feed.insertBefore(div, before);
   } else {
     feed.appendChild(div);
-    feed.scrollTop = feed.scrollHeight;
+    scrollChatToBottom(feed);
   }
 
   // Play the new-message sound only for incoming messages from others
@@ -1202,7 +1206,7 @@ function appendRoomMessage(msg){
     div.className = 'message-row room-system';
     div.innerHTML = `<div class="room-system-msg">${escapeHtml(msg.text || '')}</div>`;
     feed.appendChild(div);
-    feed.scrollTop = feed.scrollHeight;
+    scrollChatToBottom(feed);
     return;
   }
 
@@ -1270,7 +1274,7 @@ function appendRoomMessage(msg){
   });
 
   feed.appendChild(div);
-  feed.scrollTop = feed.scrollHeight;
+  scrollChatToBottom(feed);
 }
 
 // A room message was edited — update it in place on every client.
