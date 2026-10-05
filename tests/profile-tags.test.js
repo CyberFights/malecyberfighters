@@ -131,7 +131,7 @@ test('the picker can be pre-filled from a member record and cleared', () => {
   assert.equal(slot.querySelector('#regTags-boots').checked, true);
   assert.equal(slot.querySelector('#regTags-singlet').checked, false);
   assert.deepEqual(plain(win.ProfileTags.pickerSelection(slot)), {
-    style: ['pro'], fetish: ['boots'], role: ['heel', 'heel-jobber'], position: ['top']
+    style: ['pro'], fetish: ['boots'], role: ['heel', 'heel-jobber'], limits: [], position: ['top']
   });
 
   picker.clear();
@@ -147,7 +147,7 @@ test('an unprefilled picker with no controller still reads what is ticked', () =
   slot.innerHTML = '<input type="checkbox" value="heel" checked><input type="checkbox" value="singlet" checked>';
 
   assert.deepEqual(plain(win.ProfileTags.pickerSelection(slot)), {
-    style: [], fetish: ['singlet'], role: ['heel'], position: []
+    style: [], fetish: ['singlet'], role: ['heel'], limits: [], position: []
   });
   assert.deepEqual(plain(win.ProfileTags.pickerSelection(null)), plain(win.Tags.emptySelection()));
 });
@@ -439,7 +439,7 @@ test('registering sends the tags that were ticked', async () => {
   const register = calls.find(call => call.url === '/api/register');
   assert.ok(register, 'the account was submitted');
   assert.deepEqual(register.body.tags, {
-    style: [], fetish: ['singlet'], role: ['heel'], position: ['vers-top']
+    style: [], fetish: ['singlet'], role: ['heel'], limits: [], position: ['vers-top']
   });
 });
 
@@ -473,7 +473,7 @@ test('editing a profile pre-fills the picker and saves the changes', async () =>
   const update = calls.find(call => call.url === '/api/update-profile');
   assert.ok(update, 'the profile was saved');
   assert.deepEqual(update.body.updates.tags, {
-    style: ['pro'], fetish: ['singlet'], role: [], position: ['top']
+    style: ['pro'], fetish: ['singlet'], role: [], limits: [], position: ['top']
   });
 });
 
