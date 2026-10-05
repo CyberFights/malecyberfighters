@@ -36,6 +36,23 @@ if (typeof window.$ === 'undefined') {
 function show(el){ if (el) el.style.display = 'flex'; }
 function hide(el){ if (el) el.style.display = 'none'; }
 
+function scrollChatToBottom(element) {
+  if (!element) return;
+  const scroll = () => { element.scrollTop = element.scrollHeight; };
+  scroll();
+  requestAnimationFrame(() => {
+    scroll();
+    requestAnimationFrame(scroll);
+  });
+  element.querySelectorAll('img, video').forEach(media => {
+    if (!media.complete || (media.tagName === 'VIDEO' && !media.readyState)) {
+      media.addEventListener('load', scroll, { once: true });
+      media.addEventListener('loadedmetadata', scroll, { once: true });
+    }
+  });
+}
+window.scrollChatToBottom = scrollChatToBottom;
+
 function escapeHtml(s){
   if (!s) return '';
   return s.replace(/[&<>"']/g, c => ({

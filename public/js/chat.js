@@ -1136,7 +1136,7 @@ function appendPublicMessage(msg, playSound = true, before = null){
     feed.insertBefore(div, before);
   } else {
     feed.appendChild(div);
-    feed.scrollTop = feed.scrollHeight;
+    scrollChatToBottom(feed);
   }
 
   // Play the new-message sound only for incoming messages from others
@@ -1206,7 +1206,7 @@ function appendRoomMessage(msg){
     div.className = 'message-row room-system';
     div.innerHTML = `<div class="room-system-msg">${escapeHtml(msg.text || '')}</div>`;
     feed.appendChild(div);
-    feed.scrollTop = feed.scrollHeight;
+    scrollChatToBottom(feed);
     return;
   }
 
@@ -1274,7 +1274,7 @@ function appendRoomMessage(msg){
   });
 
   feed.appendChild(div);
-  feed.scrollTop = feed.scrollHeight;
+  scrollChatToBottom(feed);
 }
 
 // A room message was edited — update it in place on every client.

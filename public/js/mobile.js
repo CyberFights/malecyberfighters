@@ -49,6 +49,24 @@ function mobileImgSrc(value) {
     el.style.pointerEvents = "none";
   }
 
+  // Media can increase scrollHeight after a message is rendered. Re-apply the
+  // bottom position after layout and once embedded media reports its size.
+  function scrollChatToBottom(element) {
+    if (!element) return;
+    const scroll = () => { element.scrollTop = element.scrollHeight; };
+    scroll();
+    requestAnimationFrame(() => {
+      scroll();
+      requestAnimationFrame(scroll);
+    });
+    element.querySelectorAll('img, video').forEach(media => {
+      if (!media.complete || (media.tagName === 'VIDEO' && !media.readyState)) {
+        media.addEventListener('load', scroll, { once: true });
+        media.addEventListener('loadedmetadata', scroll, { once: true });
+      }
+    });
+  }
+
   function on(el, ev, fn) {
     if (!el) return;
     el.addEventListener(ev, fn);
@@ -912,7 +930,7 @@ function mobileImgSrc(value) {
       feed.insertBefore(row, before);
     } else {
       feed.appendChild(row);
-      feed.scrollTop = feed.scrollHeight;
+      scrollChatToBottom(feed);
     }
   }
 
@@ -1970,7 +1988,7 @@ function mobileImgSrc(value) {
       body.insertBefore(row, before);
     } else {
       body.appendChild(row);
-      body.scrollTop = body.scrollHeight;
+      scrollChatToBottom(body);
     }
   }
 
@@ -2162,7 +2180,7 @@ function mobileImgSrc(value) {
       div.className = "message-row room-system";
       div.innerHTML = `<div class="room-system-msg">${escapeHtml(msg.text || "")}</div>`;
       feed.appendChild(div);
-      feed.scrollTop = feed.scrollHeight;
+      scrollChatToBottom(feed);
       return;
     }
 
@@ -2197,7 +2215,7 @@ function mobileImgSrc(value) {
     }
 
     feed.appendChild(div);
-    feed.scrollTop = feed.scrollHeight;
+    scrollChatToBottom(feed);
   }
 
   function renderRoomMembers(members) {
@@ -3583,7 +3601,7 @@ function renderDMMessages(targetUsername, messages, options) {
 
   if (prepend) return; // the scroll-back controller holds the position instead
   if (stickToBottom) {
-    body.scrollTop = body.scrollHeight;
+    scrollChatToBottom(body);
   } else {
     body.scrollTop = prevTop + (body.scrollHeight - prevHeight);
   }
@@ -3687,7 +3705,7 @@ socket.on("privateMessage", pm => {
     // renderDMMessages(other, [pm]) first, which cleared the whole
     // conversation and left the incoming message on screen twice.
     appendSingleDMMessage(pm, me);
-    body.scrollTop = body.scrollHeight;
+    scrollChatToBottom(body);
     markDmConversationRead(other);
   } else if (pm.from !== me.username) {
     bumpDmUnread(other);
