@@ -60,10 +60,13 @@
   function startRing(name) {
     stopRing();
     if (!TONES[name]) return;
+    const settings = typeof window.getNotificationSoundSettings === 'function'
+      ? window.getNotificationSoundSettings() : { enabled: true, volume: 1 };
+    if (!settings.enabled || settings.volume <= 0) return;
     ringing = name;
     try {
       const a = toneEl(name);
-      a.volume = Math.max(0.1, Math.min(1, TONES[name].volume * callVolume));
+      a.volume = Math.max(0.01, Math.min(1, TONES[name].volume * settings.volume));
       const p = a.play();
       if (p && typeof p.catch === 'function') p.catch(() => {});
     } catch (e) {}
@@ -90,10 +93,13 @@
 
   function playEndTone() {
     stopRing();
+    const settings = typeof window.getNotificationSoundSettings === 'function'
+      ? window.getNotificationSoundSettings() : { enabled: true, volume: 1 };
+    if (!settings.enabled || settings.volume <= 0) return;
     try {
       const a = toneEl('end');
       a.currentTime = 0;
-      a.volume = Math.max(0.1, Math.min(1, TONES.end.volume * callVolume));
+      a.volume = Math.max(0.01, Math.min(1, TONES.end.volume * settings.volume));
       a.play()?.catch(() => {});
     } catch (e) {}
   }

@@ -1696,6 +1696,18 @@ Moderator decisions are final. </p>
       <button id="accountSettingsClose" class="ghost small-btn" type="button">✕</button>
     </div>
 
+    <!-- In-app notification sounds -->
+    <div style="border:1px solid rgba(160,200,255,0.22);padding:14px;border-radius:10px;background:rgba(160,200,255,0.06);margin-bottom:18px">
+      <h4 style="margin:0 0 8px;color:#7fd8ff">Notification Sounds</h4>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <input id="accountNotificationSoundsEnabled" type="checkbox">
+        <span>Play notification sounds</span>
+      </label>
+      <label for="accountNotificationSoundVolume" style="display:block;margin-bottom:5px">Volume <span id="accountNotificationSoundVolumeLabel" class="small muted">100%</span></label>
+      <input id="accountNotificationSoundVolume" type="range" min="0" max="100" step="1" value="100" style="width:100%">
+      <p class="small muted" style="margin:8px 0 0">Controls new Arena message and direct-message alert sounds on this device.</p>
+    </div>
+
     <!-- Change Password Section -->
     <div style="border:1px solid rgba(160,200,255,0.22);padding:14px;border-radius:10px;background:rgba(160,200,255,0.06);margin-bottom:18px">
       <h4 style="margin:0 0 10px 0;color:#7fd8ff">Change Password</h4>

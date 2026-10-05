@@ -713,11 +713,15 @@ let dmAlertSound = null;
 
 function playDMAlertSound(){
   try {
+    const settings = typeof window.getNotificationSoundSettings === 'function'
+      ? window.getNotificationSoundSettings() : { enabled: true, volume: 1 };
+    if (!settings.enabled || settings.volume <= 0) return;
     if (!dmAlertSound){
       dmAlertSound = new Audio('/sounds/ui-alert.mp3');
       dmAlertSound.preload = 'auto';
     }
     dmAlertSound.currentTime = 0;
+    dmAlertSound.volume = settings.volume;
     const p = dmAlertSound.play();
     if (p && typeof p.catch === 'function') p.catch(() => {});
   } catch (e) {

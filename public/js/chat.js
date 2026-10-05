@@ -87,11 +87,15 @@ let publicMessageSound = null;
 
 function playPublicMessageSound(){
   try {
+    const settings = typeof window.getNotificationSoundSettings === 'function'
+      ? window.getNotificationSoundSettings() : { enabled: true, volume: 1 };
+    if (!settings.enabled || settings.volume <= 0) return;
     if (!publicMessageSound){
       publicMessageSound = new Audio('/sounds/computer.mp3');
       publicMessageSound.preload = 'auto';
     }
     publicMessageSound.currentTime = 0;
+    publicMessageSound.volume = settings.volume;
     const p = publicMessageSound.play();
     if (p && typeof p.catch === 'function') p.catch(() => {});
   } catch (e) {
