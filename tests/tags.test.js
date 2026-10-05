@@ -5,7 +5,7 @@
  * what index.js requires for /api/register, /api/update-profile and the roster
  * search — so these tests pin the rules both sides depend on:
  *
- *   • the four categories, their per-category limits and their stable ids
+ *   • the five categories, their per-category limits and their stable ids
  *   • what /api/* accepts (an unknown id must never fail a save)
  *   • what a bad shape does (a 400 with invalid_tags, not a silent write)
  *   • what a search means ("vers" finds Vers Top; "babyface" finds Face)
@@ -26,8 +26,8 @@ const ALL_IDS = Tags.categoryKeys.flatMap(key =>
    THE CATALOGUE
 ------------------------------------------------------------ */
 
-test('the four categories are style, fetish, role and position', () => {
-  assert.deepEqual(Tags.categoryKeys, ['style', 'fetish', 'role', 'position']);
+test('the five categories are style, fetish, role, limits and position', () => {
+  assert.deepEqual(Tags.categoryKeys, ['style', 'fetish', 'role', 'limits', 'position']);
 
   Tags.CATEGORIES.forEach(category => {
     assert.ok(category.label, `${category.key} has a label`);
@@ -51,16 +51,33 @@ test('every tag carries a stable id, a label and searchable aliases', () => {
     });
   });
 
-  // The four the feature was asked for, one per category.
+  // The cornerstones of each category.
   ['submission', 'singlet', 'heel', 'jobber', 'top', 'bottom'].forEach(id => {
     assert.ok(Tags.lookup(id), `${id} is in the catalogue`);
   });
+
+  // The rules-and-limits category — blood, erotic, stakes and intensity —
+  // plus the fantasy kinks and the non-wrestling roles added alongside it.
+  [
+    'no-blood', 'blood-ok', 'erotic-ok', 'no-erotic', 'sexual-stakes',
+    'non-sexual-stakes', 'extreme-violence', 'death-matches', 'bone-breaking',
+    'multiple-rounds', 'muscle-growth', 'hypnosis', 'mind-control',
+    'lift-and-carry', 'family', 'not-a-wrestler', 'spectator'
+  ].forEach(id => {
+    assert.ok(Tags.lookup(id), `${id} is in the catalogue`);
+  });
+
+  assert.equal(Tags.lookup('no-blood').category, 'limits');
+  assert.equal(Tags.lookup('mind-control').category, 'fetish');
+  assert.equal(Tags.lookup('spectator').category, 'role');
 });
 
 test('lookup takes an id, a label or an alias', () => {
   assert.equal(Tags.lookup('High-Flyer').id, 'high-flyer');
   assert.equal(Tags.lookup('vers').id, 'versatile', 'an alias resolves');
   assert.equal(Tags.lookup(' Babyface ').id, 'face', 'case and padding are ignored');
+  assert.equal(Tags.lookup('deathmatch').id, 'death-matches', 'a compound-word alias resolves');
+  assert.equal(Tags.lookup('Lift and Carry').id, 'lift-and-carry');
   assert.equal(Tags.lookup('not-a-tag'), null);
   assert.equal(Tags.lookup(''), null);
 });
@@ -69,11 +86,12 @@ test('lookup takes an id, a label or an alias', () => {
    NORMALISING WHAT A CLIENT SENDS
 ------------------------------------------------------------ */
 
-test('a normal save comes back normalised, with all four categories', () => {
+test('a normal save comes back normalised, with all five categories', () => {
   const result = Tags.normalize({
     style: ['submission', 'pro'],
     fetish: ['singlet', 'boots'],
     role: ['heel'],
+    limits: ['sexual-stakes', 'no-blood'],
     position: ['top', 'dom']
   });
 
@@ -83,6 +101,7 @@ test('a normal save comes back normalised, with all four categories', () => {
     style: ['pro', 'submission'],
     fetish: ['singlet', 'boots'],
     role: ['heel'],
+    limits: ['no-blood', 'sexual-stakes'],
     position: ['top', 'dom']
   });
 
@@ -119,13 +138,14 @@ test('each category is capped at its own limit', () => {
 });
 
 test('a flat list of ids is filed into the right categories', () => {
-  const result = Tags.normalize(['heel', 'singlet', 'vers-top', 'pro']);
+  const result = Tags.normalize(['heel', 'singlet', 'vers-top', 'pro', 'death-matches']);
 
   assert.equal(result.ok, true);
   assert.deepEqual(result.tags, {
     style: ['pro'],
     fetish: ['singlet'],
     role: ['heel'],
+    limits: ['death-matches'],
     position: ['vers-top']
   });
 });
@@ -262,5 +282,9 @@ test('allTagIds stay stable — they are what is stored on a member', () => {
   assert.ok(ALL_IDS.includes('size-difference'));
   assert.ok(ALL_IDS.includes('heel-jobber'));
   assert.ok(ALL_IDS.includes('power-bottom'));
+  assert.ok(ALL_IDS.includes('extreme-violence'));
+  assert.ok(ALL_IDS.includes('multiple-rounds'));
+  assert.ok(ALL_IDS.includes('erotic-ok'));
+  assert.ok(ALL_IDS.includes('not-a-wrestler'));
   assert.equal(new Set(ALL_IDS).size, ALL_IDS.length);
 });

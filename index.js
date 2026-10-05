@@ -1247,8 +1247,8 @@ const {
   normalizeWeight
 } = physique;
 
-// ---------- TAG HELPERS (wrestling style / fetish / heel-jobber-face / position) ----------
-// Members tag themselves in four categories from registration or the profile
+// ---------- TAG HELPERS (wrestling style / fetish / heel-jobber-face / limits / position) ----------
+// Members tag themselves in five categories from registration or the profile
 // editor, and the roster can then be searched by tag ("heel", "singlet",
 // "vers"). The catalogue, the per-category caps and the search rules live in
 // public/js/tags.js so the pickers the browser renders and the values the API
@@ -1270,7 +1270,7 @@ function readTagSelection(value) {
   return { ok: true, tags: normalized.tags };
 }
 
-// A user document's tags, always the full four-category shape — accounts
+// A user document's tags, always the full five-category shape — accounts
 // created before this existed (and any document edited by hand) read as empty
 // rather than `undefined`.
 function userTags(user) {
@@ -1330,7 +1330,7 @@ const userSchema = new mongoose.Schema({
     }
   },
   discordId: { type: String, default: null },
-  // Fighter tags: four arrays of catalogue ids (see public/js/tags.js).
+  // Fighter tags: five arrays of catalogue ids (see public/js/tags.js).
   // Stored as ids, not labels, so a tag can be renamed without rewriting
   // every user document. The validator only guards documents written outside
   // the API — /api/register and /api/update-profile normalise first.
@@ -1339,6 +1339,7 @@ const userSchema = new mongoose.Schema({
       style: { type: [String], default: [] },
       fetish: { type: [String], default: [] },
       role: { type: [String], default: [] },
+      limits: { type: [String], default: [] },
       position: { type: [String], default: [] }
     }, { _id: false }),
     default: () => ({})

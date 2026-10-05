@@ -340,8 +340,8 @@
     {
       id: 'fighter-tags',
       title: 'Fighter tags',
-      keywords: ['tags', 'tag', 'fighter tags', 'my tags', 'wrestling style', 'fetish', 'gear', 'heel', 'jobber', 'face', 'dom', 'sub', 'top', 'bottom', 'vers', 'position'],
-      answer: 'Fighter Tags are the labels that say what you are into: a wrestling style, gear and fetishes, whether you play heel, jobber or face, and what you are into out of the ring.\n' +
+      keywords: ['tags', 'tag', 'fighter tags', 'my tags', 'wrestling style', 'fetish', 'gear', 'heel', 'jobber', 'face', 'dom', 'sub', 'top', 'bottom', 'vers', 'position', 'limits', 'blood', 'erotic', 'stakes', 'spectator'],
+      answer: 'Fighter Tags are the labels that say what you are into: a wrestling style, gear and fetishes, whether you play heel, jobber or face, the rules and stakes you play by, and what you are into out of the ring.\n' +
         'Pick them when you register, or any time afterwards in Edit Profile — each group has its own limit and you can change them as often as you like.\n' +
         'They appear as chips on your profile, one line of them on your roster row, and anyone can find you by them: search the roster for "heel" or use the Tag menu there.',
       requiresLogin: true,

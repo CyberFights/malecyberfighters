@@ -8,12 +8,12 @@
    This file is the presentation layer:
 
      ProfileTags.renderPicker(container, { selected, onChange, idPrefix })
-        builds the four checkbox groups used by the register and
+        builds the category checkbox groups used by the register and
         edit-profile modals.
 
      ProfileTags.pickerSelection(container)
         reads the current pick back out — always a normalised
-        { style, fetish, role, position } selection.
+        { style, fetish, role, limits, position } selection.
 
      ProfileTags.renderChips(container, selection, { empty, categories })
         the read-only chips a roster row / profile shows.
@@ -41,7 +41,7 @@
 
   function emptySelection() {
     var api = tagsApi();
-    return api ? api.emptySelection() : { style: [], fetish: [], role: [], position: [] };
+    return api ? api.emptySelection() : { style: [], fetish: [], role: [], limits: [], position: [] };
   }
 
   /** The selection stored on a user record, in the normalised shape. */

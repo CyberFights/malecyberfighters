@@ -13,11 +13,12 @@
                        /api/register and /api/update-profile,
                        and the tag half of the roster search)
 
-   A member picks tags in four categories:
+   A member picks tags in five categories:
 
      style     how the fighter works a match
      fetish    gear and kinks the fighter is into
      role      heel / jobber / face, and where they sit in a match
+     limits    the ground rules and stakes a match is played by
      position  what they are into between the ropes (or after)
 
    Storage: every category is a plain array of tag ids, e.g.
@@ -26,6 +27,7 @@
        style:    ['pro', 'submission'],
        fetish:   ['singlet', 'boots'],
        role:     ['heel'],
+       limits:   ['no-blood', 'sexual-stakes'],
        position: ['top', 'dom']
      }
 
@@ -112,7 +114,12 @@
         { id: "humiliation", label: "Humiliation", aliases: ["humiliate", "embarrassment", "humiliation play", "degradation"] },
         { id: "ripped-gear", label: "Ripped Gear", aliases: ["ripping gear", "torn trunks", "shredded gear", "wardrobe"] },
         { id: "tickling", label: "Tickling", aliases: ["tickle", "ticklish", "feet tickling"] },
-        { id: "size-difference", label: "Size Difference", aliases: ["height difference", "big vs small", "mismatch", "size kink"] }
+        { id: "size-difference", label: "Size Difference", aliases: ["height difference", "big vs small", "mismatch", "size kink"] },
+        { id: "muscle-growth", label: "Muscle Growth", aliases: ["growth", "growing", "getting bigger", "hulking", "size gain", "muscle gain"] },
+        { id: "hypnosis", label: "Hypnosis", aliases: ["hypno", "trance", "mesmerized", "entranced", "hypnotized", "hypnotised"] },
+        { id: "mind-control", label: "Mind Control", aliases: ["brainwashing", "brainwash", "controlled", "reprogrammed", "mental domination"] },
+        { id: "lift-and-carry", label: "Lift & Carry", aliases: ["lift and carry", "lifting", "carried", "cradle carry", "fireman's carry", "over the shoulder"] },
+        { id: "family", label: "Family", aliases: ["relatives", "brothers", "family drama", "family feud", "father and son"] }
       ]
     },
     {
@@ -132,7 +139,27 @@
         { id: "competitive", label: "Competitive", aliases: ["even match", "back and forth", "close match", "50 50"] },
         { id: "veteran", label: "Veteran", aliases: ["experience", "vet", "legend", "old school"] },
         { id: "rookie", label: "Rookie", aliases: ["new", "newcomer", "green", "debut"] },
-        { id: "manager", label: "Manager", aliases: ["second", "valet", "ringside", "corner"] }
+        { id: "manager", label: "Manager", aliases: ["second", "valet", "ringside", "corner"] },
+        { id: "not-a-wrestler", label: "Not a Wrestler", aliases: ["non wrestler", "does not wrestle", "no matches", "not a fighter", "fan"] },
+        { id: "spectator", label: "Spectator", aliases: ["watches", "watching", "audience", "voyeur", "crowd", "front row"] }
+      ]
+    },
+    {
+      key: "limits",
+      label: "Rules & Limits",
+      hint: "How rough it gets and what is on the line",
+      max: 8,
+      tags: [
+        { id: "no-blood", label: "No Blood", aliases: ["bloodless", "no gore", "clean match", "keep it clean"] },
+        { id: "blood-ok", label: "Blood OK", aliases: ["blood", "blood allowed", "blood welcome", "bloody", "gore ok"] },
+        { id: "erotic-ok", label: "Erotic OK", aliases: ["erotic", "erotic allowed", "erotic welcome", "nsfw ok", "sex ok"] },
+        { id: "no-erotic", label: "No Erotic", aliases: ["non erotic", "no sex", "sfw", "keep it clean", "safe for work"] },
+        { id: "sexual-stakes", label: "Sexual Stakes", aliases: ["sex stakes", "stakes match", "erotic stakes", "winner takes loser", "loser pays up"] },
+        { id: "non-sexual-stakes", label: "Non-Sexual Stakes", aliases: ["nonsexual stakes", "non sexual", "humiliation stakes", "gear stakes", "forfeit", "punishment stakes"] },
+        { id: "extreme-violence", label: "Extreme Violence", aliases: ["brutal", "violent", "beatdown", "no mercy", "gutting"] },
+        { id: "death-matches", label: "Death Matches", aliases: ["deathmatch", "death match", "fight to the death", "fatal finish"] },
+        { id: "bone-breaking", label: "Bone Breaking", aliases: ["broken bones", "break bones", "broken limbs", "snapped", "limb breaking"] },
+        { id: "multiple-rounds", label: "Multiple Rounds", aliases: ["multi round", "rounds", "best of three", "best of five", "several rounds"] }
       ]
     },
     {
@@ -264,10 +291,10 @@
    * Normalise a whole selection.
    *
    * Accepts the object shape used on the wire:
-   *   { style: ['pro'], fetish: ['singlet'], role: [], position: ['top'] }
+   *   { style: ['pro'], fetish: ['singlet'], role: [], limits: ['no-blood'], position: ['top'] }
    * or a flat array of ids, which is filed into the right categories.
    *
-   * Returns { ok: true, tags } — `tags` always has all four categories — or
+   * Returns { ok: true, tags } — `tags` always has all five categories — or
    * { ok: false, error: 'invalid_tags' } when the shape itself is wrong
    * (a non-object, an unknown category key, a category that is not a list).
    */
