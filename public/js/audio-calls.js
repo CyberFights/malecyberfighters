@@ -272,7 +272,16 @@
     getAudioContext();
 
     const pc = new RTCPeerConnection(rtcConfig);
-    const c = { pc, stream: null, audio: null, gainNode: null, sourceNode: null };
+    const c = {
+      pc,
+      stream: null,
+      audio: null,
+      // Keep ICE candidates until setRemoteDescription has completed. A
+      // candidate can arrive before the answer/offer on a busy socket, and
+      // addIceCandidate rejects in that state, silently breaking media.
+      remoteDescriptionReady: false,
+      pendingRemoteIce: []
+    };
     calls.set(peer, c);
 
     pc.onicecandidate = e => {
@@ -284,25 +293,13 @@
     pc.ontrack = e => {
       stopRing();
       setStatus('Connected');
-      const stream = e.streams[0];
 
-      // Route stream through Web Audio GainNode for reliable volume control
-      try {
-        const ctx = getAudioContext();
-        if (ctx) {
-          const source = ctx.createMediaStreamSource(stream);
-          const gain = ctx.createGain();
-          gain.gain.setValueAtTime(callVolume, ctx.currentTime);
-          source.connect(gain);
-          gain.connect(ctx.destination);
-          c.sourceNode = source;
-          c.gainNode = gain;
-        }
-      } catch (err) {
-        console.warn('Web Audio gain routing notice:', err);
-      }
-
-      // Also attach DOM audio element for browser stream liveness
+      // Use a native media element as the primary output.  Routing a WebRTC
+      // MediaStream through Web Audio can leave the AudioContext suspended
+      // (especially on iOS and after the call is accepted asynchronously),
+      // which makes both sides look connected while neither side is audible.
+      // The media element is also the most reliable output on mobile browsers.
+      const stream = e.streams?.[0] || new MediaStream([e.track]);
       let a = c.audio;
       if (!a) {
         a = document.createElement('audio');
@@ -314,8 +311,11 @@
         c.audio = a;
       }
       a.srcObject = stream;
-      a.volume = c.gainNode ? 0 : callVolume;
-      a.play()?.catch(() => {});
+      a.volume = callVolume;
+      const playback = a.play();
+      if (playback && typeof playback.catch === 'function') {
+        playback.catch(err => console.warn('Remote audio playback was blocked:', err));
+      }
     };
 
     pc.onconnectionstatechange = () => {
@@ -374,10 +374,16 @@
         emitTo('audio-call-signal', { to: peer, kind: 'offer', offer: o });
       } else {
         await pc.setRemoteDescription(offer);
-        for (const candidate of pendingIce.get(peer) || []) {
+        c.remoteDescriptionReady = true;
+        const queuedCandidates = [
+          ...(pendingIce.get(peer) || []),
+          ...c.pendingRemoteIce
+        ];
+        for (const candidate of queuedCandidates) {
           await pc.addIceCandidate(candidate);
         }
         pendingIce.delete(peer);
+        c.pendingRemoteIce = [];
         const a = await pc.createAnswer();
         await pc.setLocalDescription(a);
         emitTo('audio-call-signal', { to: peer, kind: 'answer', answer: a });
@@ -488,13 +494,27 @@
         stopRing();
         setStatus('Connected');
         try {
-          await calls.get(from).pc.setRemoteDescription(p.answer);
+          const call = calls.get(from);
+          await call.pc.setRemoteDescription(p.answer);
+          call.remoteDescriptionReady = true;
+          const queuedCandidates = [
+            ...(pendingIce.get(from) || []),
+            ...call.pendingRemoteIce
+          ];
+          for (const candidate of queuedCandidates) {
+            await call.pc.addIceCandidate(candidate);
+          }
+          pendingIce.delete(from);
+          call.pendingRemoteIce = [];
         } catch (_) {}
       } else if (p.kind === 'ice' && p.candidate) {
-        if (calls.has(from)) {
+        const call = calls.get(from);
+        if (call && call.remoteDescriptionReady) {
           try {
-            await calls.get(from).pc.addIceCandidate(p.candidate);
+            await call.pc.addIceCandidate(p.candidate);
           } catch (_) {}
+        } else if (call) {
+          call.pendingRemoteIce.push(p.candidate);
         } else {
           const queued = pendingIce.get(from) || [];
           queued.push(p.candidate);
