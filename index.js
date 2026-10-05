@@ -2506,7 +2506,11 @@ app.post("/api/relationship/approve", sessions.requireUser, async (req, res) => 
 });
 
 app.get("/api/relationship/list", sessions.requireUser, async (req, res) => {
-  const username = req.username;
+  // The signed-in member is allowed to view another member's public profile.
+  // Do not silently substitute req.username here: profile pages pass the
+  // profile owner's username in the query string.
+  const username = String(req.query.username || '').trim();
+  if (!username) return res.status(400).json({ ok: false, error: "missing_username", relationships: [] });
 
   const rels = await Relationship.find({
     approved: true,
@@ -2532,7 +2536,11 @@ app.get("/api/relationship/pending", sessions.requireUser, async (req, res) => {
 
 // ---------- API: RELATIONSHIP TIMELINE ----------
 app.get("/api/relationship/timeline", sessions.requireUser, async (req, res) => {
-  const username = req.username;
+  // This is public profile data, so use the requested profile owner rather
+  // than the viewer. Using req.username made every profile show the viewer's
+  // own timeline.
+  const username = String(req.query.username || '').trim();
+  if (!username) return res.status(400).json({ ok: false, error: "missing_username", timeline: [] });
 
   try {
     const rels = await Relationship.find({
