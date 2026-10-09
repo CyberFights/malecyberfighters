@@ -27,8 +27,24 @@ const REL_COLORS = {
 /* ============================================================
    HELPERS
 ============================================================ */
-function show(el){ if (el) el.style.display = 'flex'; }
-function hide(el){ if (el) el.style.display = 'none'; }
+function show(el){
+  if (!el) return;
+  if (el.hasAttribute('data-dialog-a11y') && window.MCFDialogAccessibility) {
+    window.MCFDialogAccessibility.open(el);
+    return;
+  }
+  el.style.display = 'flex';
+  if (el.hasAttribute('aria-hidden')) el.setAttribute('aria-hidden', 'false');
+}
+function hide(el){
+  if (!el) return;
+  if (el.hasAttribute('data-dialog-a11y') && window.MCFDialogAccessibility) {
+    window.MCFDialogAccessibility.close(el);
+    return;
+  }
+  el.style.display = 'none';
+  if (el.hasAttribute('aria-hidden')) el.setAttribute('aria-hidden', 'true');
+}
 
 function escapeHtml(str){
   if (!str) return '';
@@ -1515,34 +1531,34 @@ socket.on("roomInvited", ({ roomId, roomName }) => {
 });
 // OPEN TOS
 $('btnTOS')?.addEventListener('click', () => {
-  $('modalTOS').style.display = 'flex';
+  show($('modalTOS'));
 });
 
 // CLOSE TOS
 $('closeTOS')?.addEventListener('click', () => {
-  $('modalTOS').style.display = 'none';
+  hide($('modalTOS'));
 });
 
 // open rules
 $('btnRules')?.addEventListener('click', () => {
-  $('modalRules').style.display = 'flex';
+  show($('modalRules'));
 });
 
 // CLOSE rules
 $('closeRules')?.addEventListener('click', () => {
-  $('modalRules').style.display = 'none';
+  hide($('modalRules'));
 });
 $('openSupport')?.addEventListener('click', () => {
-  $('supportPopup').style.display = 'flex';
+  show($('supportPopup'));
 });
 
 // CLOSE rules
 $('closeSupport')?.addEventListener('click', () => {
-  $('supportPopup').style.display = 'none';
+  hide($('supportPopup'));
 });
 // OPEN PRIVACY
 $('btnPrivacy')?.addEventListener('click', () => {
-  $('modalPrivacy').style.display = 'flex';
+  show($('modalPrivacy'));
 });
 
 function updateRoomsSidebarBadges() {
@@ -1570,7 +1586,7 @@ function updateRoomsSidebarBadges() {
 
 // CLOSE PRIVACY
 $('closePrivacy')?.addEventListener('click', () => {
-  $('modalPrivacy').style.display = 'none';
+  hide($('modalPrivacy'));
 });
 
 function openRoomPopup(roomId, roomName) {
@@ -1751,5 +1767,5 @@ Info: ${info}
 
   alert("Report submitted.");
   const popup = $('supportPopup');
-  if (popup) popup.style.display = 'none';
+  if (popup) hide(popup);
 });

@@ -116,9 +116,9 @@
 /* ---------- shared bits ---------- */
 
 /* iOS Safari and WKWebView zoom the whole page when a focused text control
-   computes below 16px.  Keep the chat composers at that threshold in shared
-   CSS rather than relying only on mobile.css: the server can legitimately
-   serve the desktop shell to tablets, installed web apps, or browsers using a
+   computes below 16px. Keep chat composers and feature-modal controls at that
+   threshold in shared CSS rather than relying only on mobile.css: the server
+   can legitimately serve the desktop shell to tablets, installed web apps, or
    desktop-style user agent.  The coarse-pointer branch also covers phones in
    landscape whose CSS viewport is wider than the normal phone breakpoint. */
 @media (max-width: 768px), (hover: none) and (pointer: coarse) {
@@ -126,7 +126,11 @@
   #dmInput,
   #roomMessageInput,
   .pm-input input[type="text"],
-  .assistance-input-bar input[type="text"] {
+  .assistance-input-bar input[type="text"],
+  .mcf-input,
+  .mcf-modal select,
+  .mcf-modal input[type="text"],
+  .mcf-modal textarea {
     font-size: 16px !important;
   }
 }

@@ -1925,7 +1925,11 @@
     // page): fall back to showing the window ourselves rather than
     // leaving the user with nothing.
     if (!opened && target) {
-      target.style.display = 'flex';
+      if (target.hasAttribute('data-dialog-a11y') && window.MCFDialogAccessibility) {
+        window.MCFDialogAccessibility.open(target);
+      } else {
+        target.style.display = 'flex';
+      }
       opened = true;
     }
 
@@ -2121,7 +2125,12 @@
 
     if (!greeted) greet();
 
-    popup.style.display = 'flex';
+    if (window.MCFDialogAccessibility && popup.hasAttribute('data-dialog-a11y')) {
+      window.MCFDialogAccessibility.open(popup);
+    } else {
+      popup.style.display = 'flex';
+      popup.setAttribute('aria-hidden', 'false');
+    }
     scrollMessages();
 
     var input = byId('assistanceInput');
@@ -2132,7 +2141,13 @@
 
   function close() {
     var popup = byId(POPUP_ID);
-    if (popup) popup.style.display = 'none';
+    if (!popup) return;
+    if (window.MCFDialogAccessibility && popup.hasAttribute('data-dialog-a11y')) {
+      window.MCFDialogAccessibility.close(popup);
+    } else {
+      popup.style.display = 'none';
+      popup.setAttribute('aria-hidden', 'true');
+    }
   }
 
   function bind() {

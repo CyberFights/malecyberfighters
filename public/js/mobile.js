@@ -37,6 +37,10 @@ function mobileImgSrc(value) {
 
   function show(el) {
     if (!el) return;
+    if (el.hasAttribute("data-dialog-a11y") && window.MCFDialogAccessibility) {
+      window.MCFDialogAccessibility.open(el);
+      return;
+    }
     el.style.display = el.dataset.display || "flex";
     el.style.visibility = "visible";
     el.style.pointerEvents = "auto";
@@ -44,6 +48,10 @@ function mobileImgSrc(value) {
 
   function hide(el) {
     if (!el) return;
+    if (el.hasAttribute("data-dialog-a11y") && window.MCFDialogAccessibility) {
+      window.MCFDialogAccessibility.close(el);
+      return;
+    }
     el.style.display = "none";
     el.style.visibility = "hidden";
     el.style.pointerEvents = "none";

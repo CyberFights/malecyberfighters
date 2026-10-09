@@ -111,8 +111,12 @@
   function open() {
     var popup = byId(POPUP_ID);
     if (!popup) return false;
-    popup.style.display = 'flex';
-    popup.setAttribute('aria-hidden', 'false');
+    if (window.MCFDialogAccessibility && popup.hasAttribute('data-dialog-a11y')) {
+      window.MCFDialogAccessibility.open(popup);
+    } else {
+      popup.style.display = 'flex';
+      popup.setAttribute('aria-hidden', 'false');
+    }
     loadContent();
     return true;
   }
@@ -120,8 +124,12 @@
   function close() {
     var popup = byId(POPUP_ID);
     if (!popup) return;
-    popup.style.display = 'none';
-    popup.setAttribute('aria-hidden', 'true');
+    if (window.MCFDialogAccessibility && popup.hasAttribute('data-dialog-a11y')) {
+      window.MCFDialogAccessibility.close(popup);
+    } else {
+      popup.style.display = 'none';
+      popup.setAttribute('aria-hidden', 'true');
+    }
   }
 
   /* ---------------------------------------------------------
