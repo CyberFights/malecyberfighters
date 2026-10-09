@@ -364,7 +364,7 @@
 
   <div class="chat-input">
     <div id="publicReplyBar" class="reply-bar" style="display:none"></div>
-    <input id="publicMessage" type="text" placeholder="Say something to the arena">
+    <input id="publicMessage" type="text" placeholder="Say something to the arena" aria-label="Message the public arena" enterkeyhint="send">
     <button class="emoji-btn" type="button" data-emoji-btn title="Insert emoji" aria-label="Insert emoji">😊</button>
     <button id="sendPublic" type="button">Send</button>
   </div>
@@ -411,12 +411,12 @@
   <div id="dmTyping" class="small muted" style="display:none;padding:0 12px 6px"></div>
 
   <div class="chat-input">
+    <input id="dmInput" type="text" placeholder="Write a message" aria-label="Write a direct message" enterkeyhint="send">
+    <button id="dmSend" type="button">Send</button>
     <button class="small-btn secondary dm-call" type="button" title="Audio call" aria-label="Audio call">☎</button>
-    <input id="dmInput" type="text" placeholder="Write a message">
     <input id="dmImageInput" type="file" accept="image/*" style="display:none">
     <button id="dmImageBtn" class="small-btn secondary" type="button" aria-label="Send image">📷</button>
     <button class="emoji-btn" type="button" data-emoji-btn title="Insert emoji" aria-label="Insert emoji">😊</button>
-    <button id="dmSend" type="button">Send</button>
   </div>
 </div>
 
@@ -470,12 +470,12 @@
 
   <div class="chat-input">
     <div id="roomReplyBar" class="reply-bar" style="display:none"></div>
+    <input id="roomMessageInput" type="text" placeholder="Message room" aria-label="Write a room message" enterkeyhint="send">
+    <button id="roomSendBtn" type="button">Send</button>
     <button class="small-btn secondary room-call" type="button" title="Start conference call" aria-label="Start conference call">☎</button>
-    <input id="roomMessageInput" type="text" placeholder="Message room">
     <input id="roomImageInput" type="file" accept="image/*" style="display:none">
     <button id="roomImageBtn" class="small-btn secondary" type="button" aria-label="Send image">📷</button>
     <button class="emoji-btn" type="button" data-emoji-btn title="Insert emoji" aria-label="Insert emoji">😊</button>
-    <button id="roomSendBtn" type="button">Send</button>
   </div>
 </div>
 
@@ -615,11 +615,11 @@
 <!-- ============================================================
      SUPPORT
      ============================================================ -->
-<div id="supportPopup" class="popup">
+<div id="supportPopup" class="popup" role="dialog" aria-modal="true" aria-labelledby="supportTitle" aria-hidden="true" data-dialog-a11y>
   <div class="modal-box">
     <div class="modal-header">
-      <h3>Support Request</h3>
-      <button id="closeSupport" class="ghost" type="button">✕</button>
+      <h3 id="supportTitle">Support Request</h3>
+      <button id="closeSupport" class="ghost" type="button" aria-label="Close support request" data-dialog-initial-focus>✕</button>
     </div>
 
     <div class="pm-section">
@@ -764,11 +764,11 @@
 <!-- ============================================================
      TERMS OF SERVICE
      ============================================================ -->
-<div id="modalTOS" class="modal-overlay">
+<div id="modalTOS" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="tosTitle" aria-hidden="true" data-dialog-a11y>
   <div class="modal-box">
     <div class="modal-header">
-      <h3>Terms of Service</h3>
-      <button id="closeTOS" class="ghost" type="button">✕</button>
+      <h3 id="tosTitle">Terms of Service</h3>
+      <button id="closeTOS" class="ghost" type="button" aria-label="Close terms of service" data-dialog-initial-focus>✕</button>
     </div>
     <div id="tosContent" class="modal-scroll"></div>
   </div>
@@ -777,11 +777,11 @@
 <!-- ============================================================
      PRIVACY POLICY
      ============================================================ -->
-<div id="modalPrivacy" class="modal-overlay">
+<div id="modalPrivacy" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="privacyTitle" aria-hidden="true" data-dialog-a11y>
   <div class="modal-box">
     <div class="modal-header">
-      <h3>Privacy Policy</h3>
-      <button id="closePrivacy" class="ghost" type="button">✕</button>
+      <h3 id="privacyTitle">Privacy Policy</h3>
+      <button id="closePrivacy" class="ghost" type="button" aria-label="Close privacy policy" data-dialog-initial-focus>✕</button>
     </div>
     <div id="privacyContent" class="modal-scroll"></div>
   </div>
@@ -790,11 +790,11 @@
 <!-- ============================================================
      SERVER RULES
      ============================================================ -->
-<div id="modalRules" class="modal-overlay">
+<div id="modalRules" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="rulesTitle" aria-hidden="true" data-dialog-a11y>
   <div class="modal-box">
     <div class="modal-header">
-      <h3>Server Rules</h3>
-      <button id="closeRules" class="ghost" type="button">✕</button>
+      <h3 id="rulesTitle">Server Rules</h3>
+      <button id="closeRules" class="ghost" type="button" aria-label="Close server rules" data-dialog-initial-focus>✕</button>
     </div>
     <div id="rulesContent" class="modal-scroll">
 <p>
@@ -933,6 +933,7 @@ Moderator decisions are final. </p>
 
 <script src="/js/idle-logout.js"></script>
 <script src="/js/viewport-fit.js"></script>
+<script src="/js/dialog-accessibility.js"></script>
 <script src="/js/image-proxy.js"></script>
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/slash-commands.js?v=1"></script>

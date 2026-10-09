@@ -282,14 +282,14 @@ function openPrivateWindow(targetUsername) {
     <div class="pm-body" id="pmBody_${targetUsername}"></div>
 
     <div class="pm-input">
-      <button class="small-btn pm-call" type="button" title="Audio call" aria-label="Audio call">☎</button>
-      <input id="pmInput_${targetUsername}" type="text" placeholder="Message ${targetUsername}">
-      <input type="file" id="pmImage_${targetUsername}" accept="image/*" style="display:none">
-      <button class="small-btn" id="pmImageBtn_${targetUsername}" type="button" title="Send image">📷</button>
-      <input type="file" id="pmClip_${targetUsername}" accept="image/gif,video/mp4,video/webm" style="display:none">
-      <button class="small-btn" id="pmClipBtn_${targetUsername}" type="button" title="Send GIF or short video">🎬</button>
-      <button class="small-btn emoji-btn" id="pmEmojiBtn_${targetUsername}" type="button" data-emoji-btn title="Insert emoji" aria-label="Insert emoji">😊</button>
+      <input id="pmInput_${targetUsername}" type="text" placeholder="Message ${targetUsername}" aria-label="Write a direct message" enterkeyhint="send">
       <button class="small-btn" id="pmSend_${targetUsername}" type="button">Send</button>
+      <button class="small-btn pm-call" type="button" title="Audio call" aria-label="Audio call">☎</button>
+      <input type="file" id="pmImage_${targetUsername}" accept="image/*" style="display:none">
+      <button class="small-btn" id="pmImageBtn_${targetUsername}" type="button" title="Send image" aria-label="Send image">📷</button>
+      <input type="file" id="pmClip_${targetUsername}" accept="image/gif,video/mp4,video/webm" style="display:none">
+      <button class="small-btn" id="pmClipBtn_${targetUsername}" type="button" title="Send GIF or short video" aria-label="Send GIF or short video">🎬</button>
+      <button class="small-btn emoji-btn" id="pmEmojiBtn_${targetUsername}" type="button" data-emoji-btn title="Insert emoji" aria-label="Insert emoji">😊</button>
     </div>
   `;
 

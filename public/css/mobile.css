@@ -27,6 +27,17 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 
+/* On phones and touch-first tablets keep only the body's background image
+   (with its solid-color fallback) and avoid fixed-background repaints while
+   scrolling. */
+@media (max-width: 768px), (hover: none) and (pointer: coarse) {
+  html {
+    background-image: none;
+    background-attachment: scroll;
+  }
+  body { background-attachment: scroll; }
+}
+
 img { max-width: 100%; }
 
 /* Ice-blue title stroke and a soft blurred neon shadow for supporting copy. */
@@ -37,7 +48,7 @@ h1 {
 
 /* Utility */
 .muted { color: #94a3b8; }
-.small { font-size: 12px; }
+.small { font-size: 13px; }
 .lead  { font-size: 14px; color: #7dd3fc; }
 .lead {
   filter: blur(.45px);
@@ -102,6 +113,7 @@ button.ghost {
 
 button.small-btn {
   width: auto;
+  min-height: 40px;
   margin-top: 0;
   padding: 8px 12px;
   font-size: 13px;
@@ -120,11 +132,25 @@ input, select, textarea {
   font-size: 16px; /* prevents iOS zoom on focus */
 }
 textarea { resize: vertical; }
-label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
+label { display: block; font-size: 14px; color: #94a3b8; margin-bottom: 4px; }
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #b9f3ff;
+  outline-offset: 2px;
+}
 
 .field { margin-top: 10px; }
 .field-row { display: flex; gap: 10px; }
-.field-row > * { flex: 1; }
+.field-row > * { flex: 1 1 0; min-width: 0; }
+
+@media (max-width: 360px) {
+  .field-row { flex-direction: column; }
+}
 
 .error {
   display: none;
@@ -471,6 +497,8 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
 }
 .side-close-btn {
   width: auto;
+  min-width: 44px;
+  min-height: 44px;
   margin-top: 0;
   padding: 6px 12px;
   background: transparent;
@@ -565,7 +593,7 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
 }
 .chat-header .chat-title { font-weight: 700; min-width: 0; }
 .chat-header-actions { display: flex; flex-wrap: wrap; gap: 6px; flex: 0 0 auto; align-items: center; margin-left: auto; }
-.chat-header-actions button { width: auto; margin-top: 0; padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+.chat-header-actions button { width: auto; min-width: 44px; min-height: 44px; margin-top: 0; padding: 6px 10px; font-size: 12px; white-space: nowrap; }
 
 .chat-body {
   flex: 1;
@@ -676,7 +704,18 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
 }
 
 .chat-input input[type="text"] { flex: 1; min-width: 0; }
-.chat-input button { width: auto; margin-top: 0; flex: 0 0 auto; padding: 11px 14px; }
+.chat-input button { width: auto; min-height: 44px; margin-top: 0; flex: 0 0 auto; padding: 11px 14px; }
+
+/* Keep the message field and Send button together on very narrow phones.
+   The source order places them before auxiliary actions, preserving both the
+   visual and keyboard traversal order. */
+@media (max-width: 420px) {
+  #dmPopup .chat-input input[type="text"],
+  #roomChatPopup .chat-input input[type="text"] {
+    flex: 1 1 calc(100% - 80px);
+    min-width: 0;
+  }
+}
 
 /* ============================================================
    MESSAGE EDIT + REPLY
@@ -931,7 +970,7 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
 
 .pm-window .pm-input button {
   width: auto;
-  min-height: 42px;
+  min-height: 44px;
   margin-top: 0;
   flex: 0 0 auto;
 }
@@ -944,6 +983,17 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
 
 .pm-window .pm-input button[id^="pmSend_"] {
   min-width: 64px;
+}
+
+/* Full-screen DM windows have extra Call / image / clip / emoji actions.
+   Let the message and Send occupy the first row on narrow phones, then wrap
+   those optional actions below without shrinking the editor to nothing. */
+@media (max-width: 420px) {
+  .pm-window .pm-input { flex-wrap: wrap; }
+  .pm-window .pm-input input[type="text"] {
+    flex: 1 1 calc(100% - 80px);
+    min-width: 0;
+  }
 }
 
 /* ============================================================
@@ -1060,7 +1110,7 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
   margin-bottom: 12px;
 }
 .modal-header h3 { margin: 0; }
-.modal-header button { width: auto; margin-top: 0; padding: 6px 12px; }
+.modal-header button { width: auto; min-height: 44px; margin-top: 0; padding: 6px 12px; }
 
 /* ============================================================
    ROSTER
@@ -1409,7 +1459,11 @@ label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
 .forum-list-item:focus-visible {
   background:rgba(56, 189, 248, .14);
   border-color:rgba(56, 189, 248, .52);
-  outline:none;
+}
+
+.forum-list-item:focus-visible {
+  outline:2px solid #b9f3ff;
+  outline-offset:2px;
 }
 
 .forum-list-item-heading,

@@ -296,12 +296,12 @@
     </div>
     <div id="dmTyping" class="small muted" style="display:none;padding:0 12px 6px"></div>
     <div class="chat-input">
+      <input id="dmInput" type="text" placeholder="Write a message" aria-label="Write a direct message" enterkeyhint="send">
+      <button id="dmSend" type="button">Send</button>
       <button class="small-btn secondary dm-call" type="button" title="Audio call" aria-label="Audio call">☎</button>
-      <input id="dmInput" type="text" placeholder="Write a message">
       <input id="dmImageInput" type="file" accept="image/*" style="display:none">
       <button id="dmImageBtn" class="small-btn secondary" type="button" aria-label="Send image">📷</button>
       <button class="small-btn emoji-btn" type="button" data-emoji-btn title="Insert emoji" aria-label="Insert emoji">😊</button>
-      <button id="dmSend" type="button">Send</button>
     </div>
   </div>
 
@@ -707,12 +707,12 @@
   </div>
 </div>
 
-<div id="supportPopup" class="popup">
+<div id="supportPopup" class="popup" role="dialog" aria-modal="true" aria-labelledby="supportTitle" aria-hidden="true" data-dialog-a11y>
  
 
   <div class="support-mobile">
- <button class="ghost" id="closeSupport">Close</button>
-    <h2>Support Request</h2>
+ <button class="ghost" id="closeSupport" type="button" data-dialog-initial-focus>Close</button>
+    <h2 id="supportTitle">Support Request</h2>
 
     <div class="pm-section">
       <label>Type of Report</label>
@@ -750,7 +750,7 @@
 </div>
 
 <!-- ASSISTANCE POPUP (in-app support assistant) -->
-<div id="assistancePopup" class="popup" style="display:none" role="dialog" aria-modal="true" aria-labelledby="assistanceTitle">
+<div id="assistancePopup" class="popup" style="display:none" role="dialog" aria-modal="true" aria-labelledby="assistanceTitle" aria-hidden="true" data-dialog-a11y>
   <div class="support-mobile assistance-panel">
 
     <div class="assistance-header">
@@ -769,7 +769,7 @@
     <div id="assistanceQuickReplies" class="assistance-quick-replies"></div>
 
     <div class="assistance-input-bar">
-      <input id="assistanceInput" type="text" placeholder="Ask about the site…" autocomplete="off" aria-label="Ask the support assistant">
+      <input id="assistanceInput" type="text" placeholder="Ask about the site…" autocomplete="off" aria-label="Ask the support assistant" enterkeyhint="send" data-dialog-initial-focus>
       <button id="assistanceSend" type="button">Send</button>
     </div>
 
@@ -1093,7 +1093,7 @@
 
   <div class="chat-input">
     <div id="publicReplyBar" class="reply-bar" style="display:none"></div>
-    <input id="publicMessage" type="text" placeholder="Say something to the arena" />
+    <input id="publicMessage" type="text" placeholder="Say something to the arena" aria-label="Message the public arena" enterkeyhint="send" />
     <button class="emoji-btn" type="button" data-emoji-btn title="Insert emoji" aria-label="Insert emoji">😊</button>
     <button id="sendPublic">Send</button>
   </div>
@@ -1290,21 +1290,21 @@
   <!-- INPUT BAR -->
   <div class="chat-input">
     <div id="roomReplyBar" class="reply-bar" style="display:none"></div>
+    <input id="roomMessageInput" type="text" placeholder="Message room" aria-label="Write a room message" enterkeyhint="send">
+    <button id="roomSendBtn" class="send-btn" type="button">Send</button>
     <button class="small-btn room-call" type="button" title="Start conference call" aria-label="Start conference call">☎</button>
-    <input id="roomMessageInput" type="text" placeholder="Message room">
-    <button id="roomSendBtn" class="send-btn">Send</button>
     <input type="file" id="roomImageInput" accept="image/*" style="display:none">
-<button id="roomImageBtn" title="Send image" aria-label="Send image">📷</button>
+    <button id="roomImageBtn" type="button" title="Send image" aria-label="Send image">📷</button>
     <input type="file" id="roomClipInput" accept="image/gif,video/mp4,video/webm" style="display:none">
-    <button id="roomClipBtn" title="Send GIF or short video" aria-label="Send GIF or short video">🎬</button>
+    <button id="roomClipBtn" type="button" title="Send GIF or short video" aria-label="Send GIF or short video">🎬</button>
     <button class="emoji-btn" type="button" data-emoji-btn title="Insert emoji" aria-label="Insert emoji">😊</button>
 
   </div>
 </div>
 
-<div id="modalRules" class="modal-overlay" style="display:none">
+<div id="modalRules" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="rulesTitle" aria-hidden="true" data-dialog-a11y>
   <div class="modal-box">
-    <h3>Rules</h3>
+    <h3 id="rulesTitle">Rules</h3>
     <div id="rulesContent" class="modal-scroll">
       <p>
 Chat Conduct Rules
@@ -1438,26 +1438,26 @@ Moderators may:
 
 Moderator decisions are final. </p>
     </div>
-    <button id="closeRules" class="ghost">Close</button>
+    <button id="closeRules" class="ghost" type="button" data-dialog-initial-focus>Close</button>
   </div>
 </div>
 
 <!-- BEGINNER'S GUIDE POPUP — the #guideBody markup from /guide is
      injected into #guideContent by guide.js when the window opens,
      so the in-app guide and the public page share one copy. -->
-<div id="modalGuide" class="modal-overlay" style="display:none" aria-hidden="true">
+<div id="modalGuide" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="guideTitle" aria-hidden="true" data-dialog-a11y>
   <div class="modal-box">
-    <h3>How to Cyber Wrestle — Beginner's Guide</h3>
+    <h3 id="guideTitle">How to Cyber Wrestle — Beginner's Guide</h3>
     <div id="guideContent" class="modal-scroll">
       <p class="small muted">Loading…</p>
     </div>
-    <button id="closeGuide" class="ghost">Close</button>
+    <button id="closeGuide" class="ghost" type="button" data-dialog-initial-focus>Close</button>
   </div>
 </div>
 <!-- TERMS OF SERVICE POPUP -->
-<div id="modalTOS" class="modal-overlay" style="display:none">
+<div id="modalTOS" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="tosTitle" aria-hidden="true" data-dialog-a11y>
   <div class="modal-box">
-    <h3>Terms of Service</h3>
+    <h3 id="tosTitle">Terms of Service</h3>
     <div id="tosContent" class="modal-scroll">
 <p><strong>Last updated: 2026-09-08</strong></p>
 
@@ -1597,14 +1597,14 @@ Moderator decisions are final. </p>
 <p>• Email: administrator@male-cyber-fighters.com<br>
 • Website: https://male-cyber-fighters.com</p>
     </div>
-    <button id="closeTOS" class="ghost">Close</button>
+    <button id="closeTOS" class="ghost" type="button" data-dialog-initial-focus>Close</button>
   </div>
 </div>
 
 <!-- PRIVACY POLICY POPUP -->
-<div id="modalPrivacy" class="modal-overlay" style="display:none">
+<div id="modalPrivacy" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="privacyTitle" aria-hidden="true" data-dialog-a11y>
   <div class="modal-box">
-    <h3>Privacy Policy</h3>
+    <h3 id="privacyTitle">Privacy Policy</h3>
     <div id="privacyContent" class="modal-scroll">
 <p><strong>Last updated: 2026-09-08</strong></p>
 
@@ -1684,7 +1684,7 @@ Moderator decisions are final. </p>
 <p>• Email: administrator@male-cyber-fighters.com<br>
 • Website: https://male-cyber-fighters.com</p>
     </div>
-    <button id="closePrivacy" class="ghost">Close</button>
+    <button id="closePrivacy" class="ghost" type="button" data-dialog-initial-focus>Close</button>
   </div>
 </div>
 
@@ -1743,6 +1743,7 @@ Moderator decisions are final. </p>
 <!-- JS FILES -->
 <script src="/js/idle-logout.js"></script>
 <script src="/js/viewport-fit.js"></script>
+<script src="/js/dialog-accessibility.js"></script>
 <script src="/js/image-proxy.js"></script>
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/physique.js"></script>
