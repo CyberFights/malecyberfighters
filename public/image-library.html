@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#020617">
+  <title>Member Image Library · Male Cyber Fighters</title>
+  <link rel="icon" type="image/png" sizes="192x192" href="/images/mcf-192.png">
+  <link rel="stylesheet" href="/css/image-library.css">
+  <script src="/js/image-proxy.js" defer></script>
+  <script src="/js/image-library.js" defer></script>
+</head>
+<body>
+  <div class="library-shell">
+    <header class="library-header">
+      <a class="library-brand" href="/" aria-label="Male Cyber Fighters home">
+        <img src="/images/mcf-192.png" width="48" height="48" alt="">
+        <span>
+          <strong>Male Cyber Fighters</strong>
+          <small>Member community</small>
+        </span>
+      </a>
+      <a class="back-link" href="/">← Back to the Arena</a>
+    </header>
+
+    <main>
+      <section class="library-intro" aria-labelledby="libraryHeading">
+        <p class="eyebrow">MEMBER IMAGE LIBRARY <span aria-hidden="true">·</span> 18+</p>
+        <h1 id="libraryHeading">Image Library</h1>
+        <p>Browse community images by category, or add an image for other members to discover.</p>
+      </section>
+
+      <section id="memberGate" class="notice-card" role="status" hidden>
+        <h2>Members only</h2>
+        <p id="memberGateMessage">Sign in to browse and upload images.</p>
+        <a class="library-button" href="/">Go to sign in</a>
+      </section>
+
+      <div id="libraryApp" hidden>
+        <section class="upload-card" aria-labelledby="uploadHeading">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">CONTRIBUTE</p>
+              <h2 id="uploadHeading">Add an image</h2>
+            </div>
+            <span class="upload-limit">5 MB max</span>
+          </div>
+
+          <form id="imageUploadForm" enctype="multipart/form-data">
+            <div class="upload-fields">
+              <div class="field">
+                <label for="imageCategory">Category</label>
+                <select id="imageCategory" name="category" required></select>
+              </div>
+              <div class="field">
+                <label for="imageFile">Image</label>
+                <input id="imageFile" name="image" type="file" accept="image/jpeg,image/png,image/gif,image/webp" required>
+                <small>JPEG, PNG, GIF or WebP</small>
+              </div>
+              <div class="field caption-field">
+                <label for="imageCaption">Caption <span class="optional">(optional)</span></label>
+                <input id="imageCaption" name="caption" type="text" maxlength="240" placeholder="Add a short caption">
+              </div>
+              <div class="submit-field">
+                <button id="uploadButton" class="library-button" type="submit">Upload image</button>
+              </div>
+            </div>
+            <p class="upload-guidance">Only share images you have the right to post and that follow the site rules. Browsing the library requires a member account, but ImgBB-hosted image URLs are not private and can be shared. Removing an entry here removes it from this library, but may not erase the hosted copy.</p>
+            <p id="uploadStatus" class="inline-status" role="status" aria-live="polite"></p>
+          </form>
+        </section>
+
+        <section class="browse-section" aria-labelledby="browseHeading">
+          <div class="section-heading browse-heading">
+            <div>
+              <p class="eyebrow">EXPLORE</p>
+              <h2 id="browseHeading">Browse images</h2>
+            </div>
+            <p id="resultSummary" class="result-summary" aria-live="polite"></p>
+          </div>
+
+          <div id="categoryFilters" class="category-filters" role="group" aria-label="Filter images by category"></div>
+          <p id="pageStatus" class="page-status" role="status" aria-live="polite"></p>
+          <button id="retryLoad" class="secondary-button retry-button" type="button" hidden>Try again</button>
+          <div id="imageGrid" class="image-grid" aria-live="polite"></div>
+          <div id="emptyState" class="empty-state" hidden>
+            <span class="empty-icon" aria-hidden="true">▧</span>
+            <h3>No images in this category yet</h3>
+            <p>Be the first to add one.</p>
+          </div>
+          <nav class="pagination" aria-label="Image library pages">
+            <button id="previousPage" class="secondary-button" type="button" disabled>Previous</button>
+            <span id="pageNumber" class="page-number">Page 1</span>
+            <button id="nextPage" class="secondary-button" type="button" disabled>Next</button>
+          </nav>
+        </section>
+      </div>
+    </main>
+
+    <footer class="library-footer">
+      <span>18+ community · Follow the <a href="/legal/tos.html">site rules</a></span>
+      <a href="/">Male Cyber Fighters</a>
+    </footer>
+  </div>
+</body>
+</html>

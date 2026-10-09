@@ -19,6 +19,10 @@ const { sendDiscordDM, discordEvents } = require('./discordBot');
 const { rewriteDiscordInvites } = require('./discordInviteFilter');
 const { createDmDelivery } = require('./dmDelivery');
 const { createStoryRouter } = require('./storyRoutes');
+const {
+  createImageLibraryModel,
+  createImageLibraryRouter
+} = require('./imageLibrary');
 const { createSessionManager, cookieOptions, safeEqual, COOKIE_NAME } = require('./sessions');
 const { createRetentionJob, configFromEnv } = require('./retention');
 const { createPushNotifier } = require('./pushNotifications');
@@ -1702,6 +1706,7 @@ const MatchRecord = mongoose.model('MatchRecord', matchRecordSchema);
 const Reaction = mongoose.model('Reaction', reactionSchema);
 const Bookmark = mongoose.model('Bookmark', bookmarkSchema);
 const Report = mongoose.model('Report', reportSchema);
+const ImageLibraryImage = createImageLibraryModel(mongoose);
 
 // ---------- COMBAT STATS (shared dice-match resolver) ----------
 // Single source of truth for a fighter's atk / def plus the same values
@@ -2430,6 +2435,16 @@ app.use("/api/story", createStoryRouter({
       await awardAchievements(name, "story_published", { storyCount });
     }
   }
+}));
+
+// The category image library is independent of member profile galleries. The
+// uploaded bytes go to ImgBB; MongoDB stores one metadata record per image.
+app.use('/api/image-library', createImageLibraryRouter({
+  ImageLibraryImage,
+  requireUser: sessions.requireUser,
+  uploadImageToImgBB,
+  writeLimiter: uploadLimiter,
+  noRevalidate
 }));
 
 app.post("/api/relationship/request", sessions.requireUser, async (req, res) => {

@@ -50,6 +50,7 @@
     "files": [
       "index.js",
       "dmDelivery.js",
+      "imageLibrary.js",
       "electron/**/*",
       "public/**/*",
       "package.json"
