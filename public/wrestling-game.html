@@ -117,6 +117,7 @@
   </div>
 </div>
 
+<script src="/js/utils.js"></script>
 <script src="/js/wrestling-game.js"></script>
 <script src="/js/wrestling-career.js"></script>
 
@@ -134,8 +135,15 @@
   let career = null;
   let careerMatchNode = null;
 
+  function sessionToken() { try { return localStorage.getItem('cw_token_v1') || null; } catch (e) { return null; } }
   async function api(path, opts) {
-    const res = await fetch(path, Object.assign({ credentials:'include', headers:{'Content-Type':'application/json'} }, opts||{}));
+    const o = Object.assign({}, opts || {});
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, o.headers || {});
+    const token = sessionToken();
+    if (token && !headers.Authorization) headers.Authorization = 'Bearer ' + token;
+    o.headers = headers;
+    o.credentials = o.credentials || 'same-origin';
+    const res = await fetch(path, o);
     return res.json();
   }
 
