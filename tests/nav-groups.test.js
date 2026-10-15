@@ -29,6 +29,7 @@ const EXPECTED_GROUPS = {
   chatrooms: ['btnOpenChat', 'btnRooms', 'btnDMs'],
   community: ['btnRoster', 'btnForums', 'btnArchives'],
   matches: ['btnLfg', 'btnChallenges', 'btnRecord', 'btnAchievements'],
+  games: ['btnWrestlingGame'],
   help: ['openSupport', 'btnAssistance', 'btnGuide']
 };
 
