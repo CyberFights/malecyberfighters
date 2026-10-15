@@ -88,7 +88,7 @@ test('both action rows carry the same five categories, each holding its buttons'
         assert.equal(menuEl.hidden, true, `${key} menu starts hidden`);
         assert.equal(toggleEl.getAttribute('aria-controls'), menuEl.id, `${key} toggle controls its menu`);
 
-        const inside = Array.from(menuEl.querySelectorAll('button')).map(b => b.id);
+        const inside = Array.from(menuEl.querySelectorAll('button, a[id]')).map(b => b.id);
         assert.deepEqual(inside, ids, `${key} holds exactly its buttons`);
       });
     });

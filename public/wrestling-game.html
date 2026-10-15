@@ -35,7 +35,7 @@
   <div id="gate" class="card">
     <h2>Members only</h2>
     <p>Sign in to play.</p>
-    <a href="/">Go to sign in</a>
+    <p><a href="/">Go to sign in</a></p>
   </div>
 
   <div id="app" class="hidden">
@@ -129,7 +129,7 @@
   const gate = document.getElementById('gate');
   const app = document.getElementById('app');
   let me = null;
-  let stats = WG.defaultStats();
+  let stats = (WG && WG.defaultStats) ? WG.defaultStats() : {strength:5,agility:5,stamina:5,skill:5,charisma:5};
   let wrestler = null;
   let match = null;
   let career = null;
@@ -154,7 +154,7 @@
     gate.classList.add('hidden');
     app.classList.remove('hidden');
     const s = await api('/api/wrestling/stats');
-    if (s.ok) { stats = s.stats; wrestler = s.wrestler; }
+    if (s.ok && s.stats) { stats = s.stats; wrestler = s.wrestler; }
     if (wrestler) {
       document.getElementById('wrestlerName').value = wrestler.name || '';
       if (wrestler.image) document.getElementById('wrestlerImage').src = wrestler.image;
