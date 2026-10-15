@@ -94,25 +94,25 @@
         <div class="log" id="matchLog"></div>
       </div>
     </div>
-  </div>
 
-  <div class="card">
-    <h2>Career Mode — Story</h2>
-    <div id="careerStatus" class="muted">No career started.</div>
-    <button id="startCareer">Start New Career</button>
-    <div id="careerArea" class="hidden">
-      <h3 id="careerTitle"></h3>
-      <p id="careerText"></p>
-      <div id="careerChoices"></div>
-      <div id="careerTraining" class="hidden">
-        <p>Choose a stat to train:</p>
-        <div id="careerTrainButtons"></div>
+    <div class="card" id="careerCard">
+      <h2>Career Mode — Story</h2>
+      <div id="careerStatus" class="muted">No career started.</div>
+      <button id="startCareer" type="button">Start New Career</button>
+      <div id="careerArea" class="hidden">
+        <h3 id="careerTitle"></h3>
+        <p id="careerText"></p>
+        <div id="careerChoices"></div>
+        <div id="careerTraining" class="hidden">
+          <p>Choose a stat to train:</p>
+          <div id="careerTrainButtons"></div>
+        </div>
+        <div id="careerMatch" class="hidden">
+          <p>Career match! Use the match controls above (Find Random Opponent not needed).</p>
+        </div>
+        <div id="careerResult" style="font-weight:bold;margin-top:8px;"></div>
+        <div id="careerSummary" class="hidden"></div>
       </div>
-      <div id="careerMatch" class="hidden">
-        <p>Career match! Use the match controls above (Find Random Opponent not needed).</p>
-      </div>
-      <div id="careerResult" style="font-weight:bold;margin-top:8px;"></div>
-      <div id="careerSummary" class="hidden"></div>
     </div>
   </div>
 </div>
@@ -121,265 +121,6 @@
 <script src="/js/wrestling-game.js"></script>
 <script src="/js/wrestling-career.js"></script>
 
-<script>
-(() => {
-  'use strict';
-  const WG = window.WrestlingGame;
-  const WC = window.WrestlingCareer || window.CareerMode;
-  const gate = document.getElementById('gate');
-  const app = document.getElementById('app');
-  let me = null;
-  let stats = (WG && WG.defaultStats) ? WG.defaultStats() : {strength:5,agility:5,stamina:5,skill:5,charisma:5};
-  let wrestler = null;
-  let match = null;
-  let career = null;
-  let careerMatchNode = null;
-
-  function sessionToken() { try { return localStorage.getItem('cw_token_v1') || null; } catch (e) { return null; } }
-  async function api(path, opts) {
-    const o = Object.assign({}, opts || {});
-    const headers = Object.assign({ 'Content-Type': 'application/json' }, o.headers || {});
-    const token = sessionToken();
-    if (token && !headers.Authorization) headers.Authorization = 'Bearer ' + token;
-    o.headers = headers;
-    o.credentials = o.credentials || 'same-origin';
-    const res = await fetch(path, o);
-    return res.json();
-  }
-
-  async function init() {
-    const r = await api('/api/me');
-    if (!r.ok) { gate.classList.remove('hidden'); app.classList.add('hidden'); return; }
-    me = r.user;
-    gate.classList.add('hidden');
-    app.classList.remove('hidden');
-    const s = await api('/api/wrestling/stats');
-    if (s.ok && s.stats) { stats = s.stats; wrestler = s.wrestler; }
-    if (wrestler) {
-      document.getElementById('wrestlerName').value = wrestler.name || '';
-      if (wrestler.image) document.getElementById('wrestlerImage').src = wrestler.image;
-    }
-    renderStats();
-  }
-
-  function renderStats() {
-    const list = document.getElementById('statsList');
-    list.innerHTML = '';
-    WG.STATS.forEach(st => {
-      const row = document.createElement('div');
-      row.className = 'stat';
-      row.innerHTML = `<span>${st}</span><span>${stats[st]} <button data-train="${st}">Train</button></span>`;
-      list.appendChild(row);
-    });
-    list.querySelectorAll('[data-train]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const st = btn.getAttribute('data-train');
-        const r = await api('/api/wrestling/train', { method:'POST', body: JSON.stringify({ stat: st, amount: 1 }) });
-        if (r.ok) { stats = r.stats; renderStats(); }
-        else alert(r.error || 'train failed');
-      });
-    });
-  }
-
-  document.getElementById('saveWrestler').addEventListener('click', async () => {
-    const name = document.getElementById('wrestlerName').value.trim();
-    const file = document.getElementById('wrestlerFile').files[0];
-    let image = wrestler && wrestler.image ? wrestler.image : '';
-    if (file) {
-      image = await new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.readAsDataURL(file);
-      });
-    }
-    const r = await api('/api/wrestling/wrestler', { method:'POST', body: JSON.stringify({ name, image, stats }) });
-    if (r.ok) {
-      wrestler = r.wrestler; stats = r.stats;
-      if (wrestler.image) document.getElementById('wrestlerImage').src = wrestler.image;
-      document.getElementById('wrestlerStatus').textContent = 'Saved!';
-      renderStats();
-    } else {
-      document.getElementById('wrestlerStatus').textContent = r.error || 'save failed';
-    }
-  });
-
-  document.getElementById('findOpponent').addEventListener('click', async () => {
-    const r = await api('/api/allUsers');
-    if (!r.success) { document.getElementById('oppStatus').textContent = 'Failed to load roster'; return; }
-    const oppUser = WG.pickOpponent(r.users, me.username);
-    if (!oppUser) { document.getElementById('oppStatus').textContent = 'No opponents available'; return; }
-    const oppW = WG.opponentWrestler(oppUser);
-    const myW = wrestler || WG.fromProfile(me);
-    // ensure stats
-    if (!myW.stats) myW.stats = stats;
-    myW.stats = WG.normalizeStats(Object.assign({}, stats, myW.stats));
-    match = WG.newMatch(myW, oppW);
-    document.getElementById('matchArea').classList.remove('hidden');
-    document.getElementById('pName').textContent = match.player.name;
-    document.getElementById('oName').textContent = match.opponent.name;
-    if (match.player.image) document.getElementById('pImg').src = match.player.image;
-    if (match.opponent.image) document.getElementById('oImg').src = match.opponent.image;
-    document.getElementById('matchResult').textContent = '';
-    renderMatch();
-  });
-
-  function renderMatch() {
-    if (!match) return;
-    document.getElementById('pHp').textContent = match.player.hp + '/' + match.player.maxHp;
-    document.getElementById('oHp').textContent = match.opponent.hp + '/' + match.opponent.maxHp;
-    document.getElementById('pStam').textContent = match.player.stamina;
-    document.getElementById('oStam').textContent = match.opponent.stamina;
-    document.getElementById('pHpBar').style.width = (match.player.hp/match.player.maxHp*100) + '%';
-    document.getElementById('oHpBar').style.width = (match.opponent.hp/match.opponent.maxHp*100) + '%';
-    const log = document.getElementById('matchLog');
-    log.innerHTML = match.log.map(l => '<div>'+l+'</div>').join('');
-    log.scrollTop = log.scrollHeight;
-    if (WG.isFinished(match)) {
-      document.getElementById('matchResult').textContent = match.status === 'player_win' ? 'You win!' : 'You lose!';
-    }
-  }
-
-  document.querySelectorAll('[data-action]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (!match || WG.isFinished(match)) return;
-      const action = btn.getAttribute('data-action');
-      WG.resolveTurn(match, action);
-      renderMatch();
-    });
-  });
-
-
-  // ---------- Career Mode ----------
-  function saveCareer() {
-    if (!career) return;
-    try { localStorage.setItem('mcf_career_' + (me ? me.username : 'anon'), WC.serialize(career)); } catch (e) {}
-  }
-  function loadCareer() {
-    try {
-      const raw = localStorage.getItem('mcf_career_' + (me ? me.username : 'anon'));
-      if (raw) career = WC.deserialize(raw);
-    } catch (e) { career = null; }
-    return career;
-  }
-
-  function renderCareer() {
-    const status = document.getElementById('careerStatus');
-    const area = document.getElementById('careerArea');
-    if (!career) { status.textContent = 'No career started.'; area.classList.add('hidden'); return; }
-    status.textContent = 'Career: ' + career.playerName + ' | Record ' + career.wins + '-' + career.losses + ' | Rep ' + career.reputation;
-    area.classList.remove('hidden');
-    const node = WC.currentNode(career);
-    if (!node) { area.classList.add('hidden'); return; }
-    document.getElementById('careerTitle').textContent = node.title || '';
-    document.getElementById('careerText').textContent = node.text || '';
-    document.getElementById('careerResult').textContent = '';
-    document.getElementById('careerChoices').innerHTML = '';
-    document.getElementById('careerTraining').classList.add('hidden');
-    document.getElementById('careerMatch').classList.add('hidden');
-    document.getElementById('careerSummary').classList.add('hidden');
-
-    if (node.type === 'story') {
-      (node.choices || []).forEach(ch => {
-        const btn = document.createElement('button');
-        btn.textContent = ch.label;
-        btn.style.display = 'block';
-        btn.style.margin = '6px 0';
-        btn.addEventListener('click', () => {
-          const r = WC.makeChoice(career, ch.id);
-          if (r.ok) { saveCareer(); renderCareer(); }
-        });
-        document.getElementById('careerChoices').appendChild(btn);
-      });
-    } else if (node.type === 'training') {
-      document.getElementById('careerTraining').classList.remove('hidden');
-      const wrap = document.getElementById('careerTrainButtons');
-      wrap.innerHTML = '';
-      (node.statOptions || WC.STATS).forEach(st => {
-        const btn = document.createElement('button');
-        btn.textContent = st + ' + ' + (node.amount || 1);
-        btn.style.margin = '4px';
-        btn.addEventListener('click', () => {
-          const r = WC.trainStat(career, st);
-          if (r.ok) { saveCareer(); renderCareer(); }
-          else alert(r.error);
-        });
-        wrap.appendChild(btn);
-      });
-    } else if (node.type === 'match') {
-      document.getElementById('careerMatch').classList.remove('hidden');
-      careerMatchNode = node;
-      // start a career match using node opponent
-      startCareerMatch(node);
-    } else if (node.type === 'ending') {
-      document.getElementById('careerResult').textContent = 'ENDING: ' + node.title;
-      const sum = WC.summary(career);
-      const el = document.getElementById('careerSummary');
-      el.classList.remove('hidden');
-      el.innerHTML = '<p>Record: ' + sum.record + '</p><p>Reputation: ' + sum.reputation + '</p><p>Title: ' + (sum.title || 'None') + '</p>';
-    }
-  }
-
-  function startCareerMatch(node) {
-    const opp = WG.createWrestler({ name: node.opponent.name, image: node.opponent.image || '', stats: node.opponent.stats });
-    const myW = WG.fromProfile(me);
-    myW.stats = WG.normalizeStats(Object.assign({}, stats, myW.stats));
-    myW.name = career.playerName;
-    match = WG.newMatch(myW, opp);
-    // reuse match area? show in career match section
-    document.getElementById('matchArea').classList.remove('hidden');
-    document.getElementById('pName').textContent = match.player.name;
-    document.getElementById('oName').textContent = match.opponent.name;
-    if (match.player.image) document.getElementById('pImg').src = match.player.image;
-    if (match.opponent.image) document.getElementById('oImg').src = match.opponent.image;
-    document.getElementById('matchResult').textContent = 'Career match in progress...';
-    renderMatch();
-  }
-
-  // override action buttons to also resolve career match
-  const origActionHandler = null;
-  document.querySelectorAll('[data-action]').forEach(btn => {
-    // remove previous listeners by cloning
-  });
-
-  // Re-bind action buttons with career awareness
-  document.querySelectorAll('[data-action]').forEach(btn => {
-    const newBtn = btn.cloneNode(true);
-    btn.parentNode.replaceChild(newBtn, btn);
-  });
-  document.querySelectorAll('[data-action]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (!match || WG.isFinished(match)) return;
-      const action = btn.getAttribute('data-action');
-      WG.resolveTurn(match, action);
-      renderMatch();
-      if (WG.isFinished(match) && career && careerMatchNode) {
-        const won = match.status === 'player_win';
-        const r = WC.resolveMatch(career, won);
-        if (r.ok) {
-          careerMatchNode = null;
-          match = null;
-          document.getElementById('matchArea').classList.add('hidden');
-          saveCareer();
-          renderCareer();
-        }
-      }
-    });
-  });
-
-  document.getElementById('startCareer').addEventListener('click', () => {
-    const name = (wrestler && wrestler.name) ? wrestler.name : (me.display || me.username);
-    career = WC.defaultCareer(name, stats);
-    saveCareer();
-    renderCareer();
-  });
-
-  // load career on init after me set
-  const origInit = init;
-  // wrap init by redefining? Instead call load after init in init function. We'll monkeypatch by overriding init via redefinition not possible. Instead add load in a setTimeout after init call.
-  setTimeout(() => { loadCareer(); renderCareer(); }, 0);
-
-  init();
-})();
-</script>
+<script src="/js/wrestling-game-page.js"></script>
 </body>
 </html>
