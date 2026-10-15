@@ -1258,6 +1258,7 @@ const {
 // public/js/tags.js so the pickers the browser renders and the values the API
 // stores can never drift apart.
 const tags = require('./public/js/tags.js');
+const wrestlingGame = require('./wrestlingGame.js');
 
 /**
  * The tag selection to store, from a request body. `undefined` (the field was
@@ -3326,7 +3327,7 @@ app.post('/api/update-profile', sessions.requireUser, async (req, res) => {
   // member-writable at all: they are match-record counters now.)
   const PROFILE_FIELDS = [
     'display', 'age', 'discordId', 'height', 'weight', 'info', 'color',
-    'language', 'imageUrl', 'tags'
+    'language', 'imageUrl', 'tags', 'stats'
   ];
   const safeUpdates = {};
   for (const field of PROFILE_FIELDS) {
@@ -3383,6 +3384,12 @@ app.post('/api/update-profile', sessions.requireUser, async (req, res) => {
       return res.status(400).json({ ok: false, error: 'invalid_tags' });
     }
     safeUpdates.tags = tagSelection.tags;
+  }
+
+  // Normalize the five wrestling-game stats so a hand-crafted request can't
+  // store arbitrary shapes or out-of-range values.
+  if (Object.prototype.hasOwnProperty.call(safeUpdates, 'stats')) {
+    safeUpdates.stats = wrestlingGame.normalizeStats(safeUpdates.stats);
   }
 
   // The saved combat stats must track the physique — recompute them
@@ -3854,6 +3861,51 @@ app.get('/api/me', async (req, res) => {
 //   The public VAPID key the browser encrypts a subscription to, and whether
 //   push is armed at all. Public on purpose: a signed-out visitor's browser asks
 //   before offering the button.
+// ---------- API: WRESTLING GAME ----------
+app.get('/api/wrestling/stats', sessions.requireUser, async (req, res) => {
+  try {
+    const user = await User.findOne({ username: req.username }).lean();
+    if (!user) return res.status(404).json({ ok: false, error: 'not_found' });
+    return res.json({ ok: true, stats: wrestlingGame.normalizeStats(user.stats || {}), wrestler: (user.stats && user.stats.wrestler) || null });
+  } catch (e) {
+    console.error('wrestling stats error', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+app.post('/api/wrestling/train', sessions.requireUser, async (req, res) => {
+  try {
+    const user = await User.findOne({ username: req.username });
+    if (!user) return res.status(404).json({ ok: false, error: 'not_found' });
+    const result = wrestlingGame.train(user.stats || {}, req.body && req.body.stat, req.body && req.body.amount);
+    if (!result.ok) return res.status(400).json(result);
+    // preserve any saved wrestler
+    if (user.stats && user.stats.wrestler) result.stats.wrestler = user.stats.wrestler;
+    user.stats = result.stats;
+    await user.save();
+    return res.json({ ok: true, stats: result.stats });
+  } catch (e) {
+    console.error('wrestling train error', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
+app.post('/api/wrestling/wrestler', sessions.requireUser, async (req, res) => {
+  try {
+    const user = await User.findOne({ username: req.username });
+    if (!user) return res.status(404).json({ ok: false, error: 'not_found' });
+    const wrestler = wrestlingGame.createWrestler(req.body || {});
+    const stats = wrestlingGame.normalizeStats(user.stats || {});
+    stats.wrestler = wrestler;
+    user.stats = stats;
+    await user.save();
+    return res.json({ ok: true, wrestler: wrestler, stats: stats });
+  } catch (e) {
+    console.error('wrestling wrestler error', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+
 app.get('/api/push/config', (req, res) => {
   res.json({ ok: true, ...push.clientConfig() });
 });
@@ -4221,7 +4273,7 @@ app.get("/api/allUsers", noRevalidate, sessions.requireUser, async (req, res) =>
     const filter = clauses.length === 1 ? clauses[0] : (clauses.length ? { $and: clauses } : {});
 
     const users = await User.find(filter)
-      .select("username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt atk def tags createdAt")
+      .select("username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt atk def stats tags createdAt")
       .lean();
 
     res.json({ success: true, users: users.map(user => ({ ...user, tags: userTags(user) })) });
