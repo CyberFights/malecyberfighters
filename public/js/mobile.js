@@ -683,39 +683,87 @@ function mobileImgSrc(value) {
     el.style.display = "block";
   }
 
+  let loginRequestPending = false;
+
   async function handleLogin() {
+    if (loginRequestPending) return;
+
     const errEl = $("loginError");
     setError(errEl, "");
 
     const username = ($("loginUser") && $("loginUser").value || "").trim();
     const password = ($("loginPass") && $("loginPass").value) || "";
+    const submit = $("loginSubmit");
 
     if (!username || !password) {
       setError(errEl, "Enter username and password");
       return;
     }
 
-    let data;
+    loginRequestPending = true;
+    if (submit) submit.disabled = true;
+
     try {
-      data = await postJSON("/api/login", { username, password });
-    } catch (e) {
-      setError(errEl, "Network error during login");
-      return;
-    }
+      let response;
+      try {
+        response = await fetch("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password })
+        });
+      } catch (e) {
+        console.error("Login request failed before receiving a response:", e);
+        setError(errEl, "Network error. Check your connection and try again.");
+        return;
+      }
 
-    if (!data.ok) {
-      setError(errEl, data.error === "banned" ? "You are banned." : "Invalid credentials");
-      return;
-    }
+      let data;
+      try {
+        data = await response.json();
+      } catch (e) {
+        console.error("Login response could not be parsed:", e);
+        setError(errEl, response.ok
+          ? "The login service returned an unreadable response. Please reload and try again."
+          : window.MCFAuthErrors.loginFailureMessage(response, null));
+        return;
+      }
 
-    setSessionToken(data.token);
-    setSession(data.user);
-    hideId("modalLogin");
-    const loginUser = $("loginUser");
-    if (loginUser) loginUser.value = "";
-    const loginPass = $("loginPass");
-    if (loginPass) loginPass.value = "";
-    enterApp();
+      if (!response.ok || !data || !data.ok) {
+        setError(errEl, window.MCFAuthErrors.loginFailureMessage(response, data));
+        return;
+      }
+      if (!data.token || !data.user) {
+        console.error("Login succeeded without the expected session token/user payload.");
+        setError(errEl, "The login response was incomplete. Please reload and try again.");
+        return;
+      }
+
+      try {
+        setSessionToken(data.token);
+        setSession(data.user);
+      } catch (e) {
+        console.error("Login succeeded, but the session could not be saved in this browser:", e);
+        setError(errEl, "Login succeeded, but this browser could not save your session. Check storage settings and try again.");
+        return;
+      }
+
+      // Authentication succeeded. A client-side startup exception should not
+      // be reported as a failed network request.
+      try {
+        enterApp();
+        hideId("modalLogin");
+        const loginUser = $("loginUser");
+        if (loginUser) loginUser.value = "";
+        const loginPass = $("loginPass");
+        if (loginPass) loginPass.value = "";
+      } catch (e) {
+        console.error("Login succeeded, but mobile app initialization failed:", e);
+        setError(errEl, "Login succeeded, but the app could not finish loading. Please reload the page.");
+      }
+    } finally {
+      loginRequestPending = false;
+      if (submit) submit.disabled = false;
+    }
   }
 
   async function handleRegister() {
@@ -789,7 +837,9 @@ function mobileImgSrc(value) {
       const data = await postJSON("/api/register", payload);
 
       if (!data.ok) {
-        if (data.conflict) {
+        if (data.error === 'too_many_requests') {
+          setError(errEl, window.MCFAuthErrors.rateLimitMessage(null, data, 'sign-up'));
+        } else if (data.conflict) {
           const msgs = [];
           if (data.conflict.username) msgs.push("username taken");
           if (data.conflict.email) msgs.push("email in use");
@@ -3029,84 +3079,10 @@ window.openRoomPopup = openRoomPopup;
 window.openPrivateWindow = openPrivateWindow;
 
 
-/* ===================== auth-mobile.js (unique contributions) ===================== */
-/* ============================================================
-   auth-mobile.js — Mobile version of auth.js
-   Adapted from ./public/js/auth.js for ./public/mobile.html
-
-   ID conversions:
-     None — all IDs (btnLogin, modalLogin, loginCancel, loginSubmit,
-     loginUser, loginPass, loginError) exist in mobile.html.
-
-   Session flow differences:
-     - After login, show mainUI and hide authScreen
-     - After logout, show authScreen and hide mainUI + all panels
-     - updateProfileCard → updates meCard (meAvatar, meName, meHandle)
-============================================================ */
-
-$('btnLogin').addEventListener('click', () => {
-  show($('modalLogin'));
-});
-$('loginCancel').addEventListener('click', () => {
-  hide($('modalLogin'));
-});
-$('loginSubmit').addEventListener('click', doLogin);
-$('loginPass').addEventListener('keydown', e => { if(e.key === 'Enter') doLogin(); });
-
-async function doLogin(){
-  const username = $('loginUser').value.trim();
-  const password = $('loginPass').value;
-  const err = $('loginError');
-  err.style.display = 'none';
-
-  if(!username || !password){
-    err.textContent = "Enter username and password";
-    err.style.display = 'block';
-    return;
-  }
-
-  try {
-    const resp = await fetch('/api/login', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({username,password})
-    });
-    const data = await resp.json();
-
-    if(!data.ok){
-      err.textContent = data.error === 'banned' ? 'You are banned.' : 'Invalid credentials';
-      err.style.display = 'block';
-      return;
-    }
-
-    setSessionToken(data.token);
-    setSession(data.user);
-    localStorage.setItem('currentUser', JSON.stringify(data.user));
-    socket.emit('login', { token: data.token });
-    hide($('modalLogin'));
-
-    // MOBILE: show mainUI, hide authScreen
-    const authScreen = $('authScreen');
-    const mainUI = $('mainUI');
-    if (authScreen) authScreen.style.display = 'none';
-    if (mainUI) mainUI.style.display = 'block';
-
-    if (window.updateUIForSession) updateUIForSession();
-    if (window.updateProfileCard) updateProfileCard(data.user);
-
-    $('loginUser').value = '';
-    $('loginPass').value = '';
-
-    if (window.updateDMListSidebar) updateDMListSidebar();
-
-  } catch(e){
-    err.textContent = "Network error";
-    err.style.display = 'block';
-  }
-}
-
-
-window.logout = logout;
+/* ===================== auth-mobile.js bindings intentionally omitted ===================== */
+/* bindEverything() above owns the login and cancel events. The old merged
+   auth-mobile.js block registered a second login listener, so one tap sent two
+   POST /api/login requests and could hit the shared auth rate limit. */
 
 
 /* ===================== register-mobile.js (unique contributions) ===================== */

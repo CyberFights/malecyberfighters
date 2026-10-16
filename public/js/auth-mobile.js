@@ -21,10 +21,15 @@ $('loginCancel').addEventListener('click', () => {
 $('loginSubmit').addEventListener('click', doLogin);
 $('loginPass').addEventListener('keydown', e => { if(e.key === 'Enter') doLogin(); });
 
+let loginRequestPending = false;
+
 async function doLogin(){
+  if (loginRequestPending) return;
+
   const username = $('loginUser').value.trim();
   const password = $('loginPass').value;
   const err = $('loginError');
+  const submit = $('loginSubmit');
   err.style.display = 'none';
 
   if(!username || !password){
@@ -33,28 +38,75 @@ async function doLogin(){
     return;
   }
 
+  loginRequestPending = true;
+  if (submit) submit.disabled = true;
+
+  let resp;
   try {
-    const resp = await fetch('/api/login', {
+    resp = await fetch('/api/login', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({username,password})
     });
-    const data = await resp.json();
+  } catch(e){
+    console.error('Login request failed before receiving a response:', e);
+    err.textContent = 'Network error. Check your connection and try again.';
+    err.style.display = 'block';
+    loginRequestPending = false;
+    if (submit) submit.disabled = false;
+    return;
+  }
 
-    if(!data.ok){
-      err.textContent = data.error === 'banned' ? 'You are banned.' : 'Invalid credentials';
-      err.style.display = 'block';
-      return;
-    }
+  let data;
+  try {
+    data = await resp.json();
+  } catch(e){
+    console.error('Login response could not be parsed:', e);
+    err.textContent = resp.ok
+      ? 'The login service returned an unreadable response. Please reload and try again.'
+      : window.MCFAuthErrors.loginFailureMessage(resp, null);
+    err.style.display = 'block';
+    loginRequestPending = false;
+    if (submit) submit.disabled = false;
+    return;
+  }
 
-    // The token is the credential; the user record is only what the UI shows.
+  if (!resp.ok || !data || !data.ok) {
+    err.textContent = window.MCFAuthErrors.loginFailureMessage(resp, data);
+    err.style.display = 'block';
+    loginRequestPending = false;
+    if (submit) submit.disabled = false;
+    return;
+  }
+  if (!data.token || !data.user) {
+    console.error('Login succeeded without the expected session token/user payload.');
+    err.textContent = 'The login response was incomplete. Please reload and try again.';
+    err.style.display = 'block';
+    loginRequestPending = false;
+    if (submit) submit.disabled = false;
+    return;
+  }
+
+  try {
     setSessionToken(data.token);
     setSession(data.user);
     localStorage.setItem('currentUser', JSON.stringify(data.user));
-    socket.emit('login', { token: data.token });
-    hide($('modalLogin'));
+  } catch(e){
+    console.error('Login succeeded, but the session could not be saved in this browser:', e);
+    err.textContent = 'Login succeeded, but this browser could not save your session. Check storage settings and try again.';
+    err.style.display = 'block';
+    loginRequestPending = false;
+    if (submit) submit.disabled = false;
+    return;
+  }
 
-    // MOBILE: show mainUI, hide authScreen
+  // From here the server accepted the login. Keep socket/UI initialization
+  // problems separate from fetch and response-parsing errors.
+  try {
+    if (window.socket && typeof window.socket.emit === 'function') {
+      window.socket.emit('login', { token: data.token });
+    }
+
     const authScreen = $('authScreen');
     const mainUI = $('mainUI');
     if (authScreen) authScreen.style.display = 'none';
@@ -67,10 +119,14 @@ async function doLogin(){
     $('loginPass').value = '';
 
     if (window.updateDMListSidebar) updateDMListSidebar();
-
+    hide($('modalLogin'));
   } catch(e){
-    err.textContent = "Network error";
+    console.error('Login succeeded, but mobile app initialization failed:', e);
+    err.textContent = 'Login succeeded, but the app could not finish loading. Please reload the page.';
     err.style.display = 'block';
+  } finally {
+    loginRequestPending = false;
+    if (submit) submit.disabled = false;
   }
 }
 

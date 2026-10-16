@@ -16,6 +16,7 @@ const { JSDOM } = require('jsdom');
 const ROOT = path.join(__dirname, '..');
 const PAGE = fs.readFileSync(path.join(ROOT, 'public', 'mobile.html'), 'utf8');
 const SOURCE = fs.readFileSync(path.join(ROOT, 'public', 'js', 'mobile.js'), 'utf8');
+const AUTH_ERRORS_SOURCE = fs.readFileSync(path.join(ROOT, 'public', 'js', 'auth-errors.js'), 'utf8');
 // The page loads this before mobile.js; the real one is used here too, so the
 // paging assertions cover the shipped controller rather than a stand-in.
 const SCROLL_BACK_SOURCE = fs.readFileSync(
@@ -43,7 +44,7 @@ async function waitFor(predicate, timeoutMs = 5000) {
  * `dmHistory` and `publicHistory` script the pages the matching endpoints
  * return; every request is recorded so a test can assert on the cursor sent.
  */
-async function startMobilePage(username = 'bob', { dmHistory = null, publicHistory = null } = {}) {
+async function startMobilePage(username = 'bob', { dmHistory = null, publicHistory = null, loginResponse = null } = {}) {
   const dom = new JSDOM(PAGE, {
     url: 'http://127.0.0.1/',
     pretendToBeVisual: true,
@@ -73,6 +74,13 @@ async function startMobilePage(username = 'bob', { dmHistory = null, publicHisto
     const body = options && options.body ? JSON.parse(options.body) : null;
     requests.push({ url: target, body });
 
+    if (target === '/api/login') {
+      return loginResponse || {
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, token: 'test-token', user: { username } })
+      };
+    }
     if (target.includes('/api/dm/history')) {
       const page = dmPages.length ? dmPages.shift() : { ok: true, messages: [] };
       return { ok: true, json: async () => page };
@@ -98,6 +106,7 @@ async function startMobilePage(username = 'bob', { dmHistory = null, publicHisto
 
   win.eval(UNREAD_BADGE_SOURCE);
   win.eval(SCROLL_BACK_SOURCE);
+  win.eval(AUTH_ERRORS_SOURCE);
   win.eval(SOURCE);
 
   // mobile.js defers start() to DOMContentLoaded when it is evaluated while
@@ -397,6 +406,39 @@ test('an unread room message counts towards the same badge', async () => {
 
     assert.ok(await waitFor(() => page.title() === `(2) ${baseTitle}`),
       `title was "${page.title()}", total ${page.win.MCFUnreadBadge.total()}`);
+  } finally {
+    await page.close();
+  }
+});
+
+test('mobile login sends one request and explains a 429 instead of saying network error', async () => {
+  const rateLimited = {
+    ok: false,
+    status: 429,
+    headers: { get: name => name.toLowerCase() === 'retry-after' ? '600' : null },
+    json: async () => { throw new SyntaxError('plain-text 429 response'); }
+  };
+  const page = await startMobilePage('bob', { loginResponse: rateLimited });
+  try {
+    page.win.console.error = () => {};
+    page.win.setSession(null);
+    page.win.document.getElementById('loginUser').value = 'bob';
+    page.win.document.getElementById('loginPass').value = 'secret';
+
+    const before = page.requests.filter(request => request.url === '/api/login').length;
+    page.win.document.getElementById('loginSubmit').click();
+
+    assert.ok(await waitFor(() =>
+      page.requests.filter(request => request.url === '/api/login').length > before));
+    await tick(50);
+
+    const attempts = page.requests.filter(request => request.url === '/api/login').length - before;
+    assert.equal(attempts, 1, 'one tap must not post the login twice');
+    assert.equal(
+      page.win.document.getElementById('loginError').textContent,
+      'Too many login attempts. Please try again in 10 minutes.'
+    );
+    assert.equal(page.win.document.getElementById('loginSubmit').disabled, false);
   } finally {
     await page.close();
   }
