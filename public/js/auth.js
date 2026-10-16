@@ -83,10 +83,15 @@ async function doForgotPassword(isResend){
   }
 }
 
+let loginRequestPending = false;
+
 async function doLogin(){
+  if (loginRequestPending) return;
+
   const username = $('loginUser').value.trim();
   const password = $('loginPass').value;
   const err = $('loginError');
+  const submit = $('loginSubmit');
   err.style.display = 'none';
 
   if(!username || !password){
@@ -95,38 +100,86 @@ async function doLogin(){
     return;
   }
 
-  try {
-    const resp = await fetch('/api/login', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({username,password})
-    });
-    const data = await resp.json();
+  loginRequestPending = true;
+  if (submit) submit.disabled = true;
 
-    if(!data.ok){
-      err.textContent = data.error === 'banned' ? 'You are banned.' : 'Invalid credentials';
+  try {
+    let resp;
+    try {
+      resp = await fetch('/api/login', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({username,password})
+      });
+    } catch(e){
+      console.error('Login request failed before receiving a response:', e);
+      err.textContent = 'Network error. Check your connection and try again.';
       err.style.display = 'block';
       return;
     }
 
-    // The token is the credential; the user record is only what the UI shows.
-    // Store the token first so the socket upgrade below can carry it.
-    setSessionToken(data.token);
-    setSession(data.user);
-    localStorage.setItem('currentUser', JSON.stringify(data.user));
-    socket.emit('login', { token: data.token });
-    hide($('modalLogin'));
-    if (window.updateUIForSession) updateUIForSession();
-    if (window.updateProfileCard) updateProfileCard(data.user);
+    let data;
+    try {
+      data = await resp.json();
+    } catch(e){
+      console.error('Login response could not be parsed:', e);
+      err.textContent = resp.ok
+        ? 'The login service returned an unreadable response. Please reload and try again.'
+        : window.MCFAuthErrors.loginFailureMessage(resp, null);
+      err.style.display = 'block';
+      return;
+    }
+
+    if (!resp.ok || !data || !data.ok) {
+      err.textContent = window.MCFAuthErrors.loginFailureMessage(resp, data);
+      err.style.display = 'block';
+      return;
+    }
+
+    if (!data.token || !data.user) {
+      console.error('Login succeeded without the expected session token/user payload.');
+      err.textContent = 'The login response was incomplete. Please reload and try again.';
+      err.style.display = 'block';
+      return;
+    }
+
+    try {
+      // The token is the credential; the user record is only what the UI shows.
+      // Store the token first so the socket upgrade below can carry it.
+      setSessionToken(data.token);
+      setSession(data.user);
+      localStorage.setItem('currentUser', JSON.stringify(data.user));
+    } catch(e){
+      console.error('Login succeeded, but the session could not be saved in this browser:', e);
+      err.textContent = 'Login succeeded, but this browser could not save your session. Check storage settings and try again.';
+      err.style.display = 'block';
+      return;
+    }
+
+    // The server has accepted the login and the session is stored. Socket/UI
+    // failures after this point must not be mislabeled as a network failure.
+    try {
+      if (window.socket && typeof window.socket.emit === 'function') {
+        window.socket.emit('login', { token: data.token });
+      }
+    } catch(e){ console.error('Login succeeded, but socket sign-in failed:', e); }
 
     $('loginUser').value = '';
     $('loginPass').value = '';
+    try { hide($('modalLogin')); } catch(e){ console.error('Could not close the login dialog:', e); }
 
-    if (window.updateDMListSidebar) updateDMListSidebar();
-
-  } catch(e){
-    err.textContent = "Network error";
-    err.style.display = 'block';
+    if (window.updateUIForSession) {
+      try { updateUIForSession(); } catch(e){ console.error('Login UI refresh failed:', e); }
+    }
+    if (window.updateProfileCard) {
+      try { updateProfileCard(data.user); } catch(e){ console.error('Profile refresh after login failed:', e); }
+    }
+    if (window.updateDMListSidebar) {
+      try { updateDMListSidebar(); } catch(e){ console.error('DM sidebar refresh after login failed:', e); }
+    }
+  } finally {
+    loginRequestPending = false;
+    if (submit) submit.disabled = false;
   }
 }
 

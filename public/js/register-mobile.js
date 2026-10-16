@@ -121,7 +121,9 @@ $('regSubmit').addEventListener('click', async () => {
     show($('modalLogin'));
     alert('Account created. Please login.');
   } else {
-    err.textContent = data.error || 'Registration failed';
+    err.textContent = data.error === 'too_many_requests'
+      ? window.MCFAuthErrors.rateLimitMessage(null, data, 'sign-up')
+      : data.error || 'Registration failed';
     err.style.display = 'block';
   }
 });

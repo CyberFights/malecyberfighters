@@ -79,6 +79,9 @@ if (regImageFile) {
 
 function registrationErrorText(data, status){
   const code = data && data.error;
+  if (status === 429 || code === 'too_many_requests') {
+    return window.MCFAuthErrors.rateLimitMessage(null, data, 'sign-up');
+  }
   if (code === 'file_too_large' || status === 413) return 'Photo must be 5 MB or smaller.';
   if (code === 'invalid_file_type' || code === 'invalid_file') return 'Please choose an image file.';
   if (code === 'no_imgbb_key' || code === 'upload_error' || code === 'upload_failed') {

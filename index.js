@@ -1191,11 +1191,30 @@ app.get('/sw.js', noRevalidate, (req, res) => {
 });
 app.use(express.static(publicDir));
 
+const AUTH_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: AUTH_LIMIT_WINDOW_MS,
   max: 20,
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  // Return the same JSON shape as the login/register APIs. The old default
+  // handler sent plain text, which made clients trying to parse JSON report a
+  // misleading "Network error" for an ordinary HTTP 429 rate-limit response.
+  handler: (req, res) => {
+    const resetAt = req.rateLimit && req.rateLimit.resetTime
+      ? new Date(req.rateLimit.resetTime).getTime()
+      : NaN;
+    const retryAfter = Number.isFinite(resetAt)
+      ? Math.max(1, Math.ceil((resetAt - Date.now()) / 1000))
+      : Math.ceil(AUTH_LIMIT_WINDOW_MS / 1000);
+
+    res.set('Retry-After', String(retryAfter));
+    return res.status(429).json({
+      ok: false,
+      error: 'too_many_requests',
+      retryAfter
+    });
+  }
 });
 app.use('/api/login', authLimiter);
 app.use('/api/register', authLimiter);
