@@ -6,30 +6,40 @@
 <meta name="theme-color" content="#020617">
 <title>Wrestling Game · Male Cyber Fighters</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/images/mcf-192.png">
+<link rel="stylesheet" href="/css/wrestling-card.css">
 <style>
   body { margin:0; font-family:system-ui,sans-serif; background:#020617; color:#e2e8f0; }
-  .shell { max-width:960px; margin:0 auto; padding:16px; }
+  .shell { max-width:1080px; margin:0 auto; padding:16px; }
   .card { background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:16px; margin-bottom:16px; }
-  h1,h2,h3 { color:#7fd8ff; }
-  button { background:#1e293b; color:#e2e8f0; border:1px solid #334155; border-radius:8px; padding:8px 12px; cursor:pointer; }
+  h1,h2,h3 { color:#7fd8ff; margin:0 0 10px; }
+  button { background:#1e293b; color:#e2e8f0; border:1px solid #334155; border-radius:8px; padding:8px 12px; cursor:pointer; font-weight:600; }
   button:hover { background:#334155; }
+  button:disabled { opacity:0.5; cursor:not-allowed; }
   input,select { background:#020617; color:#e2e8f0; border:1px solid #334155; border-radius:8px; padding:8px; }
   .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
-  .bar { height:12px; background:#1e293b; border-radius:6px; overflow:hidden; }
-  .bar > div { height:100%; background:#22c55e; }
-  .fighter { flex:1 1 280px; text-align:center; }
-  .fighter img { width:120px; height:120px; object-fit:cover; border-radius:12px; border:2px solid #334155; }
-  .log { max-height:200px; overflow:auto; font-size:13px; color:#94a3b8; }
-  .stat { display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid #1e293b; }
-  .actions button { margin:4px; }
-  .hidden { display:none; }
+  .log { max-height:200px; overflow:auto; font-size:13px; color:#94a3b8; background:#0b1220; border-radius:8px; padding:8px; }
+  .stat { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #1e293b; align-items:center; }
+  .actions { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-top:14px; }
+  .actions button { min-width:96px; padding:10px 14px; font-size:14px; }
+  .hidden { display:none !important; }
+  .muted { color:#94a3b8; font-size:13px; }
+  header.row { justify-content:space-between; margin-bottom:10px; }
+  header a { color:#7fd8ff; text-decoration:none; }
+  .wrestler-edit { display:flex; flex-wrap:wrap; gap:20px; align-items:flex-start; }
+  .wrestler-edit .edit-pane { flex:1 1 260px; min-width:240px; }
+  .edit-pane label { display:block; font-size:12px; color:#94a3b8; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.08em; }
+  .edit-pane .field { margin-bottom:12px; }
+  .edit-pane input[type=text] { width:100%; box-sizing:border-box; }
+  .center { text-align:center; }
+  #matchResult { text-align:center; margin-top:10px; font-weight:bold; font-size:18px; color:#ffd76a; }
+  .wrestler-photo-hint { margin-top:8px; font-size:12px; color:#94a3b8; }
 </style>
 </head>
 <body>
 <div class="shell">
-  <header class="row" style="justify-content:space-between;">
+  <header class="row">
     <h1>Wrestling Game</h1>
-    <a href="/" style="color:#7fd8ff;">← Back to Arena</a>
+    <a href="/">← Back to Arena</a>
   </header>
 
   <div id="gate" class="card">
@@ -39,19 +49,29 @@
   </div>
 
   <div id="app" class="hidden">
+
     <div class="card">
       <h2>Your Wrestler</h2>
-      <div class="row">
-        <div>
-          <img id="wrestlerImage" src="/images/mcf-192.png" alt="wrestler">
-        </div>
-        <div style="flex:1;">
-          <div class="row">
-            <input id="wrestlerName" placeholder="Wrestler name">
-            <input id="wrestlerFile" type="file" accept="image/*">
-            <button id="saveWrestler">Save Wrestler</button>
+      <div class="wrestler-edit">
+        <div id="wrestlerCardWrap"></div>
+        <div class="edit-pane">
+          <div class="field">
+            <label for="wrestlerName">Ring Name</label>
+            <input id="wrestlerName" type="text" placeholder="Wrestler name" maxlength="40">
           </div>
-          <p id="wrestlerStatus" class="muted"></p>
+          <div class="field">
+            <label for="wrestlerNickname">Nickname / Title</label>
+            <input id="wrestlerNickname" type="text" placeholder="e.g. The Beast" maxlength="30">
+          </div>
+          <div class="field">
+            <label for="wrestlerFile">Photo</label>
+            <input id="wrestlerFile" type="file" accept="image/*">
+            <div class="wrestler-photo-hint">Your photo fills the octagon on the card.</div>
+          </div>
+          <div class="row">
+            <button id="saveWrestler" type="button">Save Wrestler</button>
+            <span id="wrestlerStatus" class="muted"></span>
+          </div>
         </div>
       </div>
     </div>
@@ -65,33 +85,30 @@
     <div class="card">
       <h2>Match</h2>
       <div class="row">
-        <button id="findOpponent">Find Random Opponent</button>
-        <span id="oppStatus"></span>
+        <button id="findOpponent" type="button">Find Random Opponent</button>
+        <span id="oppStatus" class="muted"></span>
       </div>
       <div id="matchArea" class="hidden">
-        <div class="row">
-          <div class="fighter">
-            <h3 id="pName"></h3>
-            <img id="pImg" src="/images/mcf-192.png" alt="">
-            <div class="bar"><div id="pHpBar" style="width:100%"></div></div>
-            <div>HP: <span id="pHp"></span> | Stamina: <span id="pStam"></span></div>
+        <div class="fight-arena">
+          <div class="fight-slot">
+            <h3 id="pName" class="hidden"></h3>
+            <div id="pCard"></div>
           </div>
-          <div class="fighter">
-            <h3 id="oName"></h3>
-            <img id="oImg" src="/images/mcf-192.png" alt="">
-            <div class="bar"><div id="oHpBar" style="width:100%"></div></div>
-            <div>HP: <span id="oHp"></span> | Stamina: <span id="oStam"></span></div>
+          <div class="fight-vs">VS</div>
+          <div class="fight-slot">
+            <h3 id="oName" class="hidden"></h3>
+            <div id="oCard"></div>
           </div>
         </div>
-        <div class="actions" style="text-align:center;margin-top:12px;">
-          <button data-action="strike">Strike</button>
-          <button data-action="grapple">Grapple</button>
-          <button data-action="taunt">Taunt</button>
-          <button data-action="block">Block</button>
-          <button data-action="rest">Rest</button>
+        <div class="actions">
+          <button data-action="strike" type="button">Strike</button>
+          <button data-action="grapple" type="button">Grapple</button>
+          <button data-action="taunt" type="button">Taunt</button>
+          <button data-action="block" type="button">Block</button>
+          <button data-action="rest" type="button">Rest</button>
         </div>
-        <div id="matchResult" style="text-align:center;margin-top:8px;font-weight:bold;"></div>
-        <div class="log" id="matchLog"></div>
+        <div id="matchResult"></div>
+        <div class="log" id="matchLog" style="margin-top:12px;"></div>
       </div>
     </div>
 
@@ -120,7 +137,7 @@
 <script src="/js/utils.js"></script>
 <script src="/js/wrestling-game.js"></script>
 <script src="/js/wrestling-career.js"></script>
-
+<script src="/js/wrestler-card.js"></script>
 <script src="/js/wrestling-game-page.js"></script>
 </body>
 </html>
