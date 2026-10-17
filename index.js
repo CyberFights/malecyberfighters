@@ -3885,7 +3885,16 @@ app.get('/api/wrestling/stats', sessions.requireUser, async (req, res) => {
   try {
     const user = await User.findOne({ username: req.username }).lean();
     if (!user) return res.status(404).json({ ok: false, error: 'not_found' });
-    return res.json({ ok: true, stats: wrestlingGame.normalizeStats(user.stats || {}), wrestler: (user.stats && user.stats.wrestler) || null });
+    const normalized = wrestlingGame.normalizeStats(user.stats || {});
+    const energy = wrestlingGame.gymEnergyState(normalized, Date.now());
+    return res.json({
+      ok: true,
+      stats: normalized,
+      wrestler: normalized.wrestler || null,
+      gymEnergy: energy.current,
+      gymEnergyMax: energy.max,
+      gymEnergyNextInMs: energy.nextInMs
+    });
   } catch (e) {
     console.error('wrestling stats error', e);
     return res.status(500).json({ ok: false, error: 'server_error' });
@@ -3896,13 +3905,24 @@ app.post('/api/wrestling/train', sessions.requireUser, async (req, res) => {
   try {
     const user = await User.findOne({ username: req.username });
     if (!user) return res.status(404).json({ ok: false, error: 'not_found' });
-    const result = wrestlingGame.train(user.stats || {}, req.body && req.body.stat, req.body && req.body.amount);
-    if (!result.ok) return res.status(400).json(result);
+    const result = wrestlingGame.gymTrain(user.stats || {}, req.body && req.body.stat, req.body && req.body.amount, Date.now());
+    if (!result.ok) {
+      const code = (result.error === 'no_energy') ? 429 : 400;
+      return res.status(code).json(result);
+    }
     // preserve any saved wrestler
     if (user.stats && user.stats.wrestler) result.stats.wrestler = user.stats.wrestler;
     user.stats = result.stats;
     await user.save();
-    return res.json({ ok: true, stats: result.stats });
+    const energy = wrestlingGame.gymEnergyState(result.stats, Date.now());
+    return res.json({
+      ok: true,
+      stats: result.stats,
+      cost: result.cost,
+      gymEnergy: energy.current,
+      gymEnergyMax: energy.max,
+      gymEnergyNextInMs: energy.nextInMs
+    });
   } catch (e) {
     console.error('wrestling train error', e);
     return res.status(500).json({ ok: false, error: 'server_error' });
