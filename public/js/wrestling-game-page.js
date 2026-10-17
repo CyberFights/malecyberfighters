@@ -68,7 +68,7 @@
       image: w.image || (me && me.imageUrl) || '/images/mcf-192.png',
       nickname: nickname,
       record: recordFor(wrestler),
-      stats: Object.assign({}, WG.defaultStats(), stats || {}, (w.stats||{}))
+      stats: Object.assign({}, WG.defaultStats(), stats || {})
     });
     wrap.appendChild(editCard);
 
@@ -90,7 +90,7 @@
       name: nEl ? (nEl.value || (wrestler && wrestler.name) || 'Wrestler') : (wrestler && wrestler.name),
       nickname: nnEl ? (nnEl.value || (wrestler && wrestler.nickname) || nicknameFor(wrestler)) : (wrestler && wrestler.nickname),
       image: wrestler && wrestler.image ? wrestler.image : ((me && me.imageUrl) || '/images/mcf-192.png'),
-      stats: Object.assign({}, WG.defaultStats(), stats || {}, (wrestler && wrestler.stats) || {}),
+      stats: Object.assign({}, WG.defaultStats(), stats || {}),
       record: recordFor(wrestler)
     });
   }
