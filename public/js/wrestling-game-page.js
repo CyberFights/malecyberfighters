@@ -324,6 +324,13 @@
     if (!node) { area.classList.add('hidden'); return; }
     const t = byId('careerTitle'); if (t) t.textContent = node.title || '';
     const txt = byId('careerText'); if (txt) txt.textContent = node.text || '';
+    const portraitEl = byId('careerPortrait');
+    if (portraitEl) {
+      const src = node.portrait || (node.opponent && node.opponent.image) || '/images/mcf-192.png';
+      portraitEl.src = src;
+      portraitEl.alt = node.opponent ? node.opponent.name : (node.title || '');
+      portraitEl.style.display = (node.portrait || (node.opponent && node.opponent.image)) ? '' : 'none';
+    }
     const cr = byId('careerResult'); if (cr) cr.textContent = '';
     const choicesEl = byId('careerChoices'); if (choicesEl) choicesEl.innerHTML = '';
     const trainEl = byId('careerTraining'); if (trainEl) trainEl.classList.add('hidden');
