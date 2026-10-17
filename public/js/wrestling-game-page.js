@@ -391,7 +391,23 @@
       const raw = localStorage.getItem('mcf_career_' + (me ? me.username : 'anon'));
       if (raw) {
         const parsed = WC.deserialize(raw);
-        if (parsed) career = parsed;
+        if (parsed) {
+          // Validate: make sure currentNode still exists in the story engine
+          const n = WC.resolveNode ? WC.resolveNode(parsed.currentNode, parsed) : (WC.getNode ? WC.getNode(parsed.currentNode) : null);
+          if (!n) {
+            // Stale/incompatible save (story was expanded); reset to a new career
+            console.warn('Saved career referenced missing node "' + parsed.currentNode + '". Resetting.');
+            const fallback = (wrestler && wrestler.name) ? wrestler.name : (me ? (me.display || me.username) : 'Wrestler');
+            career = WC.defaultCareer(fallback, stats);
+            saveCareer();
+            return career;
+          }
+          // Ensure required sub-objects exist
+          parsed.flags = parsed.flags || {};
+          parsed.history = parsed.history || [];
+          parsed.stats = parsed.stats || {};
+          career = parsed;
+        }
       }
     } catch (e) { career = null; }
     return career;
@@ -405,8 +421,22 @@
     if (!career) { status.textContent = me ? 'No career started.' : 'Sign in to start a career.'; area.classList.add('hidden'); return; }
     status.textContent = 'Career: ' + career.playerName + ' | Record ' + career.wins + '-' + career.losses + ' | Rep ' + career.reputation + (career.title ? ' | ' + career.title : '');
     area.classList.remove('hidden');
-    const node = WC.currentNode ? WC.currentNode(career) : null;
-    if (!node) { area.classList.add('hidden'); return; }
+    let node = null;
+    try {
+      node = WC.currentNode ? WC.currentNode(career) : null;
+    } catch (e) {
+      console.error('currentNode error', e);
+      node = null;
+    }
+    if (!node) {
+      // Stale/broken career state → reset gracefully
+      console.warn('Career currentNode was invalid; resetting.');
+      const fallback = (wrestler && wrestler.name) ? wrestler.name : (me ? (me.display || me.username) : 'Wrestler');
+      career = WC.defaultCareer(fallback, stats);
+      saveCareer();
+      node = WC.currentNode(career);
+      if (!node) { area.classList.add('hidden'); return; }
+    }
     const t = byId('careerTitle'); if (t) t.textContent = node.title || '';
     const txt = byId('careerText'); if (txt) txt.textContent = node.text || '';
     const portraitEl = byId('careerPortrait');
@@ -471,23 +501,27 @@
 
   function startCareerMatch(node) {
     if (!WG || !WC) return;
-    if (!node || !node.opponent) return;
+    if (!node) { const mr = byId('matchResult'); if (mr) mr.textContent = 'Could not start match (story node missing). Try starting a new career.'; return; }
+    if (!node.opponent) { const mr = byId('matchResult'); if (mr) mr.textContent = 'No opponent set for this match.'; return; }
     try {
-      const opp = WG.createWrestler ? WG.createWrestler({ name: node.opponent.name, image: node.opponent.image || '', stats: node.opponent.stats }) : { name: node.opponent.name, image: '', stats: node.opponent.stats };
+      const oppImg = (node.opponent.image && typeof node.opponent.image === 'string') ? node.opponent.image : '';
+      const opp = WG.createWrestler ? WG.createWrestler({ name: node.opponent.name || 'Opponent', image: oppImg, stats: node.opponent.stats || {} }) : { name: node.opponent.name || 'Opponent', image: oppImg, stats: node.opponent.stats || {} };
       const baseMe = me || { username: 'You', display: career ? career.playerName : 'You' };
-      const myW = WG.fromProfile ? WG.fromProfile(baseMe) : { name: baseMe.display || baseMe.username, image: '', stats };
-      myW.stats = WG.normalizeStats ? WG.normalizeStats(Object.assign({}, stats, myW.stats || {})) : Object.assign({}, stats);
-      myW.name = career ? career.playerName : myW.name;
+      const myW = WG.fromProfile ? WG.fromProfile(baseMe) : { name: baseMe.display || baseMe.username, image: '', stats: stats || {} };
+      const mergedStats = Object.assign({}, WG.defaultStats(), stats || {}, myW.stats || {});
+      myW.stats = WG.normalizeStats ? WG.normalizeStats(mergedStats) : mergedStats;
+      myW.name = (career && career.playerName) ? career.playerName : (myW.name || 'You');
       if (wrestler && wrestler.nickname) myW.nickname = wrestler.nickname;
       match = WG.newMatch(myW, opp);
+      if (!match || !match.player || !match.opponent) throw new Error('match creation returned invalid state');
       const ma = byId('matchArea');
       if (ma) ma.classList.remove('hidden');
-      const mr = byId('matchResult'); if (mr) mr.textContent = 'Career match in progress...';
       mountMatchCards();
       renderMatch();
+      const mr = byId('matchResult'); if (mr) mr.textContent = 'Career match in progress...';
     } catch (e) {
       console.error('startCareerMatch failed', e);
-      const mr = byId('matchResult'); if (mr) mr.textContent = 'Failed to start career match.';
+      const mr = byId('matchResult'); if (mr) mr.textContent = 'Failed to start career match: ' + (e && e.message ? e.message : 'unknown error') + '. Try resetting your career.';
     }
   }
 
