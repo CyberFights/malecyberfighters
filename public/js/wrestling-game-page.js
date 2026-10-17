@@ -13,6 +13,8 @@
   let match = null;
   let career = null;
   let careerMatchNode = null;
+  let gymEnergy = { current: 0, max: 10, nextInMs: 0 };
+  let energyTicker = null;
 
   let playerCard = null;
   let opponentCard = null;
@@ -110,8 +112,15 @@
       if (app) app.classList.remove('hidden');
       try {
         const s = await api('/api/wrestling/stats');
-        if (s && s.ok && s.stats) { stats = s.stats; wrestler = s.wrestler || wrestler; }
+        if (s && s.ok && s.stats) {
+          stats = s.stats;
+          wrestler = s.wrestler || wrestler;
+          gymEnergy.current = (s.gymEnergy != null) ? s.gymEnergy : (stats.gymEnergy != null ? stats.gymEnergy : 0);
+          gymEnergy.max = (s.gymEnergyMax != null) ? s.gymEnergyMax : (stats.gymEnergyMax != null ? stats.gymEnergyMax : 10);
+          gymEnergy.nextInMs = s.gymEnergyNextInMs || 0;
+        }
       } catch (e) {}
+      startEnergyTicker();
       if (wrestler) {
         const n = byId('wrestlerName');
         if (n) n.value = wrestler.name || '';
@@ -149,6 +158,62 @@
     }
   }
 
+  function fmtTime(ms) {
+    if (ms <= 0) return 'full';
+    const s = Math.ceil(ms / 1000);
+    if (s < 60) return s + 's';
+    const m = Math.floor(s / 60), rs = s % 60;
+    return m + 'm' + (rs ? ' ' + rs + 's' : '');
+  }
+
+  function renderEnergyBar() {
+    const wrap = byId('gymEnergy');
+    if (!wrap) return;
+    const cur = gymEnergy.current|0, max = gymEnergy.max|0;
+    const pct = max ? (cur/max*100) : 0;
+    const nextLabel = (cur >= max) ? 'Energy full' : ('Next energy in ' + fmtTime(gymEnergy.nextInMs));
+    wrap.innerHTML =
+      '<div class="gym-energy-label">' +
+        '<span>Gym Energy</span>' +
+        '<span class="gym-energy-num"><b>' + cur + '</b>/' + max + '</span>' +
+      '</div>' +
+      '<div class="gym-energy-bar"><i style="width:' + pct + '%"></i></div>' +
+      '<div class="gym-energy-sub">' + nextLabel + '</div>';
+  }
+
+  function startEnergyTicker() {
+    if (energyTicker) clearInterval(energyTicker);
+    energyTicker = setInterval(() => {
+      if (gymEnergy.current >= gymEnergy.max) {
+        gymEnergy.nextInMs = 0;
+        const sub = document.querySelector('.gym-energy-sub');
+        if (sub && sub.textContent !== 'Energy full') { sub.textContent = 'Energy full'; }
+        return;
+      }
+      if (gymEnergy.nextInMs > 0) {
+        gymEnergy.nextInMs -= 1000;
+        if (gymEnergy.nextInMs <= 0) {
+          gymEnergy.current = Math.min(gymEnergy.max, gymEnergy.current + 1);
+          gymEnergy.nextInMs = (gymEnergy.current >= gymEnergy.max) ? 0 : (WG.GYM_ENERGY_REGEN_MS || 5*60*1000);
+          renderStats();
+        } else {
+          const sub = document.querySelector('.gym-energy-sub');
+          if (sub) sub.textContent = 'Next energy in ' + fmtTime(gymEnergy.nextInMs);
+          document.querySelectorAll('[data-train]').forEach(btn => {
+            const st = btn.getAttribute('data-train');
+            const cost = WG.trainCost ? WG.trainCost((stats && stats[st]) || 0) : 1;
+            const shouldDisable = gymEnergy.current < cost;
+            if (btn.disabled !== shouldDisable) btn.disabled = shouldDisable;
+            const costTag = btn.nextSibling;
+            if (costTag && costTag.classList && costTag.classList.contains('train-cost')) {
+              costTag.style.opacity = (gymEnergy.current < cost) ? '0.4' : '0.85';
+            }
+          });
+        }
+      }
+    }, 1000);
+  }
+
   function renderStats() {
     const list = byId('statsList');
     if (!list) return;
@@ -159,23 +224,43 @@
       row.className = 'stat';
       const val = (stats && stats[st] != null) ? stats[st] : 5;
       const label = st.charAt(0).toUpperCase() + st.slice(1);
-      row.innerHTML = '<span>'+label+' — <b>'+val+'</b></span><span><button data-train="'+st+'" type="button">Train</button></span>';
+      const cost = WG.trainCost ? WG.trainCost(val) : 1;
+      const maxed = val >= 100;
+      const canAfford = gymEnergy.current >= cost && !maxed;
+      row.innerHTML = '<span>'+label+' — <b>'+val+'</b> ' +
+        (maxed ? '<span class="stat-max">(MAX)</span>' : '') +
+        '</span><span class="train-row">' +
+        '<span class="train-cost" style="opacity:' + (canAfford ? 0.85 : 0.4) + '">' + cost + '⚡</span>' +
+        '<button data-train="'+st+'" type="button"' + (canAfford ? '' : ' disabled') + '>Train</button>' +
+        '</span>';
       list.appendChild(row);
     });
     list.querySelectorAll('[data-train]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const st = btn.getAttribute('data-train');
-        btn.disabled = true;
+        list.querySelectorAll('[data-train]').forEach(b => b.disabled = true);
         try {
           const r = await api('/api/wrestling/train', { method:'POST', body: JSON.stringify({ stat: st, amount: 1 }) });
           if (r && r.ok && r.stats) {
             stats = r.stats;
+            gymEnergy.current = (r.gymEnergy != null) ? r.gymEnergy : gymEnergy.current;
+            gymEnergy.max = (r.gymEnergyMax != null) ? r.gymEnergyMax : gymEnergy.max;
+            gymEnergy.nextInMs = r.gymEnergyNextInMs || 0;
             renderStats();
             if (editCard) editCard.update({ stats: stats });
-          } else alert((r && r.error) || 'train failed');
-        } finally { btn.disabled = false; }
+          } else if (r && r.error === 'no_energy') {
+            gymEnergy.nextInMs = r.retryAfterMs || gymEnergy.nextInMs;
+            renderStats();
+          } else {
+            alert((r && r.error) || 'train failed');
+            renderStats();
+          }
+        } catch (e) {
+          renderStats();
+        }
       });
     });
+    renderEnergyBar();
   }
 
   const saveBtn = byId('saveWrestler');

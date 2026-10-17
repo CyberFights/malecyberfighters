@@ -31,11 +31,53 @@ const STARTING_STAT = 5;
 const MAX_STAT = 100;
 const TRAIN_AMOUNT = 1;
 
+// ---- Gym energy system ----
+// Energy regenerates over time. Training costs energy that scales with the
+// current value of the stat being trained — higher stats need more recovery.
+const GYM_ENERGY_MAX = 10;
+const GYM_ENERGY_REGEN_MS = 5 * 60 * 1000; // 1 energy every 5 minutes
+const GYM_ENERGY_START = GYM_ENERGY_MAX;   // new users start full
+
+function trainCost(statValue) {
+  // 1 energy up to 24, 2 up to 49, 3 up to 74, 4 from 75+
+  const v = Math.max(0, Math.min(STAT_MAX, Number(statValue) || 0));
+  if (v >= 75) return 4;
+  return 1 + Math.floor(v / 25);
+}
+
+// Returns { current, max, nextInMs } based on stored snapshot + elapsed time.
+function gymEnergyState(statsObj, now) {
+  const s = statsObj || {};
+  const max = (typeof s.gymEnergyMax === 'number' && s.gymEnergyMax > 0) ? s.gymEnergyMax : GYM_ENERGY_MAX;
+  const nowTs = (typeof now === 'number') ? now : Date.now();
+  let current = (typeof s.gymEnergy === 'number') ? s.gymEnergy : GYM_ENERGY_START;
+  let last = (typeof s.gymEnergyAt === 'number') ? s.gymEnergyAt : nowTs;
+  if (current < 0) current = 0;
+  if (current > max) current = max;
+  if (last > nowTs) last = nowTs;
+  if (current < max) {
+    const elapsed = nowTs - last;
+    const gained = Math.floor(elapsed / GYM_ENERGY_REGEN_MS);
+    if (gained > 0) {
+      current = Math.min(max, current + gained);
+      last = last + gained * GYM_ENERGY_REGEN_MS;
+    }
+  } else {
+    last = nowTs;
+  }
+  const nextInMs = (current >= max) ? 0 : Math.max(0, GYM_ENERGY_REGEN_MS - (nowTs - last));
+  return { current: current, max: max, lastAt: last, nextInMs: nextInMs };
+}
+
 const ACTIONS = ['strike', 'grapple', 'taunt', 'block', 'rest'];
 
 function defaultStats() {
   const out = {};
   STATS.forEach(function (s) { out[s] = STARTING_STAT; });
+  // seed gym energy at full, timestamped now so regen works from "first visit"
+  out.gymEnergy = GYM_ENERGY_START;
+  out.gymEnergyMax = GYM_ENERGY_MAX;
+  out.gymEnergyAt = Date.now();
   return out;
 }
 
@@ -51,6 +93,17 @@ function normalizeStats(value) {
   const out = defaultStats();
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     if (value.wrestler && typeof value.wrestler === 'object') out.wrestler = value.wrestler;
+    // Preserve gym energy fields if present and valid, otherwise leave defaults
+    if (typeof value.gymEnergy === 'number' && isFinite(value.gymEnergy)) {
+      out.gymEnergy = Math.max(0, Math.min(out.gymEnergyMax, value.gymEnergy));
+    }
+    if (typeof value.gymEnergyMax === 'number' && isFinite(value.gymEnergyMax) && value.gymEnergyMax > 0) {
+      out.gymEnergyMax = Math.max(1, Math.round(value.gymEnergyMax));
+      if (out.gymEnergy > out.gymEnergyMax) out.gymEnergy = out.gymEnergyMax;
+    }
+    if (typeof value.gymEnergyAt === 'number' && isFinite(value.gymEnergyAt)) {
+      out.gymEnergyAt = value.gymEnergyAt;
+    }
     STATS.forEach(function (stat) {
       if (Object.prototype.hasOwnProperty.call(value, stat)) {
         const n = Number(value[stat]);
@@ -98,6 +151,49 @@ function train(stats, stat, amount) {
   if (amt <= 0) return { ok: false, error: 'invalid_amount' };
   s[target] = Math.min(STAT_MAX, s[target] + Math.round(amt));
   return { ok: true, stats: s, stat: target, amount: Math.round(amt) };
+}
+
+// Spend gym energy to train. `now` defaults to Date.now() on the server/browser.
+// Rejects with error 'no_energy' (and returns retryAfterMs) when the user doesn't
+// have enough energy even after regen. Career mode calls the free `train()`
+// directly, bypassing gym energy.
+function gymTrain(stats, stat, amount, now) {
+  const target = String(stat || '').trim().toLowerCase();
+  if (STATS.indexOf(target) === -1) return { ok: false, error: 'invalid_stat' };
+  const nowTs = (typeof now === 'number') ? now : Date.now();
+  // Apply regen to get current energy state from stored values
+  const regen = gymEnergyState(stats, nowTs);
+  const s = normalizeStats(stats);
+  // Carry regen-calculated current energy forward as the new starting point
+  s.gymEnergy = regen.current;
+  s.gymEnergyAt = regen.lastAt;
+  // Cost is based on the stat value BEFORE increment
+  const beforeVal = s[target];
+  if (beforeVal >= STAT_MAX) return { ok: false, error: 'stat_max' };
+  const cost = trainCost(beforeVal);
+  if (s.gymEnergy < cost) {
+    // Compute how long until enough energy regens
+    const need = cost - s.gymEnergy;
+    const retryAfterMs = (need > 0 ? need : 1) * GYM_ENERGY_REGEN_MS - (nowTs - regen.lastAt);
+    return { ok: false, error: 'no_energy', cost: cost, gymEnergy: s.gymEnergy, gymEnergyMax: s.gymEnergyMax, retryAfterMs: Math.max(0, retryAfterMs) };
+  }
+  // Apply the stat gain
+  const amt = isFinite(Number(amount)) ? Math.round(Number(amount)) : TRAIN_AMOUNT;
+  if (amt <= 0) return { ok: false, error: 'invalid_amount' };
+  s[target] = Math.min(STAT_MAX, beforeVal + amt);
+  // Spend energy. If the stat crossed a cost tier this very train, we still
+  // charged the pre-tier cost, which is fine (one-time grace).
+  s.gymEnergy = Math.max(0, s.gymEnergy - cost);
+  return {
+    ok: true,
+    stats: s,
+    stat: target,
+    amount: amt,
+    cost: cost,
+    gymEnergy: s.gymEnergy,
+    gymEnergyMax: s.gymEnergyMax,
+    nextEnergyInMs: (s.gymEnergy >= s.gymEnergyMax) ? 0 : GYM_ENERGY_REGEN_MS - (nowTs - s.gymEnergyAt)
+  };
 }
 
 function trainAll(stats, amount) {
@@ -281,6 +377,8 @@ const api = {
   STARTING_STAT: STARTING_STAT,
   MAX_STAT: MAX_STAT,
   TRAIN_AMOUNT: TRAIN_AMOUNT,
+  GYM_ENERGY_MAX: GYM_ENERGY_MAX,
+  GYM_ENERGY_REGEN_MS: GYM_ENERGY_REGEN_MS,
   defaultStats: defaultStats,
   normalizeStats: normalizeStats,
   cleanName: cleanName,
@@ -288,6 +386,9 @@ const api = {
   fromProfile: fromProfile,
   train: train,
   trainAll: trainAll,
+  gymTrain: gymTrain,
+  trainCost: trainCost,
+  gymEnergyState: gymEnergyState,
   pickOpponent: pickOpponent,
   opponentWrestler: opponentWrestler,
   hpFor: hpFor,

@@ -37,6 +37,16 @@
   .career-portrait { flex:0 0 160px; width:160px; height:200px; object-fit:cover; border-radius:12px; border:2px solid #ffd76a66; box-shadow:0 10px 24px rgba(0,0,0,0.5); background:#0b1220; }
   .career-portrait-wrap p { flex:1 1 260px; margin:0; line-height:1.5; }
   @media (max-width:600px) { .career-portrait { flex:0 0 120px; width:120px; height:150px; } }
+  .gym-energy { margin-bottom:12px; padding:10px 12px; background:#0b1220; border:1px solid #1e293b; border-radius:10px; }
+  .gym-energy-label { display:flex; justify-content:space-between; align-items:baseline; font-size:13px; color:#94a3b8; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:6px; }
+  .gym-energy-num { font-size:15px; color:#e2e8f0; font-variant-numeric:tabular-nums; }
+  .gym-energy-num b { color:#ffd76a; font-size:18px; }
+  .gym-energy-bar { height:10px; background:#1e293b; border-radius:6px; overflow:hidden; border:1px solid #334155; }
+  .gym-energy-bar > i { display:block; height:100%; background:linear-gradient(90deg,#f59e0b,#facc15); box-shadow:0 0 8px rgba(250,204,21,0.5); width:0%; transition:width 300ms ease; }
+  .gym-energy-sub { margin-top:6px; font-size:12px; color:#64748b; }
+  .stat-max { font-size:11px; color:#22c55e; margin-left:6px; letter-spacing:0.08em; }
+  .train-row { display:flex; align-items:center; gap:8px; }
+  .train-cost { font-size:12px; color:#facc15; font-weight:700; min-width:28px; text-align:right; }
 </style>
 </head>
 <body>
@@ -82,8 +92,9 @@
 
     <div class="card">
       <h2>Gym — Train Your Stats</h2>
+      <div id="gymEnergy" class="gym-energy"></div>
       <div id="statsList"></div>
-      <p class="muted">Each training session adds +1 to the chosen stat (max 100).</p>
+      <p class="muted">Each training session adds +1 to the chosen stat (max 100). Higher stats cost more energy. Energy regenerates 1 point every 5 minutes, up to 10.</p>
     </div>
 
     <div class="card">
