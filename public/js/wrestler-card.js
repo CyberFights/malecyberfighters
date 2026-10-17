@@ -108,9 +108,10 @@
     // Optional HP/stamina bars under the card
     const container = el('div', 'wc-card-host');
     container.appendChild(root);
+    let bars = null;
 
     if (opts.maxHp != null || opts.maxStamina != null) {
-      const bars = el('div', 'wc-bars');
+      bars = el('div', 'wc-bars');
       if (opts.maxHp != null) {
         const hp = Math.max(0, Math.min(opts.maxHp, Number(opts.hp) || 0));
         const pct = opts.maxHp > 0 ? (hp / opts.maxHp * 100) : 0;
@@ -162,7 +163,19 @@
       if (opts.maxHp != null || patch.maxHp != null) {
         const maxHp = patch.maxHp != null ? patch.maxHp : opts.maxHp;
         const hp = patch.hp != null ? patch.hp : opts.hp;
-        const row = bars.querySelector('.wc-bar-row.hp');
+        if (!bars && maxHp != null) {
+          bars = el('div', 'wc-bars');
+          container.appendChild(bars);
+        }
+        let row = bars ? bars.querySelector('.wc-bar-row.hp') : null;
+        if (!row && bars && maxHp != null) {
+          row = el('div', 'wc-bar-row hp');
+          row.innerHTML =
+            '<span class="wc-bar-lab">HP</span>' +
+            '<span class="wc-bar"><i></i></span>' +
+            '<span class="wc-bar-num"></span>';
+          bars.appendChild(row);
+        }
         if (row && maxHp > 0) {
           const fill = row.querySelector('.wc-bar > i');
           const num = row.querySelector('.wc-bar-num');
@@ -173,7 +186,19 @@
       if (opts.maxStamina != null || patch.maxStamina != null) {
         const maxS = patch.maxStamina != null ? patch.maxStamina : opts.maxStamina;
         const s = patch.stamina != null ? patch.stamina : opts.stamina;
-        const row = bars.querySelector('.wc-bar-row.stam');
+        if (!bars && maxS != null) {
+          bars = el('div', 'wc-bars');
+          container.appendChild(bars);
+        }
+        let row = bars ? bars.querySelector('.wc-bar-row.stam') : null;
+        if (!row && bars && maxS != null) {
+          row = el('div', 'wc-bar-row stam');
+          row.innerHTML =
+            '<span class="wc-bar-lab">STAM</span>' +
+            '<span class="wc-bar"><i></i></span>' +
+            '<span class="wc-bar-num"></span>';
+          bars.appendChild(row);
+        }
         if (row && maxS > 0) {
           const fill = row.querySelector('.wc-bar > i');
           const num = row.querySelector('.wc-bar-num');
