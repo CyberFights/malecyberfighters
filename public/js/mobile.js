@@ -257,10 +257,56 @@ function mobileImgSrc(value) {
      Session
      --------------------------------------------------------------------- */
   const SESSION_KEY = "cw_session_v1";
+  const _mobileMemoryStore = {};
+
+  function safeMobileStorageGet(key) {
+    try {
+      if (typeof localStorage !== "undefined") {
+        const v = localStorage.getItem(key);
+        if (v !== null && v !== undefined) return v;
+      }
+    } catch (e) {}
+    try {
+      if (typeof sessionStorage !== "undefined") {
+        const v = sessionStorage.getItem(key);
+        if (v !== null && v !== undefined) return v;
+      }
+    } catch (e) {}
+    return Object.prototype.hasOwnProperty.call(_mobileMemoryStore, key) ? _mobileMemoryStore[key] : null;
+  }
+
+  function safeMobileStorageSet(key, value) {
+    const str = String(value);
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem(key, str);
+      }
+    } catch (e) {}
+    try {
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.setItem(key, str);
+      }
+    } catch (e) {}
+    _mobileMemoryStore[key] = str;
+  }
+
+  function safeMobileStorageRemove(key) {
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.removeItem(key);
+      }
+    } catch (e) {}
+    try {
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.removeItem(key);
+      }
+    } catch (e) {}
+    delete _mobileMemoryStore[key];
+  }
 
   function getSession() {
     try {
-      const raw = localStorage.getItem(SESSION_KEY);
+      const raw = safeMobileStorageGet(SESSION_KEY);
       return raw ? JSON.parse(raw) : null;
     } catch (e) {
       return null;
@@ -269,14 +315,14 @@ function mobileImgSrc(value) {
 
   function setSession(user) {
     if (!user) {
-      localStorage.removeItem(SESSION_KEY);
-      localStorage.removeItem("currentUser");
+      safeMobileStorageRemove(SESSION_KEY);
+      safeMobileStorageRemove("currentUser");
       clearSessionToken();
       announceSessionChange(null);
       return;
     }
-    localStorage.setItem(SESSION_KEY, JSON.stringify(user));
-    localStorage.setItem("currentUser", JSON.stringify(user));
+    safeMobileStorageSet(SESSION_KEY, JSON.stringify(user));
+    safeMobileStorageSet("currentUser", JSON.stringify(user));
     announceSessionChange(user);
   }
 
@@ -296,16 +342,16 @@ function mobileImgSrc(value) {
   const TOKEN_KEY = "cw_token_v1";
 
   function setSessionToken(token) {
-    if (token) localStorage.setItem(TOKEN_KEY, String(token));
-    else localStorage.removeItem(TOKEN_KEY);
+    if (token) safeMobileStorageSet(TOKEN_KEY, String(token));
+    else safeMobileStorageRemove(TOKEN_KEY);
   }
 
   function getSessionToken() {
-    try { return localStorage.getItem(TOKEN_KEY) || null; } catch (e) { return null; }
+    try { return safeMobileStorageGet(TOKEN_KEY) || null; } catch (e) { return null; }
   }
 
   function clearSessionToken() {
-    try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+    safeMobileStorageRemove(TOKEN_KEY);
   }
 
   /** Headers carrying the session where the cookie cannot (cross-origin app). */
@@ -742,9 +788,7 @@ function mobileImgSrc(value) {
         setSessionToken(data.token);
         setSession(data.user);
       } catch (e) {
-        console.error("Login succeeded, but the session could not be saved in this browser:", e);
-        setError(errEl, "Login succeeded, but this browser could not save your session. Check storage settings and try again.");
-        return;
+        console.warn("Session could not be saved to primary storage, continuing with session:", e);
       }
 
       // Authentication succeeded. A client-side startup exception should not
@@ -1746,7 +1790,7 @@ function mobileImgSrc(value) {
 
   function getUnreadMap() {
     try {
-      return JSON.parse(localStorage.getItem(DM_UNREAD_KEY) || "{}");
+      return JSON.parse(safeMobileStorageGet(DM_UNREAD_KEY) || "{}");
     } catch (e) {
       return {};
     }
@@ -1754,7 +1798,7 @@ function mobileImgSrc(value) {
 
   function saveUnreadMap(map) {
     try {
-      localStorage.setItem(DM_UNREAD_KEY, JSON.stringify(map || {}));
+      safeMobileStorageSet(DM_UNREAD_KEY, JSON.stringify(map || {}));
     } catch (e) {
       // Private mode / quota — the in-memory counters still work.
     }
@@ -3026,7 +3070,7 @@ socket.on("connect", () => {
 
 socket.on("forceLogout", ({ reason } = {}) => {
   if (typeof clearSession === "function") clearSession();
-  localStorage.removeItem("currentUser");
+  safeMobileStorageRemove("currentUser");
 
   // MOBILE: update mobile UI elements instead of desktop profile card
   if (window.updateUIForSession) updateUIForSession();
@@ -4349,7 +4393,9 @@ $("editSubmit").addEventListener("click", async () => {
 
     // Update session + localStorage
     setSession(data.user);
-    localStorage.setItem("currentUser", JSON.stringify(data.user));
+    try {
+      safeMobileStorageSet("currentUser", JSON.stringify(data.user));
+    } catch (e) {}
 
     // MOBILE: update meCard instead of desktop userProfileCard
     if (window.updateProfileCard) updateProfileCard(data.user);

@@ -35,7 +35,12 @@ socket.on("connect", () => {
  */
 function dropRejectedSession() {
   if (typeof clearSession === "function") clearSession();
-  localStorage.removeItem("currentUser");
+  if (typeof safeStorageRemove === "function") {
+    safeStorageRemove("currentUser");
+  } else {
+    try { localStorage.removeItem("currentUser"); } catch (e) {}
+    try { sessionStorage.removeItem("currentUser"); } catch (e) {}
+  }
   if (window.updateUIForSession) updateUIForSession();
   if (window.updateProfileCard) updateProfileCard(null);
   if (window.updateDMListSidebar) updateDMListSidebar();

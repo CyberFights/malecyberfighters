@@ -51,7 +51,10 @@ function syncExtraPhotosToClient(photos) {
   if (current && current.username === editingProfileUsername) {
     const updatedSession = { ...current, extraPhotos: editExtraPhotos };
     setSession(updatedSession);
-    localStorage.setItem("currentUser", JSON.stringify(updatedSession));
+    try {
+      if (typeof safeStorageSet === "function") safeStorageSet("currentUser", JSON.stringify(updatedSession));
+      else localStorage.setItem("currentUser", JSON.stringify(updatedSession));
+    } catch (_) {}
 
     const selfGallery = document.getElementById("selfProfilePhotos");
     if (selfGallery && window.renderProfilePhotoGallery) {
@@ -371,7 +374,10 @@ $("editSubmit").addEventListener("click", async () => {
     }
 
     setSession(data.user);
-    localStorage.setItem("currentUser", JSON.stringify(data.user));
+    try {
+      if (typeof safeStorageSet === "function") safeStorageSet("currentUser", JSON.stringify(data.user));
+      else localStorage.setItem("currentUser", JSON.stringify(data.user));
+    } catch (_) {}
     if (window.updateProfileCard) window.updateProfileCard(data.user);
     hide($("modalEditProfile"));
   } catch (error) {

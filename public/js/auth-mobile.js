@@ -88,16 +88,15 @@ async function doLogin(){
   }
 
   try {
-    setSessionToken(data.token);
-    setSession(data.user);
-    localStorage.setItem('currentUser', JSON.stringify(data.user));
+    if (typeof setSessionToken === 'function') setSessionToken(data.token);
+    if (typeof setSession === 'function') setSession(data.user);
+    if (typeof safeStorageSet === 'function') {
+      safeStorageSet('currentUser', JSON.stringify(data.user));
+    } else {
+      try { localStorage.setItem('currentUser', JSON.stringify(data.user)); } catch (e) {}
+    }
   } catch(e){
-    console.error('Login succeeded, but the session could not be saved in this browser:', e);
-    err.textContent = 'Login succeeded, but this browser could not save your session. Check storage settings and try again.';
-    err.style.display = 'block';
-    loginRequestPending = false;
-    if (submit) submit.disabled = false;
-    return;
+    console.warn('Session could not be persisted to primary storage, continuing with session:', e);
   }
 
   // From here the server accepted the login. Keep socket/UI initialization
@@ -136,7 +135,12 @@ function logout(){
   try { if (window.socket && window.socket.connected) window.socket.emit('logout'); } catch(e){ /* ignore */ }
 
   clearSession();
-  localStorage.removeItem('currentUser');
+  if (typeof safeStorageRemove === 'function') {
+    safeStorageRemove('currentUser');
+  } else {
+    try { localStorage.removeItem('currentUser'); } catch (e) {}
+    try { sessionStorage.removeItem('currentUser'); } catch (e) {}
+  }
 
   // MOBILE: hide mainUI and all panels, show authScreen
   const mainUI = $('mainUI');

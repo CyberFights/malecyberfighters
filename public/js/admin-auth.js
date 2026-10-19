@@ -6,7 +6,19 @@ window.adminSessionKey = null;
 
 function getAdminEligibleUser() {
   if (typeof getSession === "function") return getSession();
-  return JSON.parse(localStorage.getItem("cw_session_v1") || localStorage.getItem("currentUser") || "null");
+  try {
+    const raw = (typeof window !== "undefined" && typeof window.safeStorageGet === "function")
+      ? (window.safeStorageGet("cw_session_v1") || window.safeStorageGet("currentUser"))
+      : (localStorage.getItem("cw_session_v1") || localStorage.getItem("currentUser"));
+    return JSON.parse(raw || "null");
+  } catch (e) {
+    try {
+      const raw = sessionStorage.getItem("cw_session_v1") || sessionStorage.getItem("currentUser");
+      return JSON.parse(raw || "null");
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 function isAdminEligible() {

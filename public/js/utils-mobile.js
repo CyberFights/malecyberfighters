@@ -70,16 +70,63 @@ const STORAGE_DM_UNREAD = 'cw_dm_unread';
    actually identifies this session to the server. Only the token is a
    credential; the record is display data. See utils.js for the full note.
 -------------------------------------------------------------------- */
+const _memoryStorage = {};
+
+function safeStorageGet(key){
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const v = localStorage.getItem(key);
+      if (v !== null && v !== undefined) return v;
+    }
+  } catch (e) {}
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      const v = sessionStorage.getItem(key);
+      if (v !== null && v !== undefined) return v;
+    }
+  } catch (e) {}
+  return Object.prototype.hasOwnProperty.call(_memoryStorage, key) ? _memoryStorage[key] : null;
+}
+
+function safeStorageSet(key, value){
+  const str = String(value);
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(key, str);
+    }
+  } catch (e) {}
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(key, str);
+    }
+  } catch (e) {}
+  _memoryStorage[key] = str;
+}
+
+function safeStorageRemove(key){
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(key);
+    }
+  } catch (e) {}
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem(key);
+    }
+  } catch (e) {}
+  delete _memoryStorage[key];
+}
+
 const STORAGE_TOKEN = 'cw_token_v1';
 
 function setSessionToken(token){
-  if (token) localStorage.setItem(STORAGE_TOKEN, String(token));
-  else localStorage.removeItem(STORAGE_TOKEN);
+  if (token) safeStorageSet(STORAGE_TOKEN, String(token));
+  else safeStorageRemove(STORAGE_TOKEN);
 }
 function getSessionToken(){
-  try { return localStorage.getItem(STORAGE_TOKEN) || null; } catch(e){ return null; }
+  try { return safeStorageGet(STORAGE_TOKEN) || null; } catch(e){ return null; }
 }
-function clearSessionToken(){ localStorage.removeItem(STORAGE_TOKEN); }
+function clearSessionToken(){ safeStorageRemove(STORAGE_TOKEN); }
 
 function authHeaders(extra){
   const token = getSessionToken();
@@ -106,25 +153,43 @@ function announceSession(user){
 }
 
 function setSession(user){
-  localStorage.setItem(STORAGE_SESSION, JSON.stringify(user));
+  if (user) safeStorageSet(STORAGE_SESSION, JSON.stringify(user));
+  else safeStorageRemove(STORAGE_SESSION);
   announceSession(user);
 }
-function getSession(){ return JSON.parse(localStorage.getItem(STORAGE_SESSION) || 'null'); }
+function getSession(){
+  try {
+    const raw = safeStorageGet(STORAGE_SESSION);
+    return raw ? JSON.parse(raw) : null;
+  } catch(e){
+    return null;
+  }
+}
 function clearSession(){
-  localStorage.removeItem(STORAGE_SESSION);
+  safeStorageRemove(STORAGE_SESSION);
   clearSessionToken();
   announceSession(null);
 }
 
+window.safeStorageGet = safeStorageGet;
+window.safeStorageSet = safeStorageSet;
+window.safeStorageRemove = safeStorageRemove;
 window.setSessionToken = setSessionToken;
 window.getSessionToken = getSessionToken;
 window.clearSessionToken = clearSessionToken;
+window.setSession = setSession;
+window.getSession = getSession;
+window.clearSession = clearSession;
 window.authHeaders = authHeaders;
 window.authFetch = authFetch;
 
 /* PUBLIC CHAT -------------------------------------------------------- */
-function loadPublic(){ return JSON.parse(localStorage.getItem(STORAGE_PUBLIC) || '[]'); }
-function savePublic(arr){ localStorage.setItem(STORAGE_PUBLIC, JSON.stringify(arr)); }
+function loadPublic(){
+  try { return JSON.parse(safeStorageGet(STORAGE_PUBLIC) || '[]'); } catch(e){ return []; }
+}
+function savePublic(arr){
+  try { safeStorageSet(STORAGE_PUBLIC, JSON.stringify(arr)); } catch(e){}
+}
 
 /* DM STORAGE --------------------------------------------------------- */
 function pmKey(a, b) {
@@ -133,21 +198,21 @@ function pmKey(a, b) {
 
 function loadDM(a, b) {
   const key = pmKey(a, b);
-  return JSON.parse(localStorage.getItem(STORAGE_DM_PREFIX + key) || '[]');
+  try { return JSON.parse(safeStorageGet(STORAGE_DM_PREFIX + key) || '[]'); } catch(e){ return []; }
 }
 
 function saveDM(a, b, arr) {
   const key = pmKey(a, b);
-  localStorage.setItem(STORAGE_DM_PREFIX + key, JSON.stringify(arr));
+  try { safeStorageSet(STORAGE_DM_PREFIX + key, JSON.stringify(arr)); } catch(e){}
 }
 
 /* DM UNREAD ---------------------------------------------------------- */
 function getUnreadMap() {
-  return JSON.parse(localStorage.getItem(STORAGE_DM_UNREAD) || '{}');
+  try { return JSON.parse(safeStorageGet(STORAGE_DM_UNREAD) || '{}'); } catch(e){ return {}; }
 }
 
 function saveUnreadMap(map) {
-  localStorage.setItem(STORAGE_DM_UNREAD, JSON.stringify(map));
+  try { safeStorageSet(STORAGE_DM_UNREAD, JSON.stringify(map)); } catch(e){}
   if (window.MCFUnreadBadge) window.MCFUnreadBadge.refresh();
 }
 
@@ -332,7 +397,11 @@ window.updateUIForSession = function() {
 window.addEventListener('load', () => {
   // Prefer session storage; fall back to currentUser for legacy sessions
   const sessionUser = getSession();
-  const legacyUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+  let legacyUser = null;
+  try {
+    const rawLegacy = safeStorageGet('currentUser');
+    legacyUser = rawLegacy ? JSON.parse(rawLegacy) : null;
+  } catch (e) {}
   const user = sessionUser || legacyUser;
   if (user && !sessionUser) setSession(user);
   updateProfileCard(user);
@@ -342,11 +411,11 @@ window.addEventListener('load', () => {
 const STORAGE_ROOM_UNREAD = 'cw_room_unread';
 
 function getRoomUnread() {
-  return JSON.parse(localStorage.getItem(STORAGE_ROOM_UNREAD) || '{}');
+  try { return JSON.parse(safeStorageGet(STORAGE_ROOM_UNREAD) || '{}'); } catch(e){ return {}; }
 }
 
 function saveRoomUnread(map) {
-  localStorage.setItem(STORAGE_ROOM_UNREAD, JSON.stringify(map));
+  try { safeStorageSet(STORAGE_ROOM_UNREAD, JSON.stringify(map)); } catch(e){}
   if (window.MCFUnreadBadge) window.MCFUnreadBadge.refresh();
 }
 

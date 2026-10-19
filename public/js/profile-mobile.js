@@ -144,7 +144,10 @@ $("editSubmit").addEventListener("click", async () => {
 
     // Update session + localStorage
     setSession(data.user);
-    localStorage.setItem("currentUser", JSON.stringify(data.user));
+    try {
+      if (typeof safeStorageSet === "function") safeStorageSet("currentUser", JSON.stringify(data.user));
+      else localStorage.setItem("currentUser", JSON.stringify(data.user));
+    } catch (_) {}
 
     // MOBILE: update meCard instead of desktop userProfileCard
     if (window.updateProfileCard) updateProfileCard(data.user);
