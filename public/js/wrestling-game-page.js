@@ -134,6 +134,7 @@
       renderEditCard();
       loadCareer();
       renderCareer();
+      setupMoveCategoryTabs();
 
       // Live sync when the user types / picks a photo
       const nEl = byId('wrestlerName');
@@ -356,6 +357,152 @@
     } finally { findBtn.disabled = false; }
   });
 
+  let activeMoveTab = 'holds';
+
+  function setupMoveCategoryTabs() {
+    const tabs = document.querySelectorAll('.move-tab');
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        activeMoveTab = tab.getAttribute('data-tab') || 'holds';
+        renderMovesPanel();
+      });
+    });
+  }
+
+  function getMovesForTab(tab) {
+    if (!WG) return [];
+    if (tab === 'holds') return WG.HOLDS || ['sleeper-hold', 'bearhug', 'headlock', 'full-nelson', 'hammerlock'];
+    if (tab === 'power') return WG.POWER_MOVES || ['suplex', 'powerbomb', 'chokeslam', 'spinebuster', 'piledriver'];
+    if (tab === 'submissions') return WG.SUBMISSIONS || ['boston-crab', 'figure-four', 'armbar', 'sharpshooter', 'triangle-choke'];
+    return WG.TACTICS || ['strike', 'block', 'taunt', 'rest'];
+  }
+
+  function renderMovesPanel() {
+    const panel = byId('movesPanel');
+    if (!panel || !WG || !WG.MOVES) return;
+    panel.innerHTML = '';
+    const moveIds = getMovesForTab(activeMoveTab);
+    const pStamina = (match && match.player) ? match.player.stamina : 100;
+    const isOver = match && WG.isFinished && WG.isFinished(match);
+
+    moveIds.forEach(id => {
+      const m = WG.MOVES[id];
+      if (!m) return;
+      const cost = m.staminaCost || 0;
+      const lowStam = pStamina < cost;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'move-card-btn' + (lowStam ? ' low-stamina' : '');
+      btn.setAttribute('data-action', id);
+      if (isOver) btn.disabled = true;
+
+      const costLabel = cost > 0 ? (cost + '⚡ Stamina') : 'Free';
+      const statLabel = m.primaryStat ? (m.primaryStat.toUpperCase() + (m.secondaryStat ? '+' + m.secondaryStat.toUpperCase() : '')) : '';
+
+      btn.innerHTML =
+        '<img class="move-card-thumb" src="' + (m.image || '/images/moves/headlock.png') + '" alt="' + m.name + '">' +
+        '<div class="move-card-body">' +
+          '<div class="move-card-title">' + m.name + '</div>' +
+          '<div class="move-card-meta">' +
+            '<span class="move-card-cost">' + costLabel + '</span>' +
+            (statLabel ? '<span class="move-card-stat">[' + statLabel + ']</span>' : '') +
+          '</div>' +
+          '<div class="move-card-effect">' + (m.effect || m.desc || '') + '</div>' +
+        '</div>';
+
+      btn.addEventListener('click', () => {
+        executeMatchAction(id);
+      });
+      panel.appendChild(btn);
+    });
+  }
+
+  function renderSpotlight() {
+    const spotlight = byId('matchSpotlight');
+    if (!spotlight || !match) return;
+
+    const imgEl = byId('spotlightImg');
+    const catEl = byId('spotlightCategory');
+    const titleEl = byId('spotlightTitle');
+    const tagEl = byId('spotlightTag');
+    const descEl = byId('spotlightDesc');
+    const turnTextEl = byId('spotlightTurnText');
+
+    const last = match.lastMove;
+    if (!last || !last.move) {
+      if (imgEl) imgEl.src = '/images/moves/headlock.png';
+      if (catEl) { catEl.className = 'spotlight-badge badge-hold'; catEl.textContent = 'MATCH READY'; }
+      if (titleEl) titleEl.textContent = 'Step into the Ring';
+      if (tagEl) { tagEl.className = 'spotlight-tag'; tagEl.textContent = 'ROUND ' + (match.turn || 1); }
+      if (descEl) descEl.textContent = 'Choose your move from the arsenal below. Exploit opponent weaknesses and watch your stamina!';
+      if (turnTextEl) turnTextEl.textContent = 'The bell rings! Both wrestlers circle each other looking for an opening.';
+      return;
+    }
+
+    const m = last.move;
+    if (imgEl) imgEl.src = last.image || m.image || '/images/moves/headlock.png';
+
+    if (catEl) {
+      catEl.className = 'spotlight-badge badge-' + (last.category || 'basic');
+      const catNames = { hold: 'HOLD', power: 'POWER MOVE', submission: 'SUBMISSION', basic: 'TACTIC' };
+      catEl.textContent = catNames[last.category] || 'MOVE';
+    }
+
+    if (titleEl) {
+      titleEl.textContent = last.name || m.name || 'Wrestling Action';
+    }
+
+    if (tagEl) {
+      if (last.isTapOut) {
+        tagEl.className = 'spotlight-tag tapout';
+        tagEl.textContent = '🚨 TAP OUT!';
+      } else if (last.isCrit) {
+        tagEl.className = 'spotlight-tag crit';
+        tagEl.textContent = '💥 CRITICAL SLAM!';
+      } else if (last.blocked) {
+        tagEl.className = 'spotlight-tag';
+        tagEl.textContent = '🛡️ BLOCKED!';
+      } else if (last.damage > 0) {
+        tagEl.className = 'spotlight-tag';
+        tagEl.textContent = '-' + last.damage + ' HP';
+      } else {
+        tagEl.className = 'spotlight-tag';
+        tagEl.textContent = 'DEFENSE / TACTIC';
+      }
+    }
+
+    if (descEl) {
+      descEl.textContent = m.desc || m.effect || '';
+    }
+
+    if (turnTextEl) {
+      const logs = match.log || [];
+      const recent = logs.slice(-2);
+      turnTextEl.innerHTML = recent.map(line => '<div>' + String(line).replace(/</g, '&lt;') + '</div>').join('');
+    }
+  }
+
+  function executeMatchAction(action) {
+    if (!match || !WG || !WG.isFinished || WG.isFinished(match)) return;
+    WG.resolveTurn(match, action);
+    renderMatch();
+    if (WG.isFinished(match) && career && careerMatchNode && WC && WC.resolveMatch) {
+      const won = match.status === 'player_win';
+      const r = WC.resolveMatch(career, won);
+      if (r && r.ok) {
+        careerMatchNode = null;
+        const ma = byId('matchArea');
+        if (ma) ma.classList.add('hidden');
+        match = null;
+        saveCareer();
+        renderCareer();
+        renderEditCard();
+      }
+    }
+  }
+
   function renderMatch() {
     if (!match) return;
     if (!WG || !WG.isFinished) return;
@@ -367,6 +514,8 @@
       hp: match.opponent.hp, maxHp: match.opponent.maxHp,
       stamina: match.opponent.stamina, maxStamina: match.opponent.maxStamina
     });
+    renderSpotlight();
+    renderMovesPanel();
     const log = byId('matchLog');
     if (log) {
       log.innerHTML = (match.log || []).map(l => '<div>'+String(l).replace(/</g,'&lt;')+'</div>').join('');
@@ -374,7 +523,19 @@
     }
     if (WG.isFinished(match)) {
       const mr = byId('matchResult');
-      if (mr) mr.textContent = match.status === 'player_win' ? 'You win!' : (match.status === 'opponent_win' ? 'You lose!' : 'Draw!');
+      if (mr) {
+        if (match.status === 'player_win') {
+          mr.textContent = match.winType === 'submission'
+            ? '🏆 SUBMISSION VICTORY! Your opponent tapped out!'
+            : '🏆 PIN FALL VICTORY! 1... 2... 3! You win!';
+        } else if (match.status === 'opponent_win') {
+          mr.textContent = match.winType === 'submission'
+            ? '❌ DEFEAT BY SUBMISSION! You were forced to tap out.'
+            : '❌ PIN FALL DEFEAT! Opponent wins.';
+        } else {
+          mr.textContent = 'Draw!';
+        }
+      }
     } else {
       const mr = byId('matchResult');
       if (mr) mr.textContent = '';
@@ -528,23 +689,8 @@
   (function bindActions(){
     document.querySelectorAll('[data-action]').forEach(btn => {
       btn.addEventListener('click', () => {
-        if (!match || !WG || !WG.isFinished || WG.isFinished(match)) return;
         const action = btn.getAttribute('data-action');
-        WG.resolveTurn(match, action);
-        renderMatch();
-        if (WG.isFinished(match) && career && careerMatchNode && WC && WC.resolveMatch) {
-          const won = match.status === 'player_win';
-          const r = WC.resolveMatch(career, won);
-          if (r && r.ok) {
-            careerMatchNode = null;
-            const ma = byId('matchArea');
-            if (ma) ma.classList.add('hidden');
-            match = null;
-            saveCareer();
-            renderCareer();
-            renderEditCard();
-          }
-        }
+        executeMatchAction(action);
       });
     });
   })();

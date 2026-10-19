@@ -97,7 +97,7 @@
       <p class="muted">Each training session adds +1 to the chosen stat (max 100). Higher stats cost more energy. Energy regenerates 1 point every 5 minutes, up to 10.</p>
     </div>
 
-    <div class="card">
+    <div class="card" id="matchCard">
       <h2>Match</h2>
       <div class="row">
         <button id="findOpponent" type="button">Find Random Opponent</button>
@@ -115,13 +115,34 @@
             <div id="oCard"></div>
           </div>
         </div>
-        <div class="actions">
-          <button data-action="strike" type="button">Strike</button>
-          <button data-action="grapple" type="button">Grapple</button>
-          <button data-action="taunt" type="button">Taunt</button>
-          <button data-action="block" type="button">Block</button>
-          <button data-action="rest" type="button">Rest</button>
+
+        <!-- In-Ring Action Spotlight with Dynamic Action Imagery -->
+        <div id="matchSpotlight" class="match-spotlight">
+          <div class="spotlight-media">
+            <img id="spotlightImg" class="spotlight-img" src="/images/moves/headlock.png" alt="Wrestling Action">
+            <span id="spotlightCategory" class="spotlight-badge badge-hold">HOLD</span>
+          </div>
+          <div class="spotlight-info">
+            <div class="spotlight-header">
+              <h3 id="spotlightTitle" class="spotlight-title">Ready for Action</h3>
+              <span id="spotlightTag" class="spotlight-tag">ROUND 1</span>
+            </div>
+            <p id="spotlightDesc" class="spotlight-desc">Select a hold, power move, submission, or defensive tactic below to attack.</p>
+            <div id="spotlightTurnText" class="spotlight-turn-text">Match is underway! Lock up in the center of the ring.</div>
+          </div>
         </div>
+
+        <!-- Categorized Move Arsenal -->
+        <div class="arsenal-container">
+          <div class="move-category-tabs">
+            <button class="move-tab active" data-tab="holds" type="button">🥋 Holds</button>
+            <button class="move-tab" data-tab="power" type="button">💥 Power Moves</button>
+            <button class="move-tab" data-tab="submissions" type="button">🔒 Submissions</button>
+            <button class="move-tab" data-tab="tactics" type="button">🥊 Tactics & Defense</button>
+          </div>
+          <div id="movesPanel" class="moves-grid"></div>
+        </div>
+
         <div id="matchResult"></div>
         <div class="log" id="matchLog" style="margin-top:12px;"></div>
       </div>
