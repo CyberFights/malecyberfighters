@@ -587,7 +587,11 @@ function renderPMHistory(targetUsername, messages, options) {
 
   if (prepend) return; // the caller holds the scroll position instead
   if (stickToBottom) {
-    scrollChatToBottom(body);
+    if (typeof scrollChatToBottom === "function") {
+      scrollChatToBottom(body);
+    } else {
+      body.scrollTop = body.scrollHeight;
+    }
   } else {
     body.scrollTop = prevTop + (body.scrollHeight - prevHeight);
   }

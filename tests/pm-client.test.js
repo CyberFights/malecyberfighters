@@ -60,6 +60,7 @@ async function startClient(username, { openWindowFor = null, dmHistory = null } 
   win.getSession = () => ({ username, display: username });
   win.escapeHtml = value => String(value == null ? '' : value)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  win.scrollChatToBottom = el => { if (el) el.scrollTop = el.scrollHeight; };
 
   // The DM unread counter pm.js expects from utils.js.
   const KEY = 'cw_dm_unread';

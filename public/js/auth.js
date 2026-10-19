@@ -146,14 +146,15 @@ async function doLogin(){
     try {
       // The token is the credential; the user record is only what the UI shows.
       // Store the token first so the socket upgrade below can carry it.
-      setSessionToken(data.token);
-      setSession(data.user);
-      localStorage.setItem('currentUser', JSON.stringify(data.user));
+      if (typeof setSessionToken === 'function') setSessionToken(data.token);
+      if (typeof setSession === 'function') setSession(data.user);
+      if (typeof safeStorageSet === 'function') {
+        safeStorageSet('currentUser', JSON.stringify(data.user));
+      } else {
+        try { localStorage.setItem('currentUser', JSON.stringify(data.user)); } catch (e) {}
+      }
     } catch(e){
-      console.error('Login succeeded, but the session could not be saved in this browser:', e);
-      err.textContent = 'Login succeeded, but this browser could not save your session. Check storage settings and try again.';
-      err.style.display = 'block';
-      return;
+      console.warn('Session could not be persisted to primary storage, continuing with session:', e);
     }
 
     // The server has accepted the login and the session is stored. Socket/UI
@@ -190,8 +191,13 @@ function logout(){
   try { authFetch('/api/logout', { method: 'POST' }); } catch(e){ /* ignore */ }
   try { if (window.socket && window.socket.connected) window.socket.emit('logout'); } catch(e){ /* ignore */ }
 
-  clearSession();
-  localStorage.removeItem('currentUser');
+  if (typeof clearSession === 'function') clearSession();
+  if (typeof safeStorageRemove === 'function') {
+    safeStorageRemove('currentUser');
+  } else {
+    try { localStorage.removeItem('currentUser'); } catch (e) {}
+    try { sessionStorage.removeItem('currentUser'); } catch (e) {}
+  }
   // The unread badge lives in localStorage, which is per browser rather than
   // per account. Drop it so the next person to sign in here does not inherit
   // somebody else's DM count.

@@ -327,7 +327,10 @@ async function doDeleteAccount() {
 
     // Clear local session and logout
     if (typeof clearSession === 'function') clearSession();
-    localStorage.removeItem('currentUser');
+    try {
+      if (typeof safeStorageRemove === 'function') safeStorageRemove('currentUser');
+      else localStorage.removeItem('currentUser');
+    } catch (_) {}
     // Notify server to go offline if socket exists
     try {
       if (window.socket && user.username) {

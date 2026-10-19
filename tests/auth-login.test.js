@@ -163,3 +163,50 @@ test('rapid click and Enter events do not send parallel login requests', async (
     client.close();
   }
 });
+
+test('login succeeds without error even when localStorage throws (e.g. private browsing or full quota)', async () => {
+  const UTILS_SOURCE = fs.readFileSync(path.join(ROOT, 'public', 'js', 'utils.js'), 'utf8');
+  const dom = new JSDOM(MARKUP, {
+    url: 'https://male-cyber-fighters.test/',
+    runScripts: 'dangerously'
+  });
+  const win = dom.window;
+  win.console.error = () => {};
+  win.console.warn = () => {};
+
+  win.$ = id => win.document.getElementById(id);
+  win.show = el => { el.style.display = 'flex'; };
+  win.hide = el => { el.style.display = 'none'; };
+  win.socket = { emit() {} };
+  win.fetch = async () => response(200, {
+    ok: true,
+    token: 'mcf_test-token',
+    user: { username: 'fighter', display: 'Fighter' }
+  });
+
+  // Make localStorage throw QuotaExceededError on setItem
+  win.localStorage.setItem = () => {
+    throw new win.DOMException('The quota has been exceeded', 'QuotaExceededError');
+  };
+
+  win.eval(UTILS_SOURCE);
+  win.eval(AUTH_ERRORS);
+  win.eval(AUTH_SOURCE);
+
+  try {
+    win.document.getElementById('loginUser').value = 'fighter';
+    win.document.getElementById('loginPass').value = 'secret';
+    win.document.getElementById('loginSubmit').click();
+    await tick();
+
+    assert.equal(win.document.getElementById('loginError').textContent, '');
+    assert.equal(win.document.getElementById('modalLogin').style.display, 'none');
+    assert.equal(win.getSessionToken(), 'mcf_test-token');
+    const sess = win.getSession();
+    assert.ok(sess);
+    assert.equal(sess.username, 'fighter');
+    assert.equal(sess.display, 'Fighter');
+  } finally {
+    win.close();
+  }
+});

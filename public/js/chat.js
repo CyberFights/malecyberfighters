@@ -54,8 +54,17 @@ function escapeHtml(str){
 }
 
 function getSession(){
+  if (typeof window !== 'undefined' && typeof window.getSession === 'function' && window.getSession !== getSession) {
+    try {
+      const s = window.getSession();
+      if (s) return s;
+    } catch (_) {}
+  }
   try {
-    const raw = localStorage.getItem('cw_session_v1');
+    const raw = (typeof window !== 'undefined' && typeof window.safeStorageGet === 'function')
+      ? window.safeStorageGet('cw_session_v1')
+      : ((typeof localStorage !== 'undefined' && localStorage.getItem('cw_session_v1')) ||
+         (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('cw_session_v1')));
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;

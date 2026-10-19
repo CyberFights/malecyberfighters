@@ -443,3 +443,28 @@ test('mobile login sends one request and explains a 429 instead of saying networ
     await page.close();
   }
 });
+
+test('mobile login succeeds when localStorage throws (e.g. private mode or quota exceeded)', async () => {
+  const page = await startMobilePage('bob');
+  try {
+    page.win.console.error = () => {};
+    page.win.console.warn = () => {};
+    page.win.setSession(null);
+    page.win.localStorage.setItem = () => {
+      throw new page.win.DOMException('The quota has been exceeded', 'QuotaExceededError');
+    };
+    page.win.document.getElementById('loginUser').value = 'bob';
+    page.win.document.getElementById('loginPass').value = 'secret';
+    page.win.document.getElementById('loginSubmit').click();
+    await tick(50);
+
+    assert.equal(page.win.document.getElementById('loginError').textContent, '');
+    assert.equal(page.win.document.getElementById('modalLogin').style.display, 'none');
+    assert.equal(page.win.getSessionToken(), 'test-token');
+    const sess = page.win.getSession();
+    assert.ok(sess);
+    assert.equal(sess.username, 'bob');
+  } finally {
+    await page.close();
+  }
+});
