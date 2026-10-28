@@ -514,6 +514,7 @@ function renderPMHistory(targetUsername, messages, options) {
     // Server id + time: message-extras.js keys the DM edit/delete actions and
     // the live dmEdited/dmDeleted updates off these.
     if (m._id || m.id) div.dataset.dmId = String(m._id || m.id);
+    if (m.generatedMedia) div.dataset.generatedMedia = '1';
     if (m.time) div.dataset.dmTime = String(new Date(m.time).getTime());
     div.innerHTML = `
       <div style="font-size:13px;font-weight:700">${escapeHtml(m.from || "")}</div>

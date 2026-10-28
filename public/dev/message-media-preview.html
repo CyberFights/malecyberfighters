@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>✨ Visualize — UI preview</title>
+<link rel="stylesheet" href="/css/features.css?v=1">
+<link rel="stylesheet" href="/css/message-media.css?v=1">
+<style>
+  body { margin: 0; padding: 22px; background: #07101f; color: #eaf6ff; font-family: system-ui, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 6px; }
+  p.intro { margin: 0 0 18px; color: #9fb3cc; max-width: 720px; line-height: 1.5; }
+  .demo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .demo-feed { background: #0d1729; border: 1px solid rgba(127,216,255,.2); border-radius: 12px; padding: 12px; }
+  .demo-feed h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: #7fd8ff; margin: 0 0 10px; }
+  .public-feed { display: flex; flex-direction: column; gap: 10px; min-height: 120px; }
+  .message-row { display: flex; gap: 8px; align-items: flex-start; }
+  .message-avatar { width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; background: #243b5a; display: grid; place-items: center; font-weight: 700; }
+  .message { background: rgba(255,255,255,.04); border-radius: 10px; padding: 8px 10px; flex: 1; min-width: 0; }
+  .message-meta { font-size: 12px; color: #7fd8ff; margin-bottom: 4px; }
+  .message-text { font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
+  .message-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; opacity: 1; }
+  .msg-action { background: transparent; border: 1px solid rgba(127,216,255,.3); color: #b8c7d9; border-radius: 6px; padding: 3px 7px; font-size: 11.5px; cursor: pointer; }
+  .chat-image { max-width: 180px; border-radius: 8px; margin-top: 6px; display: block; }
+  .demo-video { margin-top: 6px; border: 1px dashed rgba(196,154,255,.7); border-radius: 8px; padding: 10px; font-size: 13px; color: #d9b8ff; }
+  .small { font-size: 11px; color: #8fa3bd; }
+</style>
+</head>
+<body>
+<h1>✨ Visualize a chat message</h1>
+<p class="intro">
+  Standalone UI preview. The API is mocked in this page: select any message below and press
+  <strong>✨ Visualize</strong> to see the refined generator prompt, edit it, and “post” the
+  generated media back into the same feed. The real app uses the stored message, server-side
+  safety checks, and Socket.IO delivery.
+</p>
+
+<div id="roomChatPopup" data-room="bbbbbbbbbbbbbbbbbbbbbbbb">
+  <div class="demo-grid">
+    <section class="demo-feed">
+      <h2>Arena</h2>
+      <div id="publicFeed" class="public-feed">
+        <div class="message-row" data-id="aaaaaaaaaaaaaaaaaaaaaaaa">
+          <div class="message-avatar">R</div>
+          <div class="message">
+            <div class="message-meta">Rival <span class="small">@rival • 20:14</span></div>
+            <div class="message-text">Rex lands a superplex under the neon arena lights.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="demo-feed">
+      <h2>Custom room</h2>
+      <div id="roomFeed" class="public-feed">
+        <div class="message-row" data-id="cccccccccccccccccccccccc">
+          <div class="message-avatar">B</div>
+          <div class="message">
+            <div class="message-meta">Bob <span class="small">@bob • 20:15</span></div>
+            <div class="message-text">The crowd goes wild as the challenger kicks out at two.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="demo-feed">
+      <h2>Direct message</h2>
+      <div id="dmMessages" class="public-feed">
+        <div class="message-row" data-dm-id="dddddddddddddddddddddddd">
+          <div class="message-avatar">V</div>
+          <div class="message">
+            <div class="message-meta">Vyxen <span class="small">20:16</span></div>
+            <div>Meet me in the ring at midnight — bring the championship belt.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+/* Mock API: enough to drive the shipped client without a server or keys. */
+(function () {
+  'use strict';
+  try { localStorage.setItem('cw_session_v1', JSON.stringify({ username: 'alice', display: 'Alice' })); } catch (_) {}
+
+  var SAFETY = 'Safety and quality: every person depicted is a fictional consenting adult (18+); no explicit sexual content, no minors, no real-person likenesses, no gore, no logos, no watermarks, no text overlays.';
+  var styles = [
+    { id: 'cinematic', label: 'Cinematic' },
+    { id: 'photoreal', label: 'Photorealistic' },
+    { id: 'comic', label: 'Comic book' },
+    { id: 'anime', label: 'Anime' },
+    { id: 'cyberpunk', label: 'Neon cyberpunk' }
+  ];
+  var ratios = [
+    { id: '1:1', label: 'Square (1:1)' },
+    { id: '16:9', label: 'Landscape (16:9)' },
+    { id: '9:16', label: 'Portrait (9:16)' }
+  ];
+  var sources = {
+    aaaaaaaaaaaaaaaaaaaaaaaa: 'Rex lands a superplex under the neon arena lights.',
+    cccccccccccccccccccccccc: 'The crowd goes wild as the challenger kicks out at two.',
+    dddddddddddddddddddddddd: 'Meet me in the ring at midnight — bring the championship belt.'
+  };
+
+  function json(data, status) {
+    var code = status || 200;
+    return Promise.resolve({ ok: code >= 200 && code < 300, status: code, json: async () => data });
+  }
+  function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+  function refined(body) {
+    var source = sources[body.messageId] || 'A dramatic cyber wrestling moment.';
+    var style = (styles.find(s => s.id === body.style) || styles[0]).label;
+    var ratio = (ratios.find(r => r.id === body.aspectRatio) || ratios[0]).label;
+    return (body.mediaType === 'video'
+      ? 'A five-second cinematic video loop. '
+      : 'A single polished illustration. ') +
+      'Scene: "' + source + '". ' +
+      'Visual style: ' + style + '. Composition: ' + ratio + ', clear focal subject, dramatic rim lighting, coherent anatomy, detailed background.' +
+      (body.mediaType === 'video' ? ' Motion: one slow dolly-in, subtle fabric movement, no cuts, no captions.' : ' Capture one decisive story moment.') +
+      '\n\n' + SAFETY;
+  }
+
+  function feedFor(scope) {
+    if (scope === 'room') return document.getElementById('roomFeed');
+    if (scope === 'dm') return document.getElementById('dmMessages');
+    return document.getElementById('publicFeed');
+  }
+
+  function postToChat(body) {
+    var feed = feedFor(body.scope);
+    if (!feed) return;
+    var row = document.createElement('div');
+    row.className = 'message-row';
+    row.dataset.generatedMedia = '1';
+    row.dataset.id = 'ffffffffffffffffffffffff';
+    var media = body.mediaType === 'video'
+      ? '<div class="demo-video">▶ AI video (5s loop) — preview media</div>'
+      : '<img class="chat-image" src="/images/mcf-512.png" alt="Generated image">';
+    row.innerHTML = '<div class="message-avatar">A</div><div class="message">' +
+      '<div class="message-meta">Alice <span class="small">just now</span></div>' +
+      '<div class="message-text">🎨 AI ' + body.mediaType + ' from a selected message — includes both profile pictures</div>' +
+      '<div class="small">🖼 /images/mcf-512.png + /images/jax1.jpg</div>' + media + '</div>';
+    feed.appendChild(row);
+  }
+
+  window.fetch = async function (url, options) {
+    var target = String(url);
+    var body = options && options.body ? JSON.parse(options.body) : null;
+    if (target.endsWith('/api/message-media/config')) {
+      return json({ ok: true, mediaTypes: ['image', 'video'], videoEnabled: true, styles: styles, aspectRatios: ratios });
+    }
+    if (target.endsWith('/api/message-media/prompt')) {
+      await delay(250);
+      return json({
+        ok: true,
+        target: { scope: body.scope, room: body.room, messageId: body.messageId },
+        participants: {
+          self: { username: 'alice', display: 'Alice', imageUrl: '/images/mcf-512.png' },
+          other: { username: 'rival', display: 'Rival', imageUrl: '/images/jax1.jpg' }
+        },
+        sourceText: sources[body.messageId] || '',
+        prompt: refined(body),
+        refinedBy: 'local',
+        mediaType: body.mediaType,
+        style: body.style,
+        aspectRatio: body.aspectRatio
+      });
+    }
+    if (target.endsWith('/api/message-media/generate')) {
+      await delay(700);
+      postToChat(body);
+      return json({ ok: true, message: { _id: 'ffffffffffffffffffffffff', scope: body.scope }, prompt: body.prompt }, 201);
+    }
+    return json({ ok: false, error: 'not_found' }, 404);
+  };
+})();
+</script>
+<script src="/js/image-proxy.js?v=1"></script>
+<script src="/js/features-core.js?v=1"></script>
+<script src="/js/message-media.js?v=1"></script>
+</body>
+</html>

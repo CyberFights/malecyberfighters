@@ -112,6 +112,21 @@ function mobileImgSrc(value) {
     })[c]);
   }
 
+  // GIF / short video attachment (member upload OR AI-generated media).
+  function mobileClipHtml(msg) {
+    if (!msg || !msg.clipUrl) return "";
+    const url = escapeHtml(msg.clipUrl);
+    return msg.clipType === "gif"
+      ? `<img src="${url}" class="chat-clip" alt="GIF clip" data-url="${url}">`
+      : `<video src="${url}" class="chat-clip" controls playsinline preload="metadata"></video>`;
+  }
+
+  function bindMobileClipClicks(root) {
+    root.querySelectorAll('.chat-clip[alt="GIF clip"]').forEach(el => {
+      el.addEventListener("click", () => window.open(el.dataset.url || el.src, "_blank"));
+    });
+  }
+
   function debounce(fn, wait = 250) {
     let t;
     return function (...args) {
@@ -1008,10 +1023,12 @@ function mobileImgSrc(value) {
     const imageHtml = msg.imageUrl
       ? `<img src="${escapeHtml(mobileImgSrc(msg.imageUrl))}" class="chat-image" alt="attachment" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer">`
       : "";
+    const clipHtml = mobileClipHtml(msg);
 
     const row = document.createElement("div");
     row.className = "message-row" + (isMe ? " me" : "");
     if (msg._id) row.dataset.id = String(msg._id);
+    if (msg.generatedMedia) row.dataset.generatedMedia = "1";
     if (msg.time) row.dataset.time = String(new Date(msg.time).getTime());
     row.innerHTML = `
       <div class="message-avatar">${avatarHtml(avatarSource)}</div>
@@ -1022,10 +1039,12 @@ function mobileImgSrc(value) {
         </div>
         ${msg.text ? `<div class="message-text">${escapeHtml(msg.text)}</div>` : ""}
         ${imageHtml}
+        ${clipHtml}
       </div>
     `;
     const imgEl = row.querySelector(".chat-image");
     if (imgEl) imgEl.addEventListener("click", () => window.open(msg.imageUrl, "_blank"));
+    bindMobileClipClicks(row);
     if (before) {
       // Scroll-back: slot an older message in above what is on screen and leave
       // the reader's position alone.
@@ -2016,6 +2035,7 @@ function mobileImgSrc(value) {
       const row = document.createElement("div");
       row.className = "message-row" + (isMe ? " me" : "") + ((msg.type === "storyApproval" || msg.type === "relationshipApproval" || msg.type === "matchApproval") ? " system" : "");
       if (msg._id || msg.id) row.dataset.dmId = String(msg._id || msg.id);
+      if (msg.generatedMedia) row.dataset.generatedMedia = "1";
       if (msg.time) row.dataset.dmTime = String(new Date(msg.time).getTime());
 
       let content = "";
@@ -2047,9 +2067,9 @@ function mobileImgSrc(value) {
         </div>
       `;
       } else if (msg.imageUrl) {
-      content = `<img src="${escapeHtml(mobileImgSrc(msg.imageUrl))}" class="chat-image" alt="attachment">`;
+      content = `<img src="${escapeHtml(mobileImgSrc(msg.imageUrl))}" class="chat-image" alt="attachment">` + mobileClipHtml(msg);
     } else {
-      content = `<div>${escapeHtml(msg.deleted ? "message deleted" : (msg.text || ""))}</div>`;
+      content = `<div>${escapeHtml(msg.deleted ? "message deleted" : (msg.text || ""))}</div>` + mobileClipHtml(msg);
     }
 
     row.innerHTML = `
@@ -2061,6 +2081,7 @@ function mobileImgSrc(value) {
         ${content}
       </div>
     `;
+    bindMobileClipClicks(row);
 
     const relBtn = row.querySelector(".approveRelBtn");
     if (relBtn) {
@@ -2291,13 +2312,15 @@ function mobileImgSrc(value) {
     const author = directoryUser(msg.from) || { username: msg.from, display: msg.display || msg.from };
     const display = msg.display || author.display || msg.from || "";
 
-    const content = msg.imageUrl
+    const clipHtml = mobileClipHtml(msg);
+    const content = (msg.imageUrl
       ? `<img src="${escapeHtml(mobileImgSrc(msg.imageUrl))}" class="chat-image" alt="attachment">`
-      : `<div>${escapeHtml(msg.text || "")}</div>`;
+      : `<div>${escapeHtml(msg.text || "")}</div>`) + clipHtml;
 
     const div = document.createElement("div");
     div.className = "message-row" + (isMe ? " me" : "");
     if (msg._id) div.dataset.id = String(msg._id);
+    if (msg.generatedMedia) div.dataset.generatedMedia = "1";
     if (msg.time) div.dataset.time = String(new Date(msg.time).getTime());
     div.innerHTML = `
       <div class="message-avatar">${avatarHtml(author)}</div>
@@ -2315,6 +2338,7 @@ function mobileImgSrc(value) {
       imgEl.style.cursor = "pointer";
       imgEl.addEventListener("click", () => window.open(msg.imageUrl, "_blank"));
     }
+    bindMobileClipClicks(div);
 
     feed.appendChild(div);
     scrollChatToBottom(feed);
@@ -3576,6 +3600,9 @@ function renderDMMessages(targetUsername, messages, options) {
 
     const div = document.createElement("div");
     div.className = "message-row " + (m.from === s.username ? "me" : "");
+    if (m._id || m.id) div.dataset.dmId = String(m._id || m.id);
+    if (m.generatedMedia) div.dataset.generatedMedia = "1";
+    if (m.time) div.dataset.dmTime = String(new Date(m.time).getTime());
 
     const avatarHtml = renderMessageAvatar
       ? renderMessageAvatar(m.from, m.display || m.from, m.imageUrl, 36)
@@ -3602,9 +3629,9 @@ function renderDMMessages(targetUsername, messages, options) {
         </div>
       `;
     } else if (m.imageUrl) {
-      contentHtml = `<img src="${mobileImgSrc(m.imageUrl)}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${m.imageUrl}">`;
+      contentHtml = `<img src="${mobileImgSrc(m.imageUrl)}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${m.imageUrl}">` + mobileClipHtml(m);
     } else {
-      contentHtml = `<div>${escapeHtml(m.text || "")}</div>`;
+      contentHtml = `<div>${escapeHtml(m.text || "")}</div>` + mobileClipHtml(m);
     }
 
     div.innerHTML = `
@@ -3619,6 +3646,7 @@ function renderDMMessages(targetUsername, messages, options) {
     div.querySelectorAll('.chat-image').forEach(img => {
       img.addEventListener('click', () => window.open(img.dataset.url, '_blank'));
     });
+    bindMobileClipClicks(div);
 
     if (anchor) body.insertBefore(div, anchor);
     else body.appendChild(div);
@@ -3752,6 +3780,9 @@ function appendSingleDMMessage(pm, me) {
 
   const div = document.createElement("div");
   div.className = "message-row " + (pm.from === me.username ? "me" : "");
+  if (pm._id || pm.id) div.dataset.dmId = String(pm._id || pm.id);
+  if (pm.generatedMedia) div.dataset.generatedMedia = "1";
+  if (pm.time) div.dataset.dmTime = String(new Date(pm.time).getTime());
 
   const avatarHtml = typeof renderMessageAvatar === 'function'
     ? renderMessageAvatar(pm.from, pm.display || pm.from, pm.imageUrl, 36)
@@ -3778,9 +3809,9 @@ function appendSingleDMMessage(pm, me) {
       </div>
     `;
   } else if (pm.imageUrl) {
-    contentHtml = `<img src="${mobileImgSrc(pm.imageUrl)}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${pm.imageUrl}">`;
+    contentHtml = `<img src="${mobileImgSrc(pm.imageUrl)}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${pm.imageUrl}">` + mobileClipHtml(pm);
   } else {
-    contentHtml = `<div>${escapeHtml(pm.text || "")}</div>`;
+    contentHtml = `<div>${escapeHtml(pm.text || "")}</div>` + mobileClipHtml(pm);
   }
 
   div.innerHTML = `
@@ -3791,6 +3822,7 @@ function appendSingleDMMessage(pm, me) {
     </div>
   `;
 
+  bindMobileClipClicks(div);
   div.querySelectorAll('.chat-image').forEach(img => {
     img.addEventListener('click', () => window.open(img.dataset.url, '_blank'));
   });

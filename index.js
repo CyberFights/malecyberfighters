@@ -23,6 +23,10 @@ const {
   createImageLibraryModel,
   createImageLibraryRouter
 } = require('./imageLibrary');
+const {
+  configFromEnv: mediaConfigFromEnv,
+  createMessageMediaRouter
+} = require('./messageMedia');
 const { createSessionManager, cookieOptions, safeEqual, COOKIE_NAME } = require('./sessions');
 const { createRetentionJob, configFromEnv } = require('./retention');
 const { createPushNotifier } = require('./pushNotifications');
@@ -83,6 +87,12 @@ const ALLOWED_CLIP_MIME = {
   'video/webm': '.webm'
 };
 const UPLOADS_DIR = path.join(__dirname, 'uploads', 'clips');
+// AI-generated stills are kept apart from member-uploaded clips. Filenames are
+// random hex, so the directory can be served with immutable cache headers and
+// trimmed oldest-first if it ever grows past its cap.
+const GENERATED_DIR = path.join(__dirname, 'uploads', 'generated');
+const MAX_GENERATED_DIR_BYTES = 512 * 1024 * 1024;
+const MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024;
 
 const DISCORD_WEBHOOK_URL = process.env.Discord_webhook || null;
 const DISCORD_SUPPORT_URL = process.env.Discord_Support || null;
@@ -1146,7 +1156,16 @@ const noCacheStatic = {
 // 7-day immutable cache is safe. express.static supports Range requests,
 // which <video> players use for seeking.
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+fs.mkdirSync(GENERATED_DIR, { recursive: true });
 app.use('/clips', express.static(UPLOADS_DIR, { maxAge: '7d', immutable: true }));
+// Same-origin generated images: CSP already allows 'self', and the filenames
+// are unguessable random hex. Never serve an index or dotfiles here.
+app.use('/generated', express.static(GENERATED_DIR, {
+  maxAge: '7d',
+  immutable: true,
+  index: false,
+  dotfiles: 'deny'
+}));
 
 app.use('/js', express.static(path.join(publicDir, 'js'), noCacheStatic));
 app.use('/css', express.static(path.join(publicDir, 'css'), noCacheStatic));
@@ -1232,6 +1251,14 @@ const uploadLimiter = rateLimit({
 app.use('/api/upload-image', uploadLimiter);
 app.use('/api/upload-clip', uploadLimiter);
 app.use('/api/profile/photos', uploadLimiter);
+// Prompt refinement and generation call third-party APIs, so they get their
+// own (tighter, attributable) budget instead of sharing the upload limiter.
+const mediaLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false
+});
 app.use(cors({ origin: true, credentials: true }));
 // Request client hints so modern browsers will include Sec-CH-UA-Mobile on subsequent navigations.
 // This improves server-side mobile detection without relying solely on User-Agent sniffing.
@@ -1447,6 +1474,10 @@ const publicMessageSchema = new mongoose.Schema({
   display: String,
   text: String,
   imageUrl: String,
+  // AI image/video messages generated from another message in this chat
+  clipUrl: String,
+  clipType: String,
+  generatedMedia: { type: Object, default: null },
   // true once a message has been edited by its author
   edited: { type: Boolean, default: false },
   // optional quoted/replied-to message metadata
@@ -1467,6 +1498,8 @@ const roomMessageSchema = new mongoose.Schema({
   // short video / GIF attached to the message (served from /clips)
   clipUrl: String,
   clipType: String, // "video" | "gif"
+  // Provenance for AI media generated from another message in this room
+  generatedMedia: { type: Object, default: null },
   edited: { type: Boolean, default: false },
   replyTo: { type: Object, default: null },
   time: { type: Date, default: Date.now }
@@ -1632,6 +1665,8 @@ const dmSchema = new mongoose.Schema({
   // short video / GIF message (served from our /clips route)
   clipUrl: { type: String },
   clipType: { type: String }, // "video" | "gif"
+  // Provenance for AI media generated from another message in this DM
+  generatedMedia: { type: Object, default: null },
 
   relationshipId: { type: String },
   storyId: { type: String },
@@ -2465,6 +2500,27 @@ app.use('/api/image-library', createImageLibraryRouter({
   uploadImageToImgBB,
   writeLimiter: uploadLimiter,
   noRevalidate
+}));
+
+// Pick any text message in the arena, a room or a DM → refine it into an
+// image/video generator prompt → generate → post the result in that same chat.
+app.use('/api/message-media', createMessageMediaRouter({
+  PublicMessage,
+  RoomMessage,
+  DM,
+  Room,
+  User,
+  requireUser: sessions.requireUser,
+  canAccessRoom,
+  canPost: canPostGeneratedMessage,
+  writeLimiter: mediaLimiter,
+  noRevalidate,
+  config: mediaConfigFromEnv(process.env),
+  fetchImpl: fetch,
+  hostImage: hostGeneratedImage,
+  hostVideo: hostGeneratedVideo,
+  readLocalImage: readLocalProfileImage,
+  publishMessage: broadcastGeneratedMessage
 }));
 
 app.post("/api/relationship/request", sessions.requireUser, async (req, res) => {
@@ -4948,6 +5004,191 @@ function canAccessRoom(room, username) {
     || (Array.isArray(room.invitedUsers) && room.invitedUsers.some(invited =>
       String(invited).trim().toLowerCase() === normalizedUsername
     ));
+}
+
+/* ---------------------------------------------------------------------------
+   AI media generated from a chat message.
+   The generator module owns the prompts, provider calls and validation; these
+   helpers own this deployment's storage and delivery.
+--------------------------------------------------------------------------- */
+
+let generatedDirTrim = Promise.resolve();
+
+/** Keep the local generated-image store bounded by deleting oldest files. */
+function trimGeneratedDir() {
+  generatedDirTrim = generatedDirTrim.catch(() => {}).then(async () => {
+    const entries = await fs.promises.readdir(GENERATED_DIR);
+    const files = [];
+    for (const name of entries) {
+      try {
+        const stat = await fs.promises.stat(path.join(GENERATED_DIR, name));
+        if (stat.isFile()) files.push({ name, size: stat.size, mtime: stat.mtimeMs });
+      } catch (_) { /* removed meanwhile */ }
+    }
+    let total = files.reduce((sum, file) => sum + file.size, 0);
+    if (total <= MAX_GENERATED_DIR_BYTES) return;
+    files.sort((a, b) => a.mtime - b.mtime);
+    for (const file of files) {
+      if (total <= MAX_GENERATED_DIR_BYTES) break;
+      try {
+        await fs.promises.unlink(path.join(GENERATED_DIR, file.name));
+        total -= file.size;
+      } catch (_) { /* already gone */ }
+    }
+  });
+  return generatedDirTrim;
+}
+
+const IMAGE_FILE_EXTENSIONS = Object.freeze({
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/gif': '.gif',
+  'image/webp': '.webp'
+});
+
+/**
+ * Prefer the existing ImgBB host when it is configured (durable across
+ * deploys); otherwise keep the generated still on this server. A failed ImgBB
+ * upload falls back to local storage rather than losing the generated image.
+ */
+async function hostGeneratedImage({ buffer, mimetype }) {
+  const type = String(mimetype || '').toLowerCase();
+  if (process.env.IMGBB_API_KEY) {
+    try {
+      const hosted = await uploadImageToImgBB({ buffer, mimetype: type });
+      if (hosted && isImgBBUrl(hosted.imageUrl)) return { imageUrl: hosted.imageUrl };
+    } catch (err) {
+      console.warn('generated image ImgBB upload failed; storing locally:', err?.code || err?.message || err);
+    }
+  }
+
+  const extension = IMAGE_FILE_EXTENSIONS[type];
+  if (!extension) {
+    const error = new Error('Unsupported generated image type');
+    error.code = 'upload_failed';
+    throw error;
+  }
+  const name = `${crypto.randomBytes(16).toString('hex')}${extension}`;
+  await fs.promises.writeFile(path.join(GENERATED_DIR, name), buffer, { flag: 'wx' });
+  await trimGeneratedDir().catch(err => console.warn('generated image trim failed:', err?.message || err));
+  return { imageUrl: `/generated/${name}` };
+}
+
+async function hostGeneratedVideo({ buffer, extension, clipType }) {
+  const safeExtension = ['gif', 'mp4', 'webm'].includes(extension) ? extension : null;
+  if (!safeExtension) {
+    const error = new Error('Unsupported generated clip type');
+    error.code = 'upload_failed';
+    throw error;
+  }
+  const used = await uploadsDirSize();
+  if (used + buffer.length > MAX_UPLOADS_TOTAL_SIZE) {
+    const error = new Error('Clip storage is full');
+    error.code = 'storage_full';
+    throw error;
+  }
+  const name = `${crypto.randomBytes(16).toString('hex')}.${safeExtension}`;
+  await fs.promises.writeFile(path.join(UPLOADS_DIR, name), buffer, { flag: 'wx' });
+  return { clipUrl: `/clips/${name}`, clipType };
+}
+
+const LOCAL_PROFILE_MIME = Object.freeze({
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp'
+});
+
+/**
+ * Read a same-origin profile picture for the AI portrait overlay. Only the
+ * directories this app already serves images from are reachable, and the
+ * resolved path is checked against its root so `..` cannot escape.
+ */
+async function readLocalProfileImage(urlPath) {
+  const clean = String(urlPath || '').split('?')[0].replace(/\\/g, '/');
+  if (!clean.startsWith('/') || clean.includes('\0') || clean.includes('..')) return null;
+
+  let root;
+  let relative;
+  if (clean.startsWith('/generated/')) {
+    root = GENERATED_DIR;
+    relative = clean.slice('/generated/'.length);
+  } else if (clean.startsWith('/clips/')) {
+    root = UPLOADS_DIR;
+    relative = clean.slice('/clips/'.length);
+  } else if (clean.startsWith('/images/')) {
+    root = publicDir;
+    relative = clean.slice(1);
+  } else {
+    return null;
+  }
+
+  const absolute = path.resolve(root, relative);
+  const rootPath = path.resolve(root);
+  if (absolute !== rootPath && !absolute.startsWith(rootPath + path.sep)) return null;
+
+  const mimetype = LOCAL_PROFILE_MIME[path.extname(absolute).toLowerCase()];
+  if (!mimetype) return null;
+
+  try {
+    const stat = await fs.promises.stat(absolute);
+    if (!stat.isFile() || stat.size > MAX_PROFILE_IMAGE_BYTES) return null;
+    return { buffer: await fs.promises.readFile(absolute), mimetype };
+  } catch (_) {
+    return null;
+  }
+}
+
+/** Enforce the same posting rules the socket handlers apply to typed chat. */
+async function canPostGeneratedMessage({ username, scope, room, roomRecord }) {
+  const timedOut = await globalTimeoutUntil(username);
+  if (timedOut) return { ok: false, status: 403, error: 'timed_out', until: timedOut };
+  if (scope !== 'room' || !roomRecord) return { ok: true };
+
+  const moderationKey = String(username).replace(/[.$]/g, '_');
+  const mutedUntil = roomRecord.muted ? roomRecord.muted[moderationKey] : null;
+  if (mutedUntil && new Date(mutedUntil) > new Date()) {
+    return { ok: false, status: 403, error: 'muted', until: mutedUntil };
+  }
+  if (roomRecord.slowModeMs > 0) {
+    const last = await RoomMessage.findOne({ room, from: username })
+      .sort({ time: -1 })
+      .limit(1)
+      .select('time')
+      .lean();
+    if (last) {
+      const elapsed = Date.now() - new Date(last.time).getTime();
+      if (elapsed < roomRecord.slowModeMs) {
+        return {
+          ok: false,
+          status: 429,
+          error: 'slow_mode',
+          retryAfterMs: roomRecord.slowModeMs - elapsed
+        };
+      }
+    }
+  }
+  return { ok: true };
+}
+
+/**
+ * Deliver the new media message over the same socket events the chat renderers
+ * already understand. The arena uses externalPublicMessage so the author's own
+ * mobile client renders it too (publicMessage is filtered as a local echo).
+ */
+function broadcastGeneratedMessage({ scope, room, partner, username, payload }) {
+  if (scope === 'public') {
+    io.emit('externalPublicMessage', payload);
+    return;
+  }
+  if (scope === 'room') {
+    io.to(String(room)).emit('roomMessage', { ...payload, room: String(room) });
+    return;
+  }
+  const dmPayload = { ...payload, to: partner };
+  deliverToUser(partner, 'privateMessage', dmPayload);
+  emitToUser(username, 'privateMessage', dmPayload);
 }
 
 // ---------- SOCKET AUTHENTICATION ----------

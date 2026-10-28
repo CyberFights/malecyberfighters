@@ -25,6 +25,7 @@
     "express-rate-limit": "^7.0.0",
     "form-data": "^4.0.0",
     "helmet": "^7.0.0",
+    "jimp": "^0.22.12",
     "mongoose": "^8.3.0",
     "multer": "^1.4.5-lts.2",
     "node-fetch": "^2.6.7",
@@ -51,6 +52,7 @@
       "index.js",
       "dmDelivery.js",
       "imageLibrary.js",
+      "messageMedia.js",
       "electron/**/*",
       "public/**/*",
       "package.json"
