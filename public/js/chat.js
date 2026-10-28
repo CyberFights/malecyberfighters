@@ -6,6 +6,22 @@ function chatImgSrc(value) {
   return value == null ? '' : String(value);
 }
 
+// GIF / short video attachment — member-uploaded clips and AI-generated video
+// use the same /clips URL shape on public, room and DM messages.
+function chatClipHtml(msg) {
+  if (!msg || !msg.clipUrl) return '';
+  const url = escapeHtml(msg.clipUrl);
+  return msg.clipType === 'gif'
+    ? `<img src="${url}" class="chat-clip" alt="GIF clip" data-url="${url}">`
+    : `<video src="${url}" class="chat-clip" controls playsinline preload="metadata"></video>`;
+}
+
+function bindChatClipClicks(root) {
+  root.querySelectorAll('.chat-clip[alt="GIF clip"]').forEach(el => {
+    el.addEventListener('click', () => window.open(el.dataset.url || el.src, '_blank'));
+  });
+}
+
 /* ============================================================
    GLOBAL SAFE SELECTOR (works with utils.js)
 ============================================================ */
@@ -1112,11 +1128,13 @@ function appendPublicMessage(msg, playSound = true, before = null){
   const div = document.createElement('div');
   div.className = 'message-row ' + (isMine ? 'me' : '');
   if (msg._id) div.dataset.id = msg._id;
+  if (msg.generatedMedia) div.dataset.generatedMedia = '1';
   if (msg.time) div.dataset.time = String(new Date(msg.time).getTime());
 
   const imageHtml = msg.imageUrl
     ? `<img src="${escapeHtml(chatImgSrc(msg.imageUrl))}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${escapeHtml(msg.imageUrl)}">`
     : '';
+  const clipHtml = chatClipHtml(msg);
 
   const replyHtml = msg.replyTo
     ? `<div class="reply-preview">↩ <b>@${escapeHtml(msg.replyTo.display || msg.replyTo.from || '')}</b> — ${escapeHtml((msg.replyTo.text || '').slice(0, 80))}</div>`
@@ -1136,6 +1154,7 @@ function appendPublicMessage(msg, playSound = true, before = null){
       ${replyHtml}
       ${msg.text ? `<div class="message-text">${escapeHtml(msg.text)}</div>` : ''}
       ${imageHtml}
+      ${clipHtml}
       <div class="message-actions">
         <button type="button" class="msg-action action-reply">Reply</button>
         ${isMine && msg.text ? `<button type="button" class="msg-action action-edit">Edit</button>` : ''}
@@ -1146,6 +1165,7 @@ function appendPublicMessage(msg, playSound = true, before = null){
   div.querySelectorAll('.chat-image').forEach(img => {
     img.addEventListener('click', () => window.open(img.dataset.url, '_blank'));
   });
+  bindChatClipClicks(div);
 
   div.querySelector('.action-reply')?.addEventListener('click', () => setPublicReply(msg));
   div.querySelector('.action-edit')?.addEventListener('click', () => {
@@ -1243,6 +1263,7 @@ function appendRoomMessage(msg){
   const div = document.createElement('div');
   div.className = 'message-row';
   if (msg._id) div.dataset.id = msg._id;
+  if (msg.generatedMedia) div.dataset.generatedMedia = '1';
   if (msg.time) div.dataset.time = String(new Date(msg.time).getTime());
 
   const textHtml = msg.text ? `<div class="message-text">${escapeHtml(msg.text)}</div>` : '';
@@ -1250,11 +1271,7 @@ function appendRoomMessage(msg){
     ? `<img src="${chatImgSrc(msg.imageUrl)}" class="chat-image" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" data-url="${msg.imageUrl}">`
     : '';
   // GIF / short video clips attached to the message (served from /clips)
-  const clipHtml = msg.clipUrl
-    ? (msg.clipType === 'gif'
-        ? `<img src="${escapeHtml(msg.clipUrl)}" class="chat-clip" alt="GIF clip" data-url="${escapeHtml(msg.clipUrl)}">`
-        : `<video src="${escapeHtml(msg.clipUrl)}" class="chat-clip" controls playsinline preload="metadata"></video>`)
-    : '';
+  const clipHtml = chatClipHtml(msg);
 
   const replyHtml = msg.replyTo
     ? `<div class="reply-preview">↩ <b>@${escapeHtml(msg.replyTo.display || msg.replyTo.from || '')}</b> — ${escapeHtml((msg.replyTo.text || '').slice(0, 80))}</div>`
@@ -1287,9 +1304,7 @@ function appendRoomMessage(msg){
   });
 
   // GIF clips open full-size in a new tab; videos use their inline controls.
-  if (msg.clipUrl && msg.clipType === 'gif') {
-    div.querySelector('.chat-clip')?.addEventListener('click', () => window.open(msg.clipUrl, '_blank'));
-  }
+  bindChatClipClicks(div);
 
   div.querySelector('.action-reply')?.addEventListener('click', () => setRoomReply(msg));
   div.querySelector('.action-edit')?.addEventListener('click', () => {

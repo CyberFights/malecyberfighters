@@ -54,7 +54,8 @@ self.addEventListener('fetch', event => {
   // would otherwise grow the app-shell cache without bound.
   // Clips (GIFs / short videos) are large media files — HTTP headers cache
   // them, so keep them out of the app-shell cache as well.
-  if (url.pathname === '/img' || url.pathname.startsWith('/clips/')) return;
+  if (url.pathname === '/img' || url.pathname.startsWith('/clips/') ||
+      url.pathname.startsWith('/generated/')) return;
 
   if (
     request.mode === 'navigate'

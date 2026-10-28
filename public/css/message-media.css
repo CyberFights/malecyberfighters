@@ -1,0 +1,188 @@
+/* ============================================================
+   message-media.css — ✨ Visualize a chat message
+   Shared by the desktop shell, mobile.html and mobile2.html.
+=========================================================== */
+
+/* The per-message action. It rides in the existing .message-actions bar, so
+   desktop hover behaviour and mobile tap targets come from the host themes. */
+.msg-action.mcf-media-btn {
+  border-color: rgba(196, 154, 255, 0.55);
+  color: #d9b8ff;
+  white-space: nowrap;
+}
+.msg-action.mcf-media-btn:hover,
+.msg-action.mcf-media-btn:focus-visible {
+  border-color: #d9b8ff;
+  color: #fff;
+  background: rgba(168, 85, 247, 0.16);
+}
+
+/* Some DM renderers have no action bar; this one is created on demand. */
+.message-actions.mcf-media-actions-added {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.message > .mcf-media-btn { margin-top: 6px; }
+
+.mcf-media-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mcf-media-source-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.mcf-media-label {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.mcf-media-source {
+  margin: 0;
+  padding: 9px 12px;
+  border-left: 3px solid rgba(196, 154, 255, 0.75);
+  border-radius: 0 8px 8px 0;
+  background: rgba(127, 216, 255, 0.07);
+  max-height: 110px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.mcf-media-participants {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid rgba(196, 154, 255, 0.25);
+  border-radius: 10px;
+  background: rgba(168, 85, 247, 0.07);
+}
+
+.mcf-media-participant {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mcf-media-avatar {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(217, 184, 255, 0.85);
+  background: #20304a;
+}
+
+.mcf-media-avatar-fallback {
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.mcf-media-participant-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 1.3;
+}
+.mcf-media-participant-label strong { color: #d9b8ff; }
+.mcf-media-participant-label span {
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 150px;
+}
+
+.mcf-media-participant-join { opacity: 0.5; font-size: 14px; }
+
+.mcf-media-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mcf-media-control {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+  min-width: 0;
+}
+
+.mcf-media-prompt {
+  min-height: 150px;
+  line-height: 1.5;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.mcf-media-note {
+  font-size: 12.5px;
+  line-height: 1.45;
+  opacity: 0.78;
+}
+
+.mcf-media-status {
+  min-height: 20px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted, #b8c7d9);
+}
+.mcf-media-status.mcf-media-error { color: #ff9db4; }
+.mcf-media-status.mcf-media-info { color: #9fe8ff; }
+
+.mcf-media-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.mcf-media-generate {
+  margin-left: auto;
+  border-color: rgba(196, 154, 255, 0.8);
+  background: rgba(168, 85, 247, 0.2);
+  color: #f3e8ff;
+  font-weight: 700;
+}
+.mcf-media-generate:hover:not(:disabled) { background: rgba(168, 85, 247, 0.34); }
+.mcf-media-generate:disabled { opacity: 0.55; cursor: progress; }
+
+@media (max-width: 620px) {
+  .mcf-media-controls { grid-template-columns: 1fr; }
+  .mcf-media-generate { margin-left: 0; width: 100%; }
+  .mcf-media-actions > button { flex: 1 1 auto; }
+}
+
+/* Light theme overrides from features.css also apply to the popup scaffold. */
+html[data-mcf-theme="light"] .msg-action.mcf-media-btn {
+  border-color: rgba(120, 60, 180, 0.45);
+  color: #6b2fb3;
+}
+html[data-mcf-theme="light"] .mcf-media-source {
+  background: rgba(120, 60, 180, 0.07);
+  border-left-color: #8b46d6;
+}
+html[data-mcf-theme="light"] .mcf-media-generate {
+  background: rgba(120, 60, 180, 0.16);
+  color: #4a1d80;
+}
