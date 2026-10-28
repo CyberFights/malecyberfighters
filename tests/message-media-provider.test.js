@@ -582,3 +582,77 @@ test('text error streams are bounded and cancelled when they exceed the limit', 
   }), err => err.code === 'provider_error' && err.detail.length <= 180);
   assert.equal(cancelled, true);
 });
+
+/* ------------------------------------------------------------------ *
+   Classic Pollinations content negotiation
+ * ------------------------------------------------------------------ */
+
+test('classic Pollinations gets machine-readable errors and successful images with the same Accept header', async () => {
+  const seen = [];
+  const fetchImpl = async (_url, options) => {
+    seen.push(options.headers.Accept);
+    // The classic API returns JPEG error cards whenever Accept contains image/.
+    if (/image\//i.test(options.headers.Accept)) {
+      return response({ ok: false, status: 400, headers: { 'content-type': 'image/jpeg' }, buffer: Buffer.from('JFIF') });
+    }
+    if (seen.length === 1) {
+      return response({ ok: false, status: 400, headers: { 'content-type': 'application/json' },
+        json: { success: false, error: { code: 'BAD_REQUEST', message: 'Invalid request parameter' } } });
+    }
+    return okImage();
+  };
+  await assert.rejects(() => generateMedia({ prompt: 'A wrestling match', config: testConfig(), fetchImpl }), err => {
+    assert.equal(err.code, 'provider_error');
+    assert.equal(err.providerStatus, 400);
+    assert.equal(err.contentType, 'application/json');
+    assert.match(err.detail, /Invalid request parameter/);
+    return true;
+  });
+  const image = await generateMedia({ prompt: 'A wrestling match', config: testConfig(), fetchImpl });
+  assert.equal(image.mimetype, 'image/png');
+  assert.equal(seen.length, 2);
+  for (const accept of seen) {
+    assert.match(accept, /application\/json/);
+    assert.doesNotMatch(accept, /image\//i);
+    assert.match(accept, /\*\/\*/);
+  }
+});
+
+test('classic error details do not expose echoed prompt, URL, or request parameters', async () => {
+  const privateText = 'A distinctive private wrestling message';
+  await assert.rejects(() => generateMedia({
+    prompt: privateText, config: testConfig({ maxGetUrlChars: 800 }),
+    fetchImpl: async url => {
+      const encoded = new URL(url).pathname.split('/').pop();
+      return response({ ok: false, status: 400, headers: { 'content-type': 'application/json' },
+        json: { error: { message: `Bad request ${decodeURIComponent(encoded)} ${encoded}` }, requestParameters: { prompt: privateText } } });
+    }
+  }), err => {
+    assert.equal(err.providerStatus, 400);
+    assert.doesNotMatch(err.message, /distinctive private wrestling message/i);
+    assert.doesNotMatch(err.detail, /distinctive%20private/i);
+    assert.match(err.detail, /\[redacted\]/);
+    return true;
+  });
+  await assert.rejects(() => generateMedia({
+    prompt: privateText, config: testConfig(),
+    fetchImpl: async () => response({ ok: false, status: 400, headers: { 'content-type': 'application/json' },
+      json: { requestParameters: { prompt: privateText } } })
+  }), err => !err.message.includes(privateText) && !err.detail.includes(privateText));
+});
+
+test('custom image, OpenAI, and video providers retain their existing Accept negotiation', async () => {
+  for (const config of [
+    testConfig({ imageUrl: 'https://example.test/image' }),
+    testConfig({ imageMode: 'openai' }),
+    testConfig({ videoEnabled: true })
+  ]) {
+    const mediaType = config.videoEnabled ? 'video' : 'image';
+    let accept = '';
+    await assert.rejects(() => generateMedia({
+      prompt: 'A wrestling match', mediaType, config,
+      fetchImpl: async (_url, options) => { accept = options.headers.Accept; return response({ ok: false, status: 403 }); }
+    }));
+    assert.match(accept, mediaType === 'video' ? /video\/mp4/ : /image\/jpeg/);
+  }
+});

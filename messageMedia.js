@@ -1142,9 +1142,12 @@ async function readProviderErrorBody(response, secrets, contentType) {
   let detail = trimmed;
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
     try {
-      detail = providerMessageFromData(JSON.parse(trimmed)) || trimmed;
+      // Error envelopes may also contain requestParameters.prompt and other
+      // private input. Never fall back to the entire parsed JSON document.
+      detail = providerMessageFromData(JSON.parse(trimmed));
     } catch (_) {
-      detail = trimmed;
+      // Truncated or malformed JSON could contain a partial private prompt.
+      detail = '';
     }
   }
   return safeDetail(redactSecrets(detail, secrets), PROVIDER_ERROR_BODY_LIMIT);
@@ -1391,9 +1394,18 @@ async function generateMedia({
   const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
   const attempts = boundedInteger(config.providerAttempts, DEFAULT_PROVIDER_ATTEMPTS, 1, 5);
   const retryMs = boundedInteger(config.providerRetryMs, DEFAULT_PROVIDER_RETRY_MS, 0, MAX_PROVIDER_RETRY_MS);
-  const secrets = [config.mediaKey, config.llmKey].filter(Boolean);
+  // Providers sometimes echo the request in errors; do not expose the prompt
+  // or keys in the member-visible detail or server log.
+  const secrets = [config.mediaKey, config.llmKey, finalPrompt, encodeURIComponent(finalPrompt)].filter(Boolean);
+  let classicPollinations = false;
+  try {
+    classicPollinations = !isVideo && mode === 'get' && new URL(baseUrl).hostname.toLowerCase() === 'image.pollinations.ai';
+  } catch (_) { /* assertProviderUrl reports invalid URLs below */ }
   const headers = {
-    Accept: isVideo ? 'video/mp4,video/webm,image/gif,*/*' : 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8,*/*;q=0.5',
+    // Classic Pollinations chooses JPEG error cards whenever Accept contains
+    // "image/". JSON/* gets machine-readable errors and still returns JPEG on
+    // success. Keep other providers' content negotiation unchanged.
+    Accept: classicPollinations ? 'application/json, */*;q=0.9' : isVideo ? 'video/mp4,video/webm,image/gif,*/*' : 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8,*/*;q=0.5',
     'User-Agent': 'MaleCyberFighters/1.0 (+https://male-cyber-fighters.com)',
     ...(config.mediaKey ? { Authorization: `Bearer ${config.mediaKey}` } : {})
   };
@@ -1485,6 +1497,10 @@ async function generateMedia({
           }
         }
         const url = getModeUrl(baseUrl, finalPrompt, params, config.maxGetUrlChars || MAX_GET_URL_CHARS);
+        // The GET URL may contain a shortened version of the prompt. Redact
+        // both representations if a provider echoes its request path.
+        const encodedPrompt = new URL(url).pathname.split('/').pop();
+        if (encodedPrompt) secrets.push(encodedPrompt, decodeURIComponent(encodedPrompt));
         try {
           response = await fetchWithTimeout(fetchImpl, url, { method: 'GET', headers }, attemptTimeout);
         } catch (fetchErr) {

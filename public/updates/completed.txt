@@ -42,3 +42,4 @@
 - stories have shareable links, can be exported as text, and can be searched in the Archives by title, text or member
 - Visualize: fixed "message media generate error: provider_error" — provider 5xx responses, JSON/HTML error cards and empty replies are now classified (rate limit / bad key / refused / transient), retried with a fresh seed, and reported with a redacted detail in the server log and the dialog instead of a bare error code
 - Visualize: keep generator seeds in Pollinations’ accepted 32-bit range and avoid displaying binary JPEG error cards as garbled text; unsuccessful provider images are not posted to chat.
+- Visualize: request readable JSON errors from the classic image provider instead of JPEG error cards, while still accepting generated images.
