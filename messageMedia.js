@@ -50,6 +50,8 @@ const MIN_ATTEMPT_MS = 100;
 // Most CDNs cap the request line well below this; keeping the keyless GET URL
 // short avoids 414/502 responses for long, wrestling-detailed prompts.
 const MAX_GET_URL_CHARS = 3800;
+// Pollinations validates seeds as signed 32-bit non-negative integers.
+const PROVIDER_SEED_RANGE = 0x80000000;
 
 const MEDIA_TYPES = Object.freeze(['image', 'video']);
 const SCOPES = Object.freeze(['public', 'room', 'dm']);
@@ -1079,11 +1081,51 @@ function classifyProviderFailure(text) {
   return '';
 }
 
-/** Read an error body without ever trusting it (bounded, tag-stripped, redacted). */
-async function readProviderErrorBody(response, secrets) {
+/** Read an error body without ever trusting it (tag-stripped and redacted). */
+async function readProviderErrorBody(response, secrets, contentType) {
+  // Some providers return an error card as a JPEG. Never decode or expose its
+  // bytes as text, and never mistake a non-2xx image for generated media.
+  if (/^(?:image|video|audio)\//i.test(contentType)) {
+    if (response.body && typeof response.body.cancel === 'function') {
+      try { await response.body.cancel(); } catch (_) { /* already closed */ }
+    } else if (response.body && typeof response.body.destroy === 'function') {
+      response.body.destroy();
+    }
+    return 'The generator returned an image or media error without a readable explanation';
+  }
   let raw = '';
   try {
-    if (typeof response.text === 'function') raw = await response.text();
+    if (response.body && typeof response.body.getReader === 'function') {
+      const reader = response.body.getReader();
+      const chunks = [];
+      let length = 0;
+      let complete = false;
+      try {
+        while (length < PROVIDER_ERROR_BODY_LIMIT) {
+          const { done, value } = await reader.read();
+          if (done) { complete = true; break; }
+          const chunk = Buffer.from(value).subarray(0, PROVIDER_ERROR_BODY_LIMIT - length);
+          chunks.push(chunk);
+          length += chunk.length;
+        }
+      } finally {
+        if (!complete) {
+          try { await reader.cancel(); } catch (_) { /* already closed */ }
+        }
+        reader.releaseLock();
+      }
+      raw = Buffer.concat(chunks).toString('utf8');
+    } else if (response.body && response.body[Symbol.asyncIterator]) {
+      const chunks = [];
+      let length = 0;
+      for await (const value of response.body) {
+        const chunk = Buffer.from(value).subarray(0, PROVIDER_ERROR_BODY_LIMIT - length);
+        chunks.push(chunk);
+        length += chunk.length;
+        if (length >= PROVIDER_ERROR_BODY_LIMIT) break;
+      }
+      raw = Buffer.concat(chunks).toString('utf8');
+    } else if (typeof response.text === 'function') raw = await response.text();
     else if (typeof response.arrayBuffer === 'function') {
       raw = Buffer.from(await response.arrayBuffer()).toString('utf8');
     }
@@ -1091,6 +1133,10 @@ async function readProviderErrorBody(response, secrets) {
     return '';
   }
   raw = String(raw || '').slice(0, PROVIDER_ERROR_BODY_LIMIT);
+  // A missing or incorrect content type must not make binary data printable.
+  if (/[\ufffd\u0000-\u0008\u000e-\u001f]/.test(raw)) {
+    return 'The generator returned a binary error without a readable explanation';
+  }
   const trimmed = raw.trim();
   if (!trimmed) return '';
   let detail = trimmed;
@@ -1142,7 +1188,7 @@ async function readMediaResponse(response, { fetchImpl, maxBytes, timeoutMs, dep
   const retryAfter = retryAfterRaw ? Number(retryAfterRaw) || null : null;
 
   if (!response.ok) {
-    const detail = await readProviderErrorBody(response, secrets);
+    const detail = await readProviderErrorBody(response, secrets, contentType);
     const kind = classifyProviderFailure(detail);
     const base = { status, detail, retryAfter, contentType, secrets };
     // Explicit HTTP status wins: a 500 is a transient provider failure even if
@@ -1334,9 +1380,9 @@ async function generateMedia({
   // Video models generally accept only landscape or portrait; a square or 4:3
   // request becomes landscape rather than sending contradictory parameters.
   const videoRatio = aspectRatioSpec(normalizeAspectRatio(aspectRatio) === '9:16' ? '9:16' : '16:9');
-  const chosenSeed = Number.isSafeInteger(Number(seed)) && Number(seed) >= 0
-    ? Number(seed)
-    : crypto.randomBytes(4).readUInt32BE(0);
+  const chosenSeed = seed != null && Number.isSafeInteger(Number(seed)) && Number(seed) >= 0
+    ? Number(seed) % PROVIDER_SEED_RANGE
+    : crypto.randomInt(0, PROVIDER_SEED_RANGE);
   const isVideo = media === 'video';
   const baseUrl = isVideo ? config.videoUrl : config.imageUrl;
   const mode = isVideo ? config.videoMode : config.imageMode;
@@ -1377,7 +1423,7 @@ async function generateMedia({
     // Pollinations caches by URL, so a retry with the same seed can just replay
     // the failed response. Varying the seed also gives the generator a fresh
     // chance when a particular render was refused.
-    const attemptSeed = attempt === 0 ? chosenSeed : (chosenSeed + attempt * 7919) % 2147483647;
+    const attemptSeed = (chosenSeed + attempt * 7919) % PROVIDER_SEED_RANGE;
     const remainingMs = deadline - Date.now();
     if (remainingMs < MIN_ATTEMPT_MS) break;
     const attemptTimeout = Math.max(MIN_ATTEMPT_MS, Math.min(timeoutMs, remainingMs));

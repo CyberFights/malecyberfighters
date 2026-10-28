@@ -496,3 +496,89 @@ test('a provider_auth failure is a 502 with an actionable client code, and provi
     assert.equal(statuses[statuses.length - 1][1], code);
   }
 });
+
+/* ------------------------------------------------------------------ *
+   Pollinations seed range and binary error cards
+ * ------------------------------------------------------------------ */
+
+test('generated seeds use the complete non-negative signed 32-bit range', async t => {
+  const crypto = require('node:crypto');
+  const randomInt = t.mock.method(crypto, 'randomInt', (min, max) => {
+    assert.equal(min, 0);
+    assert.equal(max, 2147483648);
+    return max - 1;
+  });
+  let requestedSeed;
+  const result = await generateMedia({
+    prompt: 'A wrestling match', config: testConfig(),
+    fetchImpl: async url => {
+      requestedSeed = Number(new URL(url).searchParams.get('seed'));
+      return okImage();
+    }
+  });
+  assert.equal(randomInt.mock.callCount(), 1);
+  assert.equal(requestedSeed, 2147483647);
+  assert.equal(result.seed, requestedSeed);
+});
+
+test('oversized input seeds and retry seeds stay in range in GET and POST requests', async () => {
+  for (const mode of ['get', 'openai']) {
+    const seeds = [];
+    const result = await generateMedia({
+      prompt: 'A wrestling match', seed: 4294967295,
+      config: testConfig({ imageMode: mode, providerAttempts: 2, providerRetryMs: 0 }),
+      fetchImpl: async (url, options) => {
+        seeds.push(mode === 'get' ? Number(new URL(url).searchParams.get('seed')) : JSON.parse(options.body).seed);
+        return seeds.length === 1 ? response({ ok: false, status: 500 }) : okImage();
+      }
+    });
+    assert.deepEqual(seeds, [2147483647, 7918]);
+    assert.equal(result.seed, seeds[1]);
+  }
+});
+
+test('HTTP 400 JPEG error cards are not decoded, posted, or mistaken for a refusal', async () => {
+  let read = false;
+  let canceled = false;
+  await assert.rejects(() => generateMedia({
+    prompt: 'A wrestling match', config: testConfig({ providerAttempts: 3 }),
+    fetchImpl: async () => ({
+      ok: false, status: 400,
+      headers: { get: key => key === 'content-type' ? 'image/jpeg' : null },
+      body: { cancel: async () => { canceled = true; } },
+      text: async () => { read = true; return '\ufffd\ufffd JFIF'; }
+    })
+  }), err => {
+    assert.equal(err.code, 'provider_error');
+    assert.equal(err.providerStatus, 400);
+    assert.equal(err.contentType, 'image/jpeg');
+    assert.match(err.detail, /without a readable explanation/);
+    assert.doesNotMatch(err.message, /JFIF|\ufffd/);
+    return true;
+  });
+  assert.equal(read, false);
+  assert.equal(canceled, true);
+});
+
+test('binary errors with missing content type never appear as text diagnostics', async () => {
+  await assert.rejects(() => generateMedia({
+    prompt: 'A wrestling match', config: testConfig(),
+    fetchImpl: async () => response({ ok: false, status: 400, text: '\ufffd\ufffd JFIF\u0000 rate limit' })
+  }), err => err.code === 'provider_error' && !err.message.includes('JFIF') && /binary error/.test(err.detail));
+});
+
+test('text error streams are bounded and cancelled when they exceed the limit', async () => {
+  let cancelled = false;
+  const body = new ReadableStream({
+    pull(controller) { controller.enqueue(Buffer.alloc(16384, 65)); },
+    cancel() { cancelled = true; }
+  });
+  await assert.rejects(() => generateMedia({
+    prompt: 'A wrestling match', config: testConfig(),
+    fetchImpl: async () => ({
+      ok: false, status: 400, body,
+      headers: { get: key => key === 'content-type' ? 'text/plain' : null }
+    })
+  }), err => err.code === 'provider_error' && err.detail.length <= 180);
+  assert.equal(cancelled, true);
+});
