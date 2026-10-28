@@ -67,7 +67,7 @@ function jsonResponse(data, status = 200) {
   };
 }
 
-async function boot({ videoEnabled = false, generateError = null } = {}) {
+async function boot({ videoEnabled = false, generateError = null, generateDetail = '' } = {}) {
   const dom = new JSDOM(PAGE, {
     url: 'https://example.test/',
     runScripts: 'dangerously',
@@ -114,7 +114,9 @@ async function boot({ videoEnabled = false, generateError = null } = {}) {
       });
     }
     if (target.endsWith('/api/message-media/generate')) {
-      if (generateError) return jsonResponse({ ok: false, error: generateError }, 400);
+      if (generateError) {
+        return jsonResponse({ ok: false, error: generateError, detail: generateDetail }, 400);
+      }
       return jsonResponse({
         ok: true,
         message: { _id: 'f'.repeat(24), scope: body.scope, imageUrl: '/generated/' + '1'.repeat(32) + '.png' },
@@ -266,6 +268,50 @@ test('a failed generation keeps the dialog open and explains the error', async (
     );
     assert.ok(win.document.querySelector('.mcf-modal'), 'the dialog stays open for a retry');
     assert.equal(win.document.getElementById('mcfMediaGenerate').disabled, false);
+  } finally {
+    dom.window.close();
+  }
+});
+
+test('provider failures show the server detail and an actionable message', async () => {
+  const cases = [
+    ['provider_error', 'upstream flux unavailable (HTTP 503)', /image generator failed/i],
+    ['provider_auth', 'the API key was rejected', /API key/i],
+    ['provider_refused', 'prompt was refused by the content filter', /refused this prompt/i]
+  ];
+  for (const [code, detail, expected] of cases) {
+    const { dom, win } = await boot({ generateError: code, generateDetail: detail });
+    try {
+      win.document.querySelector(`#dmMessages .message-row[data-dm-id="${DM_ID}"] .mcf-media-btn`).click();
+      await waitFor(() => !!win.document.getElementById('mcfMediaPrompt'));
+      const promptEl = win.document.getElementById('mcfMediaPrompt');
+      await waitFor(() => promptEl.value.includes('A polished illustration'));
+      win.document.getElementById('mcfMediaGenerate').click();
+      const status = win.document.getElementById('mcfMediaStatus');
+      assert.equal(await waitFor(() => status.textContent.includes(detail)), true, `${code}: detail missing`);
+      assert.match(status.textContent, expected, `${code}: actionable text missing`);
+      assert.ok(win.document.querySelector('.mcf-modal'), 'the dialog stays open for a retry');
+      assert.equal(win.document.getElementById('mcfMediaGenerate').disabled, false);
+    } finally {
+      dom.window.close();
+    }
+  }
+});
+
+test('a provider detail containing markup is stripped before display', async () => {
+  const { dom, win } = await boot({
+    generateError: 'provider_error',
+    generateDetail: '<img src=x onerror=alert(1)>bad gateway'
+  });
+  try {
+    win.document.querySelector(`#dmMessages .message-row[data-dm-id="${DM_ID}"] .mcf-media-btn`).click();
+    await waitFor(() => !!win.document.getElementById('mcfMediaPrompt'));
+    const promptEl = win.document.getElementById('mcfMediaPrompt');
+    await waitFor(() => promptEl.value.includes('A polished illustration'));
+    win.document.getElementById('mcfMediaGenerate').click();
+    const status = win.document.getElementById('mcfMediaStatus');
+    assert.equal(await waitFor(() => /bad gateway/.test(status.textContent)), true);
+    assert.equal(win.document.querySelector('#mcfMediaStatus img'), null, 'markup must not become HTML');
   } finally {
     dom.window.close();
   }

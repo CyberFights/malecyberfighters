@@ -56,6 +56,8 @@
     slow_mode: 'That room has slow mode on — wait a moment and try again.',
     generation_in_progress: 'Your previous generation is still running.',
     provider_rate_limited: 'The image generator is busy. Wait a minute and try again.',
+    provider_auth: 'The image generator rejected this server\'s API key. Ask an admin to check the media key.',
+    provider_refused: 'The generator refused this prompt. Edit the wording and try again, or pick a shorter message.',
     provider_timeout: 'The generator is taking longer than usual — the media will still appear in chat if it finishes.',
     provider_error: 'The image generator failed. Please try again.',
     provider_config: 'The image generator is not configured correctly.',
@@ -81,7 +83,18 @@
 
   function esc(value) { return MCF.escapeHtml(value); }
   function toast(message, kind) { MCF.toast(message, kind); }
-  function errorText(code) { return ERRORS[code] || ('Could not generate media (' + (code || 'unknown_error') + ').'); }
+
+  /** Show the server's short, redacted provider detail alongside the message. */
+  function errorText(code, data) {
+    var text = ERRORS[code] || ('Could not generate media (' + (code || 'unknown_error') + ').');
+    var detail = data && typeof data.detail === 'string' ? data.detail : '';
+    if (detail) {
+      detail = detail.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/<[^>]*>/g, '').trim();
+      if (detail.length > 160) detail = detail.slice(0, 159) + '…';
+      if (detail) text += ' (' + detail + ')';
+    }
+    return text;
+  }
 
   function avatarSrc(value) {
     var raw = String(value == null ? '' : value).trim();
@@ -437,7 +450,7 @@
 
     if (id !== promptRequestId || !els.prompt) return;
     if (!data.ok) {
-      showError(errorText(data.error));
+      showError(errorText(data.error, data));
       return;
     }
 
@@ -499,7 +512,7 @@
 
     setBusy(false);
     if (!data.ok) {
-      showError(errorText(data.error));
+      showError(errorText(data.error, data));
       return;
     }
 
