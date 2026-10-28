@@ -35,6 +35,22 @@ const IMAGE_TIMEOUT_MS = 90 * 1000;
 const VIDEO_TIMEOUT_MS = 180 * 1000;
 const LLM_TIMEOUT_MS = 20 * 1000;
 
+// The keyless Pollinations endpoint is a best-effort service: it regularly
+// returns 5xx responses, and its rate limit / safety refusals often arrive as a
+// JSON error or an HTML "image card" page with an HTTP 200 status instead of a
+// clean 402/429. Those cases used to collapse into a bare `provider_error`,
+// which made the failure impossible to diagnose from the server log.
+const PROVIDER_DETAIL_LIMIT = 240;
+const PROVIDER_ERROR_BODY_LIMIT = 8 * 1024;
+const DEFAULT_PROVIDER_ATTEMPTS = 3;
+const DEFAULT_PROVIDER_RETRY_MS = 450;
+const MAX_PROVIDER_RETRY_MS = 4000;
+// Don't start another attempt when the shared timeout budget is nearly gone.
+const MIN_ATTEMPT_MS = 100;
+// Most CDNs cap the request line well below this; keeping the keyless GET URL
+// short avoids 414/502 responses for long, wrestling-detailed prompts.
+const MAX_GET_URL_CHARS = 3800;
+
 const MEDIA_TYPES = Object.freeze(['image', 'video']);
 const SCOPES = Object.freeze(['public', 'room', 'dm']);
 
@@ -110,6 +126,57 @@ function envValue(env, name) {
   return String((env && env[name]) || '').trim();
 }
 
+function boundedInteger(value, fallback, min, max) {
+  const parsed = Number.parseInt(String(value == null || value === '' ? fallback : value), 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, Math.max(0, ms || 0)));
+}
+
+/**
+ * node-fetch throws a plain TypeError for DNS/connection failures. Left alone
+ * those become an opaque 500 `server_error`; make them retryable provider
+ * errors with a redacted detail instead.
+ */
+function normalizeNetworkError(err, secrets) {
+  if (err && typeof err.code === 'string' && err.code.startsWith('provider_')) return err;
+  if (err && (err.code === 'invalid_media' || err.code === 'media_too_large')) return err;
+  return providerFailure({
+    code: 'provider_error',
+    message: 'Could not reach the generator',
+    status: 0,
+    secrets,
+    retryable: true,
+    detail: safeDetail(redactSecrets((err && err.message) || err, secrets), 180)
+  });
+}
+
+/** One-line, secret-free log summary: no provider URL (it embeds the prompt) and no keys. */
+function formatProviderError(err, { mediaType = '', provider = '' } = {}) {
+  const code = (err && err.code) || 'server_error';
+  const message = safeDetail((err && err.message) || String(err || 'unknown error'), 300);
+  const parts = [code, message];
+  if (err && err.providerStatus) parts.push(`status=${err.providerStatus}`);
+  if (err && err.contentType) parts.push(`type=${err.contentType}`);
+  if (err && err.attempts > 1) parts.push(`attempts=${err.attempts}`);
+  if (mediaType) parts.push(`mediaType=${mediaType}`);
+  if (provider) parts.push(`provider=${provider}`);
+  return parts.join(' | ');
+}
+
+/** Hostname only — never log the full provider URL, which contains the prompt. */
+function providerLabel(config, mediaType) {
+  const raw = mediaType === 'video' ? config.videoUrl : config.imageUrl;
+  try {
+    return new URL(String(raw)).hostname || '';
+  } catch (_) {
+    return '';
+  }
+}
+
 /**
  * Provider configuration. Images work out of the box through Pollinations'
  * keyless classic endpoint. A key unlocks the unified API and video; an LLM
@@ -147,7 +214,16 @@ function configFromEnv(env = process.env) {
     llmModel: envValue(env, 'MCF_PROMPT_LLM_MODEL') || 'openai',
     imageTimeoutMs: IMAGE_TIMEOUT_MS,
     videoTimeoutMs: VIDEO_TIMEOUT_MS,
-    llmTimeoutMs: LLM_TIMEOUT_MS
+    llmTimeoutMs: LLM_TIMEOUT_MS,
+    // Keyless Pollinations is a best-effort service: retry transient 5xx/error
+    // cards a couple of times before telling the member it failed.
+    providerAttempts: boundedInteger(envValue(env, 'MCF_MEDIA_ATTEMPTS'), DEFAULT_PROVIDER_ATTEMPTS, 1, 5),
+    providerRetryMs: boundedInteger(envValue(env, 'MCF_MEDIA_RETRY_MS'), DEFAULT_PROVIDER_RETRY_MS, 0, MAX_PROVIDER_RETRY_MS),
+    // The provider's own content filter can reject legitimate (non-sexual)
+    // wrestling prompts. Our local prompt writer already strips unsafe
+    // requests, so operators may turn the provider filter off if needed.
+    safeMode: !['0', 'false', 'no', 'off'].includes(envValue(env, 'MCF_MEDIA_SAFE').toLowerCase()),
+    maxGetUrlChars: boundedInteger(envValue(env, 'MCF_MEDIA_MAX_URL_CHARS'), MAX_GET_URL_CHARS, 800, 12000)
   });
 }
 
@@ -881,9 +957,21 @@ function assertProviderUrl(raw) {
 function decodeBase64Media(value) {
   const raw = String(value || '').trim();
   if (!raw) return null;
-  const base64 = raw.startsWith('data:') ? raw.slice(raw.indexOf(',') + 1) : raw;
+  let base64 = raw;
+  if (raw.startsWith('data:')) {
+    // Only image/video data URLs are media; `data:application/json` error
+    // payloads must not be mistaken for generated bytes.
+    if (!/^data:(image|video)\//i.test(raw) || !raw.includes(',')) return null;
+    base64 = raw.slice(raw.indexOf(',') + 1);
+  }
+  // Node's Buffer silently ignores invalid base64 characters, which used to
+  // turn an error string like "rate limited" into a few junk bytes that then
+  // failed raster validation. Require a real base64 payload instead.
+  const compact = base64.replace(/\s+/g, '');
+  // Accept standard and URL-safe base64 (some providers use - and _).
+  if (compact.length < 16 || !/^[A-Za-z0-9+/\-_]+={0,2}$/.test(compact)) return null;
   try {
-    const buffer = Buffer.from(base64, 'base64');
+    const buffer = Buffer.from(compact, 'base64');
     return buffer.length ? buffer : null;
   } catch (_) {
     return null;
@@ -927,7 +1015,120 @@ function extractBase64Media(data) {
   return null;
 }
 
-async function readMediaResponse(response, { fetchImpl, maxBytes, timeoutMs, depth = 0 }) {
+/* ------------------------------------------------------------------ *
+   Provider error diagnostics.
+
+   A bare `provider_error` told us nothing: it covered a 500 response, a JSON
+   error card returned with HTTP 200, an HTML rate-limit page and an empty body.
+   We now read a bounded, redacted snippet of the provider's reply and classify
+   it, so both the server log and the UI can say what actually went wrong.
+ * ------------------------------------------------------------------ */
+
+function redactSecrets(value, secrets = []) {
+  let text = String(value == null ? '' : value);
+  for (const secret of secrets) {
+    if (secret && String(secret).length >= 4) text = text.split(String(secret)).join('[redacted]');
+  }
+  return text
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
+    .replace(/\b(?:sk|pk)_[A-Za-z0-9_-]{6,}/g, '[redacted]')
+    .replace(/([?&](?:token|key|api_key|apikey|auth|password)=)[^&\s"']+/gi, '$1[redacted]');
+}
+
+function safeDetail(value, limit = PROVIDER_DETAIL_LIMIT) {
+  let text = String(value == null ? '' : value)
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (text.length > limit) text = `${text.slice(0, limit - 1)}…`;
+  return text;
+}
+
+/** Pull a readable message out of the many shapes providers use for errors. */
+function providerMessageFromData(data, depth = 0) {
+  if (data == null || depth > 4) return '';
+  if (typeof data === 'string' || typeof data === 'number') return String(data).trim();
+  if (Array.isArray(data)) {
+    return data.slice(0, 3).map(item => providerMessageFromData(item, depth + 1)).filter(Boolean).join(' | ');
+  }
+  if (typeof data !== 'object') return '';
+  const parts = [];
+  for (const key of ['error', 'message', 'detail', 'details', 'description', 'reason', 'code', 'status', 'type', 'hint']) {
+    if (data[key] === undefined || data[key] === null) continue;
+    const value = providerMessageFromData(data[key], depth + 1);
+    if (value && !parts.includes(value)) parts.push(value);
+    if (parts.length >= 6) break;
+  }
+  return parts.join(' | ');
+}
+
+function classifyProviderFailure(text) {
+  const value = String(text || '').toLowerCase();
+  if (/\b(?:rate.?limit|too many requests|quota|pollen|402|429|retry.?after|slow down|try again later|payment required|free (?:tier|slot)|server busy|at capacity)\b/.test(value)) {
+    return 'provider_rate_limited';
+  }
+  if (/\b(?:unauthori[sz]ed|forbidden|invalid (?:api )?key|api key|authentication required|401|403|invalid token|not permitted|access denied)\b/.test(value)) {
+    return 'provider_auth';
+  }
+  // Deliberately specific: our own prompt says "Safety and quality: ..." and a
+  // provider error may echo it. Require an actual refusal phrase, not "safety".
+  if (/\b(?:nsfw|content filter|blocked|refused|prohibited|inappropriate|moderation|flagged|not allowed|filtered|violates (?:our |the )?policy|safety (?:filter|system|check|rejection))\b/.test(value)) {
+    return 'provider_refused';
+  }
+  return '';
+}
+
+/** Read an error body without ever trusting it (bounded, tag-stripped, redacted). */
+async function readProviderErrorBody(response, secrets) {
+  let raw = '';
+  try {
+    if (typeof response.text === 'function') raw = await response.text();
+    else if (typeof response.arrayBuffer === 'function') {
+      raw = Buffer.from(await response.arrayBuffer()).toString('utf8');
+    }
+  } catch (_) {
+    return '';
+  }
+  raw = String(raw || '').slice(0, PROVIDER_ERROR_BODY_LIMIT);
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  let detail = trimmed;
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      detail = providerMessageFromData(JSON.parse(trimmed)) || trimmed;
+    } catch (_) {
+      detail = trimmed;
+    }
+  }
+  return safeDetail(redactSecrets(detail, secrets), PROVIDER_ERROR_BODY_LIMIT);
+}
+
+/** A 200 response can still be an HTML/JSON error card rather than media. */
+function looksLikeErrorDocument(buffer, contentType) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 4) return false;
+  if (/^(?:text\/|application\/(?:json|xml)|[a-z]+\/(?:[\w.-]*\+)?(?:json|xml))/i.test(contentType)) return true;
+  const head = buffer.subarray(0, Math.min(buffer.length, 512)).toString('utf8').trim();
+  return /^(?:<!doctype|<html|<head|<body|<\?xml|\{)/i.test(head);
+}
+
+function providerFailure({ code, message, status, detail, retryAfter, retryable, contentType, secrets }) {
+  const cleanDetail = safeDetail(redactSecrets(detail, secrets), 180);
+  const extra = {
+    status,
+    providerStatus: status,
+    detail: cleanDetail,
+    contentType,
+    retryable: !!retryable
+  };
+  if (retryAfter) extra.retryAfter = retryAfter;
+  // Internal only — capped so a long Retry-After never blocks a request. The
+  // public `retryAfter` above stays the provider's true value in seconds.
+  if (retryAfter) extra.providerRetryMs = Math.min(Number(retryAfter) * 1000 || 0, MAX_PROVIDER_RETRY_MS);
+  return codedError(code, cleanDetail ? `${message}: ${cleanDetail}` : message, extra);
+}
+
+async function readMediaResponse(response, { fetchImpl, maxBytes, timeoutMs, depth = 0, secrets = [] } = {}) {
   const status = Number(response.status || (response.ok ? 200 : 500));
   const contentType = String(response.headers && response.headers.get
     ? response.headers.get('content-type') || ''
@@ -935,18 +1136,46 @@ async function readMediaResponse(response, { fetchImpl, maxBytes, timeoutMs, dep
   const contentLength = Number(response.headers && response.headers.get
     ? response.headers.get('content-length') || 0
     : 0);
+  const retryAfterRaw = response.headers && response.headers.get
+    ? response.headers.get('retry-after')
+    : null;
+  const retryAfter = retryAfterRaw ? Number(retryAfterRaw) || null : null;
 
   if (!response.ok) {
-    const retryAfter = response.headers && response.headers.get
-      ? response.headers.get('retry-after')
-      : null;
+    const detail = await readProviderErrorBody(response, secrets);
+    const kind = classifyProviderFailure(detail);
+    const base = { status, detail, retryAfter, contentType, secrets };
+    // Explicit HTTP status wins: a 500 is a transient provider failure even if
+    // its body happens to mention "busy" or "rate limit".
     if (status === 402 || status === 429) {
-      throw codedError('provider_rate_limited', 'The generator is rate-limited; try again shortly', {
-        status,
-        retryAfter: retryAfter ? Number(retryAfter) || null : null
+      // A 402 means the free-tier slot is genuinely gone; a short 429 can be
+      // worth one more attempt, but a long Retry-After should reach the member.
+      const shortWait = status === 429 && (!retryAfter || retryAfter * 1000 <= MAX_PROVIDER_RETRY_MS);
+      throw providerFailure({
+        ...base, code: 'provider_rate_limited',
+        message: `The generator is rate-limited (HTTP ${status})`,
+        retryable: shortWait
       });
     }
-    throw codedError('provider_error', `The generator returned HTTP ${status}`, { status });
+    if (status === 401 || status === 403) {
+      throw providerFailure({ ...base, code: 'provider_auth', message: `The generator rejected the API key (HTTP ${status})` });
+    }
+    if (status >= 500 || status === 408 || status === 425) {
+      throw providerFailure({
+        ...base, code: 'provider_error', message: `The generator returned HTTP ${status}`, retryable: true
+      });
+    }
+    if (kind === 'provider_rate_limited') {
+      throw providerFailure({ ...base, code: 'provider_rate_limited', message: `The generator is rate-limited (HTTP ${status})` });
+    }
+    if (kind === 'provider_auth') {
+      throw providerFailure({ ...base, code: 'provider_auth', message: `The generator rejected the API key (HTTP ${status})` });
+    }
+    throw providerFailure({
+      ...base,
+      code: kind === 'provider_refused' ? 'provider_refused' : 'provider_error',
+      message: kind === 'provider_refused' ? `The generator refused the request (HTTP ${status})` : `The generator returned HTTP ${status}`
+    });
   }
 
   if (contentLength && contentLength > maxBytes) {
@@ -961,28 +1190,105 @@ async function readMediaResponse(response, { fetchImpl, maxBytes, timeoutMs, dep
     if (url && depth < 2) {
       assertProviderUrl(url);
       const next = await fetchWithTimeout(fetchImpl, url, { method: 'GET', headers: { Accept: '*/*' } }, timeoutMs);
-      return readMediaResponse(next, { fetchImpl, maxBytes, timeoutMs, depth: depth + 1 });
+      return readMediaResponse(next, { fetchImpl, maxBytes, timeoutMs, depth: depth + 1, secrets });
     }
-    throw codedError('provider_error', 'The generator returned no usable media', { status });
+    // A JSON reply with no media is almost always an error card returned with
+    // HTTP 200 (Pollinations does this for rate limits and refusals).
+    const detail = safeDetail(redactSecrets(providerMessageFromData(data), secrets), 180);
+    const kind = classifyProviderFailure(`${status} ${detail}`) || 'provider_error';
+    const messages = {
+      provider_rate_limited: 'The generator is rate-limited',
+      provider_auth: 'The generator rejected the API key',
+      provider_refused: 'The generator refused this prompt',
+      provider_error: 'The generator returned no usable media'
+    };
+    throw providerFailure({
+      code: kind,
+      message: messages[kind],
+      status,
+      detail,
+      retryAfter,
+      contentType,
+      secrets,
+      // A 200-level error card is not an authoritative rejection: retrying a
+      // rate-limit/refusal card once often succeeds on the keyless endpoint.
+      retryable: !retryAfter || retryAfter * 1000 <= MAX_PROVIDER_RETRY_MS
+    });
   }
 
   if (typeof response.arrayBuffer !== 'function') {
-    throw codedError('provider_error', 'The generator returned no media bytes');
+    throw providerFailure({
+      code: 'provider_error', message: 'The generator returned no media bytes',
+      status, contentType, secrets, retryable: true, detail: ''
+    });
   }
   const arrayBuffer = await response.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
-  if (!buffer.length) throw codedError('provider_error', 'The generator returned an empty file');
+  if (!buffer.length) {
+    throw providerFailure({
+      code: 'provider_error', message: 'The generator returned an empty file',
+      status, contentType, secrets, retryable: true, detail: ''
+    });
+  }
   if (buffer.length > maxBytes) throw codedError('media_too_large', 'The generator returned a file that is too large');
+  if (looksLikeErrorDocument(buffer, contentType)) {
+    const detail = safeDetail(redactSecrets(buffer.subarray(0, PROVIDER_ERROR_BODY_LIMIT).toString('utf8'), secrets), 180);
+    const kind = classifyProviderFailure(`${status} ${detail}`) || 'provider_error';
+    const messages = {
+      provider_rate_limited: 'The generator is rate-limited',
+      provider_auth: 'The generator rejected the API key',
+      provider_refused: 'The generator refused this prompt',
+      provider_error: 'The generator returned an error page instead of media'
+    };
+    throw providerFailure({
+      code: kind,
+      message: messages[kind],
+      status, detail, retryAfter, contentType, secrets,
+      // Rate-limit/refusal pages delivered with HTTP 200 are often transient.
+      retryable: !retryAfter || retryAfter * 1000 <= MAX_PROVIDER_RETRY_MS
+    });
+  }
   return { buffer, contentType };
 }
 
-function getModeUrl(base, prompt, params) {
+/**
+ * Keep the mandatory safety suffix and the verbatim match turn, but trim the
+ * verbose scene directions so the keyless GET URL stays under CDN/proxy limits.
+ * The full prompt is still stored on the generated chat message.
+ */
+function fitPromptForUrl(prompt, base, query, maxChars = MAX_GET_URL_CHARS) {
+  const build = value => `${base}/${encodeURIComponent(value)}?${query}`;
+  if (build(prompt).length <= maxChars) return prompt;
+  const marker = prompt.lastIndexOf(SAFETY_MARKER);
+  const suffix = marker >= 0 ? prompt.slice(marker) : '';
+  let body = (marker >= 0 ? prompt.slice(0, marker) : prompt).trimEnd();
+  const assemble = () => `${body}${body ? '…' : ''}${suffix ? `\n\n${suffix}` : ''}`;
+  for (let i = 0; i < 40 && body.length > 120 && build(assemble()).length > maxChars; i++) {
+    const cut = Math.max(0, Math.floor(body.length * 0.84));
+    let at = body.lastIndexOf('. ', cut);
+    if (at < body.length * 0.45) at = body.lastIndexOf(' ', cut);
+    body = body.slice(0, at > 0 ? at : cut).trimEnd().replace(/[,;:]$/, '');
+  }
+  let fitted = assemble();
+  // Last resort: cap the encoded path directly, always preserving the suffix.
+  if (build(fitted).length > maxChars) {
+    const url = new URL(build(''));
+    const budget = Math.max(80, maxChars - url.origin.length - url.pathname.length - query.length - 8 - encodeURIComponent(suffix).length);
+    body = body.slice(0, budget).replace(/\s+\S*$/, '');
+    fitted = `${body}…${suffix ? `\n\n${suffix}` : ''}`;
+  }
+  return fitted;
+}
+
+function getModeUrl(base, prompt, params, maxChars = MAX_GET_URL_CHARS) {
   const cleanBase = String(base).replace(/\/+$/, '');
   const query = new URLSearchParams();
   Object.entries(params || {}).forEach(([key, value]) => {
     if (value !== null && value !== undefined && value !== '') query.set(key, String(value));
   });
-  const full = `${cleanBase}/${encodeURIComponent(prompt)}?${query.toString()}`;
+  const queryString = query.toString();
+  const fitted = fitPromptForUrl(prompt, cleanBase, queryString, maxChars);
+  const full = `${cleanBase}/${encodeURIComponent(fitted)}?${queryString}`;
   assertProviderUrl(full);
   return full;
 }
@@ -1037,6 +1343,9 @@ async function generateMedia({
   const model = isVideo ? config.videoModel : config.imageModel;
   const timeoutMs = isVideo ? (config.videoTimeoutMs || VIDEO_TIMEOUT_MS) : (config.imageTimeoutMs || IMAGE_TIMEOUT_MS);
   const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+  const attempts = boundedInteger(config.providerAttempts, DEFAULT_PROVIDER_ATTEMPTS, 1, 5);
+  const retryMs = boundedInteger(config.providerRetryMs, DEFAULT_PROVIDER_RETRY_MS, 0, MAX_PROVIDER_RETRY_MS);
+  const secrets = [config.mediaKey, config.llmKey].filter(Boolean);
   const headers = {
     Accept: isVideo ? 'video/mp4,video/webm,image/gif,*/*' : 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8,*/*;q=0.5',
     'User-Agent': 'MaleCyberFighters/1.0 (+https://male-cyber-fighters.com)',
@@ -1051,89 +1360,158 @@ async function generateMedia({
     .filter(value => /^https?:\/\//i.test(value))
     .slice(0, 2);
   const referencesEnabled = !!config.mediaKey || config.imageMode === 'openai' || config.videoMode === 'openai';
+  // Some image models reject a reference-image parameter outright. If a
+  // request with references is refused, drop them on the next attempt: the
+  // local portrait overlay still guarantees both profile pictures. The
+  // provider's content filter is NEVER relaxed automatically — that stays an
+  // explicit operator choice (MCF_MEDIA_SAFE) and a surfaced refusal error.
+  let useReferences = referencesEnabled && references.length > 0;
+  const useSafeFilter = config.safeMode !== false;
 
-  let response;
-  if (mode === 'openai') {
-    assertProviderUrl(baseUrl);
-    const body = isVideo ? {
-      model,
-      prompt: finalPrompt,
-      duration: config.videoDuration || 5,
-      aspect_ratio: videoRatio.id,
-      response_format: 'b64_json'
-    } : {
-      model,
-      prompt: finalPrompt,
-      n: 1,
-      size: `${ratio.width}x${ratio.height}`,
-      response_format: 'b64_json'
-    };
-    if (referencesEnabled && references.length) body.image = references;
-    response = await fetchWithTimeout(fetchImpl, baseUrl, {
-      method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    }, timeoutMs);
-  } else {
-    const params = isVideo ? {
-      model,
-      width: videoRatio.width,
-      height: videoRatio.height,
-      duration: config.videoDuration || 5,
-      aspectRatio: videoRatio.id,
-      audio: 'false',
-      seed: chosenSeed,
-      safe: 'true'
-    } : {
-      model,
-      width: ratio.width,
-      height: ratio.height,
-      seed: chosenSeed,
-      safe: 'true',
-      enhance: 'false',
-      nologo: config.mediaKey ? 'true' : 'false'
-    };
-    if (referencesEnabled && references.length) {
-      if (isVideo) {
-        params['image[0]'] = references[0];
-        if (references[1]) params['image[1]'] = references[1];
+  let lastError = null;
+  let attemptsUsed = 0;
+  // All attempts share ONE timeout budget, so retries can never make the
+  // request outlast the client's abort timer.
+  const deadline = Date.now() + timeoutMs;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    // Pollinations caches by URL, so a retry with the same seed can just replay
+    // the failed response. Varying the seed also gives the generator a fresh
+    // chance when a particular render was refused.
+    const attemptSeed = attempt === 0 ? chosenSeed : (chosenSeed + attempt * 7919) % 2147483647;
+    const remainingMs = deadline - Date.now();
+    if (remainingMs < MIN_ATTEMPT_MS) break;
+    const attemptTimeout = Math.max(MIN_ATTEMPT_MS, Math.min(timeoutMs, remainingMs));
+    attemptsUsed = attempt + 1;
+    try {
+      let response;
+      if (mode === 'openai') {
+        assertProviderUrl(baseUrl);
+        const body = isVideo ? {
+          model,
+          prompt: finalPrompt,
+          duration: config.videoDuration || 5,
+          aspect_ratio: videoRatio.id,
+          response_format: 'b64_json',
+          seed: attemptSeed
+        } : {
+          model,
+          prompt: finalPrompt,
+          n: 1,
+          size: `${ratio.width}x${ratio.height}`,
+          response_format: 'b64_json',
+          seed: attemptSeed
+        };
+        if (useReferences) body.image = references;
+        try {
+          response = await fetchWithTimeout(fetchImpl, baseUrl, {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          }, attemptTimeout);
+        } catch (fetchErr) {
+          throw normalizeNetworkError(fetchErr, secrets);
+        }
       } else {
-        params.image = references.join(',');
+        const params = isVideo ? {
+          model,
+          width: videoRatio.width,
+          height: videoRatio.height,
+          duration: config.videoDuration || 5,
+          aspectRatio: videoRatio.id,
+          audio: 'false',
+          seed: attemptSeed,
+          safe: useSafeFilter ? 'true' : 'false'
+        } : {
+          model,
+          width: ratio.width,
+          height: ratio.height,
+          seed: attemptSeed,
+          safe: useSafeFilter ? 'true' : 'false',
+          enhance: 'false',
+          nologo: config.mediaKey ? 'true' : 'false'
+        };
+        if (useReferences) {
+          if (isVideo) {
+            params['image[0]'] = references[0];
+            if (references[1]) params['image[1]'] = references[1];
+          } else {
+            params.image = references.join(',');
+          }
+        }
+        const url = getModeUrl(baseUrl, finalPrompt, params, config.maxGetUrlChars || MAX_GET_URL_CHARS);
+        try {
+          response = await fetchWithTimeout(fetchImpl, url, { method: 'GET', headers }, attemptTimeout);
+        } catch (fetchErr) {
+          throw normalizeNetworkError(fetchErr, secrets);
+        }
       }
+
+      const { buffer, contentType } = await readMediaResponse(response, {
+        fetchImpl, maxBytes, timeoutMs: attemptTimeout, secrets
+      });
+
+      if (isVideo) {
+        const clip = detectClipType(buffer);
+        if (!clip) {
+          throw providerFailure({
+            code: 'invalid_media', message: 'The generator did not return a GIF or MP4/WebM video',
+            status: 200, contentType, secrets, retryable: true,
+            detail: safeDetail(buffer.subarray(0, 180).toString('utf8'))
+          });
+        }
+        return {
+          mediaType: 'video', buffer, ...clip,
+          provider: mode === 'openai' ? 'openai-compatible' : 'pollinations',
+          model, seed: attemptSeed, attempts: attemptsUsed
+        };
+      }
+
+      const validation = validateRasterUpload({
+        buffer,
+        size: buffer.length,
+        mimetype: contentType || 'application/octet-stream'
+      });
+      if (!validation.ok) {
+        throw providerFailure({
+          code: 'invalid_media', message: `The generator did not return a valid raster image (${validation.error})`,
+          status: 200, contentType, secrets, retryable: true,
+          detail: safeDetail(buffer.subarray(0, 180).toString('utf8'))
+        });
+      }
+      return {
+        mediaType: 'image', buffer, mimetype: validation.mimetype,
+        provider: mode === 'openai' ? 'openai-compatible' : 'pollinations',
+        model, seed: attemptSeed, attempts: attemptsUsed
+      };
+    } catch (err) {
+      lastError = err;
+      let retryable = !!err && err.retryable === true;
+      // A 4xx refusal may simply mean this model does not accept the `image`
+      // reference parameter. Retry once without it before giving up.
+      if (!retryable && useReferences && err &&
+          (err.code === 'provider_refused' || err.code === 'provider_error' || err.code === 'invalid_media')) {
+        useReferences = false;
+        retryable = true;
+      }
+      if (!retryable || attempt === attempts - 1) {
+        if (err && attemptsUsed > 1) err.attempts = attemptsUsed;
+        throw err;
+      }
+      const wait = Math.min(
+        err.providerRetryMs || retryMs * Math.pow(2, attempt),
+        MAX_PROVIDER_RETRY_MS
+      );
+      if (wait > 0) await sleep(wait);
     }
-    const url = getModeUrl(baseUrl, finalPrompt, params);
-    response = await fetchWithTimeout(fetchImpl, url, { method: 'GET', headers }, timeoutMs);
   }
-
-  const { buffer, contentType } = await readMediaResponse(response, { fetchImpl, maxBytes, timeoutMs });
-
-  if (isVideo) {
-    const clip = detectClipType(buffer);
-    if (!clip) throw codedError('invalid_media', 'The generator did not return a GIF or MP4/WebM video');
-    return {
-      mediaType: 'video',
-      buffer,
-      ...clip,
-      provider: mode === 'openai' ? 'openai-compatible' : 'pollinations',
-      model,
-      seed: chosenSeed
-    };
+  if (lastError) {
+    lastError.attempts = attemptsUsed;
+    throw lastError;
   }
-
-  const validation = validateRasterUpload({
-    buffer,
-    size: buffer.length,
-    mimetype: contentType || 'application/octet-stream'
+  throw providerFailure({
+    code: 'provider_error', message: 'The generator did not return any media',
+    status: 0, secrets, retryable: false, detail: ''
   });
-  if (!validation.ok) throw codedError('invalid_media', 'The generator did not return a valid raster image');
-  return {
-    mediaType: 'image',
-    buffer,
-    mimetype: validation.mimetype,
-    provider: mode === 'openai' ? 'openai-compatible' : 'pollinations',
-    model,
-    seed: chosenSeed
-  };
 }
 
 function isHostedImageUrl(value) {
@@ -1289,8 +1667,10 @@ function statusForError(error) {
     case 'generation_in_progress':
     case 'slow_mode':
     case 'provider_rate_limited': return 429;
+    case 'provider_refused': return 422;
     case 'video_unavailable':
     case 'provider_error':
+    case 'provider_auth':
     case 'provider_timeout':
     case 'provider_config':
     case 'invalid_media':
@@ -1307,6 +1687,11 @@ function publicError(error) {
   if (error && error.retryAfter) body.retryAfter = error.retryAfter;
   if (error && error.retryAfterMs) body.retryAfterMs = error.retryAfterMs;
   if (error && error.until) body.until = error.until;
+  // A short, redacted provider message helps a member (or an admin reading a
+  // screenshot) understand the failure without exposing keys or the prompt.
+  if (error && error.detail && /^(provider_|invalid_media|media_too_large)/.test(error.code || '')) {
+    body.detail = safeDetail(error.detail, 180);
+  }
   return body;
 }
 
@@ -1401,7 +1786,7 @@ function createMessageMediaRouter({
         aspectRatio: request.aspectRatio
       });
     } catch (err) {
-      logger.error('message media prompt error:', err && (err.code || err.message) || err);
+      logger.error('message media prompt error:', formatProviderError(err));
       return res.status(statusForError(err)).json(publicError(err));
     }
   });
@@ -1619,7 +2004,10 @@ function createMessageMediaRouter({
         participants: participantSummary
       });
     } catch (err) {
-      logger.error('message media generate error:', err && (err.code || err.message) || err);
+      logger.error('message media generate error:', formatProviderError(err, {
+        mediaType: request.mediaType,
+        provider: providerLabel(config, request.mediaType)
+      }));
       return res.status(statusForError(err)).json(publicError(err));
     } finally {
       inFlight.delete(req.username);

@@ -40,14 +40,14 @@ const MP4 = Buffer.concat([
   Buffer.from('isomiso2avc1mp41', 'ascii')
 ]);
 
-function response({ ok = true, status = 200, headers = {}, buffer = null, json = null } = {}) {
+function response({ ok = true, status = 200, headers = {}, buffer = null, json = null, text = '' } = {}) {
   return {
     ok,
     status,
     headers: { get: key => headers[String(key).toLowerCase()] || null },
     arrayBuffer: async () => buffer || Buffer.alloc(0),
     json: async () => json,
-    text: async () => ''
+    text: async () => text || (json === null ? '' : JSON.stringify(json))
   };
 }
 
@@ -69,6 +69,9 @@ function testConfig(overrides = {}) {
     imageTimeoutMs: 1000,
     videoTimeoutMs: 1000,
     llmTimeoutMs: 1000,
+    // Keep the unit tests deterministic; dedicated tests opt into retries.
+    providerAttempts: 1,
+    providerRetryMs: 0,
     ...overrides
   };
 }
@@ -346,16 +349,19 @@ test('generateMedia requests a Pollinations-style image and validates the bytes'
 });
 
 test('generateMedia rejects non-image bytes and provider rate limits', async () => {
+  // An HTML error page is now recognised as a provider failure (with its own
+  // redacted detail) rather than being treated as a corrupt image upload.
   await assert.rejects(
     () => generateMedia({
       prompt: 'A dramatic wrestling pose',
       config: testConfig(),
       fetchImpl: async () => response({
         headers: { 'content-type': 'text/html' },
+        text: '<html>not an image</html>',
         buffer: Buffer.from('<html>not an image</html>')
       })
     }),
-    err => err.code === 'invalid_media'
+    err => err.code === 'provider_error' && /not an image/.test(err.detail) && err.providerStatus === 200
   );
 
   await assert.rejects(
