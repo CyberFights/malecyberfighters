@@ -70,7 +70,7 @@
           <div class="message-avatar">V</div>
           <div class="message">
             <div class="message-meta">Vyxen <span class="small">20:16</span></div>
-            <div>Meet me in the ring at midnight — bring the championship belt.</div>
+            <div>I grab you by the waist and try to hoist you up for a powerbomb, yt</div>
           </div>
         </div>
       </div>
@@ -98,9 +98,24 @@
     { id: '9:16', label: 'Portrait (9:16)' }
   ];
   var sources = {
-    aaaaaaaaaaaaaaaaaaaaaaaa: 'Rex lands a superplex under the neon arena lights.',
-    cccccccccccccccccccccccc: 'The crowd goes wild as the challenger kicks out at two.',
-    dddddddddddddddddddddddd: 'Meet me in the ring at midnight — bring the championship belt.'
+    aaaaaaaaaaaaaaaaaaaaaaaa: {
+      text: 'Rex lands a superplex under the neon arena lights.',
+      anatomy: 'a suplex: the attacker locks both arms around the opponent’s waist from behind, lifts them clear of the mat and bridges backward so the opponent arches toward the canvas',
+      motion: 'the attacker lifts, rotates and drives the opponent down onto the canvas in one fluid arc, both bodies showing real weight and momentum',
+      setting: 'a packed wrestling arena with bright spotlights, hazy air and a blurred roaring crowd'
+    },
+    cccccccccccccccccccccccc: {
+      text: 'The crowd goes wild as the challenger kicks out at two.',
+      anatomy: 'a pinfall: the attacker lies across the opponent’s chest, hooking a leg and pressing both shoulders to the canvas while a referee counts',
+      motion: 'the attacker hooks the leg and presses the shoulders down as the opponent strains to kick out',
+      setting: 'a pro-wrestling ring with a taut canvas, three ropes and padded turnbuckles'
+    },
+    dddddddddddddddddddddddd: {
+      text: 'I grab you by the waist and try to hoist you up for a powerbomb, yt',
+      anatomy: 'a powerbomb: the attacker hoists the opponent up onto their shoulders, grips the waist and drives them down back-first onto the canvas',
+      motion: 'the attacker lifts, rotates and drives the opponent down onto the canvas in one fluid arc',
+      setting: 'a pro-wrestling ring with canvas, ropes and turnbuckles under dramatic arena lighting'
+    }
   };
 
   function json(data, status) {
@@ -109,16 +124,26 @@
   }
   function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
+  // Mirrors the server's wrestling-aware prompt writer: it keeps the exact move
+  // from the message, adds correct anatomy for that move, and sets the scene.
   function refined(body) {
-    var source = sources[body.messageId] || 'A dramatic cyber wrestling moment.';
+    var src = sources[body.messageId] || { text: 'We lock up in the middle of the ring.', anatomy: 'a locked-up standoff', motion: 'the two fighters circle and surge into a lock-up', setting: 'a pro-wrestling ring' };
     var style = (styles.find(s => s.id === body.style) || styles[0]).label;
     var ratio = (ratios.find(r => r.id === body.aspectRatio) || ratios[0]).label;
-    return (body.mediaType === 'video'
-      ? 'A five-second cinematic video loop. '
-      : 'A single polished illustration. ') +
-      'Scene: "' + source + '". ' +
-      'Visual style: ' + style + '. Composition: ' + ratio + ', clear focal subject, dramatic rim lighting, coherent anatomy, detailed background.' +
-      (body.mediaType === 'video' ? ' Motion: one slow dolly-in, subtle fabric movement, no cuts, no captions.' : ' Capture one decisive story moment.') +
+    var isVideo = body.mediaType === 'video';
+    return (isVideo
+      ? 'A short cinematic video clip'
+      : 'A single polished still image') + ' of a scripted pro-wrestling match between two adult fighters. ' +
+      'Depict the exact move, holds and body positions in the turn below — the same action; never substitute a different move or change the number of fighters. ' +
+      'Match turn (word for word): "' + src.text + '". ' +
+      'Two distinct adult wrestlers portraying the two chat members; keep each fighter’s face, build and wrestling gear consistent. ' +
+      (/^i\b|\byou\b/i.test(src.text) ? 'Written in first person: "I/me/my" is the narrator, "you/your" is their opponent.' : 'Written in third person: keep each named fighter and their role exactly as written.') + ' ' +
+      'Setting: ' + src.setting + '. Move anatomy: ' + src.anatomy + '. ' +
+      'Visual style: ' + style + '. Composition: ' + ratio + ', dynamic low eye-level full-body angle, correct limbs, believable contact, dramatic lighting. ' +
+      'Ignore quoted dialogue, the "yt" marker and out-of-character notes; show only the physical action. No text, logos or watermarks; keep the lower corners fairly clear for two member profile portraits. ' +
+      (isVideo
+        ? 'Motion: a 5-second seamless loop, one continuous shot and one slow continuous camera move. Animate this exact action: ' + src.motion + '. Consistent character design, no cuts, no captions.'
+        : 'Freeze the single decisive instant of the move, with expressive effort, weight, depth and a sense of motion.') +
       '\n\n' + SAFETY;
   }
 
@@ -160,7 +185,7 @@
           self: { username: 'alice', display: 'Alice', imageUrl: '/images/mcf-512.png' },
           other: { username: 'rival', display: 'Rival', imageUrl: '/images/jax1.jpg' }
         },
-        sourceText: sources[body.messageId] || '',
+        sourceText: (sources[body.messageId] && sources[body.messageId].text) || '',
         prompt: refined(body),
         refinedBy: 'local',
         mediaType: body.mediaType,
