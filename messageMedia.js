@@ -1067,6 +1067,11 @@ function providerMessageFromData(data, depth = 0) {
 
 function classifyProviderFailure(text) {
   const value = String(text || '').toLowerCase();
+  // Only identify an explicit privacy-only block. Do not assume that an
+  // arbitrary mention of privacy, or a multi-category refusal, is this case.
+  if (/\bsafety filter\s*:\s*privacy\s*(?:\||$)/.test(value)) {
+    return 'provider_privacy';
+  }
   if (/\b(?:rate.?limit|too many requests|quota|pollen|402|429|retry.?after|slow down|try again later|payment required|free (?:tier|slot)|server busy|at capacity)\b/.test(value)) {
     return 'provider_rate_limited';
   }
@@ -1220,6 +1225,9 @@ async function readMediaResponse(response, { fetchImpl, maxBytes, timeoutMs, dep
     if (kind === 'provider_auth') {
       throw providerFailure({ ...base, code: 'provider_auth', message: `The generator rejected the API key (HTTP ${status})` });
     }
+    if (kind === 'provider_privacy') {
+      throw providerFailure({ ...base, code: 'provider_privacy', message: `The generator's privacy filter blocked the request (HTTP ${status})` });
+    }
     throw providerFailure({
       ...base,
       code: kind === 'provider_refused' ? 'provider_refused' : 'provider_error',
@@ -1248,6 +1256,7 @@ async function readMediaResponse(response, { fetchImpl, maxBytes, timeoutMs, dep
     const messages = {
       provider_rate_limited: 'The generator is rate-limited',
       provider_auth: 'The generator rejected the API key',
+      provider_privacy: "The generator's privacy filter blocked the request",
       provider_refused: 'The generator refused this prompt',
       provider_error: 'The generator returned no usable media'
     };
@@ -1259,9 +1268,8 @@ async function readMediaResponse(response, { fetchImpl, maxBytes, timeoutMs, dep
       retryAfter,
       contentType,
       secrets,
-      // A 200-level error card is not an authoritative rejection: retrying a
-      // rate-limit/refusal card once often succeeds on the keyless endpoint.
-      retryable: !retryAfter || retryAfter * 1000 <= MAX_PROVIDER_RETRY_MS
+      // Do not retry an explicit privacy block with the same prompt.
+      retryable: kind !== 'provider_privacy' && (!retryAfter || retryAfter * 1000 <= MAX_PROVIDER_RETRY_MS)
     });
   }
 
@@ -1286,6 +1294,7 @@ async function readMediaResponse(response, { fetchImpl, maxBytes, timeoutMs, dep
     const messages = {
       provider_rate_limited: 'The generator is rate-limited',
       provider_auth: 'The generator rejected the API key',
+      provider_privacy: "The generator's privacy filter blocked the request",
       provider_refused: 'The generator refused this prompt',
       provider_error: 'The generator returned an error page instead of media'
     };
@@ -1293,8 +1302,8 @@ async function readMediaResponse(response, { fetchImpl, maxBytes, timeoutMs, dep
       code: kind,
       message: messages[kind],
       status, detail, retryAfter, contentType, secrets,
-      // Rate-limit/refusal pages delivered with HTTP 200 are often transient.
-      retryable: !retryAfter || retryAfter * 1000 <= MAX_PROVIDER_RETRY_MS
+      // An explicit privacy block should not be retried without edits.
+      retryable: kind !== 'provider_privacy' && (!retryAfter || retryAfter * 1000 <= MAX_PROVIDER_RETRY_MS)
     });
   }
   return { buffer, contentType };
@@ -1729,7 +1738,8 @@ function statusForError(error) {
     case 'generation_in_progress':
     case 'slow_mode':
     case 'provider_rate_limited': return 429;
-    case 'provider_refused': return 422;
+    case 'provider_refused':
+    case 'provider_privacy': return 422;
     case 'video_unavailable':
     case 'provider_error':
     case 'provider_auth':

@@ -451,6 +451,7 @@ test('a provider_auth failure is a 502 with an actionable client code, and provi
   for (const [code, extra, expected] of [
     ['provider_auth', {}, 502],
     ['provider_refused', {}, 422],
+    ['provider_privacy', {}, 422],
     ['provider_rate_limited', { retryAfter: 45 }, 429]
   ]) {
     const source = new Collection([{
@@ -654,5 +655,37 @@ test('custom image, OpenAI, and video providers retain their existing Accept neg
       fetchImpl: async (_url, options) => { accept = options.headers.Accept; return response({ ok: false, status: 403 }); }
     }));
     assert.match(accept, mediaType === 'video' ? /video\/mp4/ : /image\/jpeg/);
+  }
+});
+
+/* Explicit privacy safety blocks must be surfaced without bypassing them. */
+test('Pollinations privacy blocks are actionable and never retried or relaxed', async () => {
+  for (const status of [400, 200]) {
+    let calls = 0;
+    const config = testConfig({ providerAttempts: 3, providerRetryMs: 0, mediaKey: 'test-key' });
+    await assert.rejects(() => generateMedia({
+      prompt: 'Two adult wrestlers in a ring', config,
+      referenceImages: ['https://chat.example.test/one.png', 'https://chat.example.test/two.png'],
+      fetchImpl: async (url) => {
+        calls++;
+        assert.equal(new URL(url).searchParams.get('safe'), 'true');
+        assert.ok(new URL(url).searchParams.get('image'));
+        return response({
+          ok: status === 200, status,
+          headers: { 'content-type': 'application/json' },
+          json: { success: false, error: { message: 'Request blocked by safety filter: privacy', code: 'content_blocked' }, status }
+        });
+      }
+    }), err => err.code === 'provider_privacy' && err.providerStatus === status && err.retryable === false);
+    assert.equal(calls, 1, 'a privacy refusal must not be retried with altered safety or references');
+  }
+});
+
+test('only explicit privacy-only safety blocks get the privacy-specific response', async () => {
+  for (const message of ['Request blocked by safety filter: sexual,privacy', 'privacy service returned an invalid request']) {
+    await assert.rejects(() => generateMedia({
+      prompt: 'Two wrestlers in a ring', config: testConfig(),
+      fetchImpl: async () => response({ ok: false, status: 400, headers: { 'content-type': 'application/json' }, json: { error: message } })
+    }), err => err.code !== 'provider_privacy');
   }
 });
