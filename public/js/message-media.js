@@ -58,6 +58,7 @@
     provider_rate_limited: 'The image generator is busy. Wait a minute and try again.',
     provider_auth: 'The image generator rejected this server\'s API key. Ask an admin to check the media key.',
     provider_refused: 'The generator refused this prompt. Edit the wording and try again, or pick a shorter message.',
+    provider_privacy: 'The generator flagged this prompt for privacy. Remove personal details such as names or contact information, then try again. The filter can also flag fictional details by mistake.',
     provider_timeout: 'The generator is taking longer than usual — the media will still appear in chat if it finishes.',
     provider_error: 'The image generator failed. Please try again.',
     provider_config: 'The image generator is not configured correctly.',

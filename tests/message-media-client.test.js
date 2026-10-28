@@ -277,7 +277,8 @@ test('provider failures show the server detail and an actionable message', async
   const cases = [
     ['provider_error', 'upstream flux unavailable (HTTP 503)', /image generator failed/i],
     ['provider_auth', 'the API key was rejected', /API key/i],
-    ['provider_refused', 'prompt was refused by the content filter', /refused this prompt/i]
+    ['provider_refused', 'prompt was refused by the content filter', /refused this prompt/i],
+    ['provider_privacy', 'Request blocked by safety filter: privacy', /remove personal details.*names.*contact information/i]
   ];
   for (const [code, detail, expected] of cases) {
     const { dom, win } = await boot({ generateError: code, generateDetail: detail });
