@@ -381,9 +381,7 @@
     };
 
     els.source.textContent = target.sourceText || '';
-    els.note.textContent = config.videoEnabled
-      ? 'Both members’ profile pictures are included in the image. Prompts are checked for unsafe content and the result is posted in this chat under your name.'
-      : 'Both members’ profile pictures are included in the image. Video generation needs a media API key on the server; you can still copy the refined prompt into any external image/video generator.';
+    els.note.textContent = 'Both profile pictures appear as corner badges on still images. Appearance matching depends on the configured generator and available photos.';
     els.refine.addEventListener('click', function () {
       els.prompt.dataset.dirty = '';
       loadPrompt();
@@ -394,7 +392,10 @@
     [els.mediaType, els.style, els.ratio].forEach(function (select) {
       select.addEventListener('change', function () {
         if (!els.prompt.dataset.dirty) loadPrompt();
-        else setStatus('Options changed — press “Re-refine prompt” to rebuild it.', 'info');
+        else {
+          if (select === els.mediaType) els.note.textContent = 'Output changed. Re-refine the prompt to see whether this generator can use the profile pictures.';
+          setStatus('Options changed — press “Re-refine prompt” to rebuild it.', 'info');
+        }
       });
     });
   }
@@ -457,6 +458,15 @@
 
     els.source.textContent = data.sourceText || currentTarget.sourceText || '';
     renderParticipants(data.participants);
+    if (options.mediaType === 'image') {
+      els.note.textContent = data.referenceStatus === 'available'
+        ? 'Both profile photos will be sent to the image generator as appearance references and shown as corner badges. Likeness and pose depend on the generator.'
+        : data.referenceStatus === 'missing'
+          ? 'Profile pictures appear as corner badges, but both accessible photos are needed for appearance matching.'
+          : 'Profile pictures appear as corner badges only. This generator cannot use them as appearance references; an admin can configure a reference-capable model.';
+    } else {
+      els.note.textContent = 'Video generation depends on the selected model; profile images may be used as start and end frames, not appearance references.';
+    }
     els.prompt.value = data.prompt || '';
     els.prompt.dataset.dirty = '';
     setStatus(data.refinedBy === 'llm'

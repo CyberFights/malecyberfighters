@@ -259,29 +259,20 @@ test('retries are bounded and the final error records how many attempts were mad
   assert.equal(calls, 3);
 });
 
-test('a refusal caused by reference images is retried without them', async () => {
+test('a provider rejecting reference images is not silently retried without them', async () => {
   const urls = [];
-  const generated = await generateMedia({
+  await assert.rejects(() => generateMedia({
     prompt: 'A dramatic wrestling pose',
-    config: testConfig({ mediaKey: 'key', providerAttempts: 3, providerRetryMs: 0 }),
+    config: testConfig({ mediaKey: 'key', imageReferences: true, providerAttempts: 3, providerRetryMs: 0 }),
     referenceImages: ['https://chat.example.test/img?u=one', 'https://chat.example.test/img?u=two'],
     fetchImpl: async value => {
       urls.push(value);
-      if (urls.length === 1) {
-        // Models without image-input support reject the `image` parameter.
-        return response({
-          ok: false, status: 400,
-          headers: { 'content-type': 'application/json' },
-          json: { error: 'Bad request: image parameter is not supported' }
-        });
-      }
-      return okImage();
+      return response({ ok: false, status: 400, headers: { 'content-type': 'application/json' },
+        json: { error: 'Bad request: image parameter is not supported' } });
     }
-  });
-  assert.equal(generated.mediaType, 'image');
-  assert.equal(urls.length, 2);
-  assert.ok(new URL(urls[0]).searchParams.get('image'), 'first attempt sends references');
-  assert.equal(new URL(urls[1]).searchParams.get('image'), null, 'retry drops references');
+  }), err => err.code === 'provider_error');
+  assert.equal(urls.length, 1);
+  assert.ok(new URL(urls[0]).searchParams.get('image'));
 });
 
 test('a network/DNS failure is a retryable provider_error with a redacted detail', async () => {
@@ -663,7 +654,7 @@ test('custom image, OpenAI, and video providers retain their existing Accept neg
 test('Pollinations privacy blocks are actionable and never retried or relaxed', async () => {
   for (const status of [400, 200]) {
     let calls = 0;
-    const config = testConfig({ providerAttempts: 3, providerRetryMs: 0, mediaKey: 'test-key' });
+    const config = testConfig({ providerAttempts: 3, providerRetryMs: 0, mediaKey: 'test-key', imageReferences: true });
     await assert.rejects(() => generateMedia({
       prompt: 'Two adult wrestlers in a ring', config,
       referenceImages: ['https://chat.example.test/one.png', 'https://chat.example.test/two.png'],
@@ -694,7 +685,7 @@ test('only explicit privacy-only safety blocks get the privacy-specific response
 test('default wrestling prompts and old suffixes do not insert a numeric age, with safety still enabled', async () => {
   for (const keyed of [false, true]) {
     const config = testConfig(keyed ? {
-      mediaKey: 'test-key', imageUrl: 'https://gen.pollinations.ai/image'
+      mediaKey: 'test-key', imageUrl: 'https://gen.pollinations.ai/image', imageModel: 'flux-klein'
     } : {});
     const turn = 'I lift you into a powerbomb in the ring';
     const oldPrompt = buildPrompt({ sourceText: turn }) +
@@ -706,7 +697,7 @@ test('default wrestling prompts and old suffixes do not insert a numeric age, wi
         const parsed = new URL(url);
         const actual = decodeURIComponent(parsed.pathname.split('/').pop());
         assert.equal(parsed.searchParams.get('safe'), 'true');
-        assert.match(actual, /fictional consenting adult/);
+        assert.match(actual, /consenting adult/);
         assert.match(actual, /no explicit sexual content/);
         assert.match(actual, /no minors/);
         assert.match(actual, /powerbomb/);
@@ -730,8 +721,8 @@ test('explicit error-image headers on HTTP 200 do not result in posted media or 
     let cancelled = false;
     await assert.rejects(() => generateMedia({
       prompt: 'Two adult wrestlers in a ring',
-      config: testConfig({ mediaKey: 'key', providerAttempts: 3, providerRetryMs: 0 }),
-      referenceImages: ['https://chat.example.test/a.png'],
+      config: testConfig({ mediaKey: 'key', imageReferences: true, providerAttempts: 3, providerRetryMs: 0 }),
+      referenceImages: ['https://chat.example.test/a.png', 'https://chat.example.test/b.png'],
       fetchImpl: async () => {
         calls++;
         return {
@@ -753,8 +744,8 @@ test('safety refusals are not retried without references or with a changed filte
     let calls = 0;
     await assert.rejects(() => generateMedia({
       prompt: 'Two adult wrestlers in a ring',
-      config: testConfig({ mediaKey: 'key', providerAttempts: 3, providerRetryMs: 0 }),
-      referenceImages: ['https://chat.example.test/a.png'],
+      config: testConfig({ mediaKey: 'key', imageReferences: true, providerAttempts: 3, providerRetryMs: 0 }),
+      referenceImages: ['https://chat.example.test/a.png', 'https://chat.example.test/b.png'],
       fetchImpl: async url => {
         calls++;
         assert.equal(new URL(url).searchParams.get('safe'), 'true');
@@ -819,7 +810,7 @@ test('GET safe=false sends the concise prompt unchanged without the safety suffi
   const prompt = finalizePrompt(buildPrompt({ sourceText: turn, scene }), { safeMode: false });
   let request;
   await generateMedia({
-    prompt, config: testConfig({ imageUrl: 'https://gen.pollinations.ai/image', mediaKey: 'key', safeMode: false }),
+    prompt, config: testConfig({ imageUrl: 'https://gen.pollinations.ai/image', imageModel: 'flux-klein', mediaKey: 'key', safeMode: false }),
     referenceImages: ['https://chat.example.test/a.png', 'https://chat.example.test/b.png'],
     fetchImpl: async url => { request = new URL(url); return okImage(); }
   });
@@ -828,7 +819,8 @@ test('GET safe=false sends the concise prompt unchanged without the safety suffi
   assert.equal(sent, prompt);
   assert.ok(sent.length < 400);
   assert.match(sent, /figure-four headscissors/);
-  assert.match(sent, /legs around your head/);
+  assert.match(sent, /head trapped between the attacker's thighs/i);
+  assert.match(sent, /attacker locks both legs/i);
   assert.match(sent, /face up/);
   assert.match(sent, /supplied profile pictures/);
   assert.doesNotMatch(sent, /Safety and quality:|Match turn|Move anatomy:|Ignore quoted dialogue/);
@@ -884,4 +876,59 @@ test('both safety modes reject unsafe source text before contacting the LLM', as
       fetchImpl: async () => { throw new Error('must not call the LLM'); }
     }), err => err.code === 'unsafe_prompt');
   }
+});
+
+test('text-only flux does not receive photos even with a key; Klein receives two in order', async () => {
+  const refs = ['https://chat.example.test/a.png', 'https://chat.example.test/b.png'];
+  for (const [imageModel, expected] of [['flux', false], ['flux-klein', true]]) {
+    let request;
+    await generateMedia({
+      prompt: 'Two wrestlers', referenceImages: refs,
+      config: testConfig({ mediaKey: 'key', imageUrl: 'https://gen.pollinations.ai/image', imageModel }),
+      fetchImpl: async url => { request = new URL(url); return okImage(); }
+    });
+    assert.equal(request.searchParams.get('image'), expected ? refs.join(',') : null);
+  }
+});
+
+test('reference input is omitted if either profile is unavailable, and retained on transient retry', async () => {
+  const config = testConfig({ mediaKey: 'key', imageModel: 'flux-klein', imageUrl: 'https://gen.pollinations.ai/image', providerAttempts: 2, providerRetryMs: 0 });
+  const urls = [];
+  const refs = ['https://chat.example.test/a.png', 'https://chat.example.test/b.png'];
+  await generateMedia({ prompt: 'Two wrestlers', config, referenceImages: refs,
+    fetchImpl: async url => { urls.push(new URL(url)); return urls.length === 1
+      ? response({ ok: false, status: 503, headers: { 'content-type': 'application/json' }, json: { error: 'temporarily unavailable' } })
+      : okImage(); } });
+  assert.equal(urls.length, 2);
+  assert.equal(urls[0].searchParams.get('image'), refs.join(','));
+  assert.equal(urls[1].searchParams.get('image'), refs.join(','));
+  let partial;
+  await generateMedia({ prompt: 'Two wrestlers', config, referenceImages: refs.slice(0, 1),
+    fetchImpl: async url => { partial = new URL(url); return okImage(); } });
+  assert.equal(partial.searchParams.get('image'), null);
+});
+
+test('a configured POST provider receives both reference images in order', async () => {
+  const refs = ['https://chat.example.test/a.png', 'https://chat.example.test/b.png'];
+  let body;
+  await generateMedia({ prompt: 'Two wrestlers', referenceImages: refs,
+    config: testConfig({ imageMode: 'openai', imageReferences: true, imageUrl: 'https://provider.example.test/generations' }),
+    fetchImpl: async (_url, options) => { body = JSON.parse(options.body); return okImage(); } });
+  assert.deepEqual(body.image, refs);
+});
+
+test('long GET prompts retain the participant reference mapping when shortened', async () => {
+  const turn = 'I grapple with you in the wrestling ring. '.repeat(25);
+  const scene = { hasReferences: true, author: 'bob', self: { username: 'alice' }, other: { username: 'bob' } };
+  const prompt = buildPrompt({ sourceText: turn, scene });
+  let actual;
+  const generated = await generateMedia({ prompt,
+    config: testConfig({ imageUrl: 'https://gen.pollinations.ai/image', imageModel: 'flux-klein', mediaKey: 'key', safeMode: false, maxGetUrlChars: 800 }),
+    referenceImages: ['https://chat.example.test/a.png', 'https://chat.example.test/b.png'],
+    fetchImpl: async url => { actual = decodeURIComponent(new URL(url).pathname.replace(/^\/image\//, '')); return okImage(); }
+  });
+  assert.ok(actual.length < prompt.length);
+  assert.match(actual, /supplied profile pictures/i);
+  assert.match(actual, /second picture is the author; the first is their opponent/i);
+  assert.equal(generated.prompt, actual);
 });
