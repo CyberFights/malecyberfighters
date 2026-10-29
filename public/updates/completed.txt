@@ -44,3 +44,4 @@
 - Visualize: keep generator seeds in Pollinations’ accepted 32-bit range and avoid displaying binary JPEG error cards as garbled text; unsuccessful provider images are not posted to chat.
 - Visualize: request readable JSON errors from the classic image provider instead of JPEG error cards, while still accepting generated images.
 - Visualize: explain provider privacy-filter refusals in the prompt dialog and avoid automatic retries without member edits.
+- Visualize: keep the fictional adult-only requirement without adding a numeric age to every prompt, which can trigger a provider privacy filter.

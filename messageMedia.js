@@ -104,8 +104,10 @@ const ASPECT_RATIOS = Object.freeze([
 const ASPECT_RATIO_IDS = new Set(ASPECT_RATIOS.map(ratio => ratio.id));
 
 const SAFETY_MARKER = 'Safety and quality:';
+// Avoid numeric ages: Pollinations' privacy guardrail may classify them as
+// personal information. "Adult" retains the requirement without the number.
 const SAFETY_SUFFIX = SAFETY_MARKER +
-  ' every person depicted is a fictional consenting adult (18+); no explicit sexual content, ' +
+  ' every person depicted is a fictional consenting adult; no explicit sexual content, ' +
   'no minors, no real-person or celebrity likenesses, no gore, no logos, no watermarks, no text overlays, ' +
   'no distorted anatomy or extra limbs.';
 
@@ -221,9 +223,8 @@ function configFromEnv(env = process.env) {
     // cards a couple of times before telling the member it failed.
     providerAttempts: boundedInteger(envValue(env, 'MCF_MEDIA_ATTEMPTS'), DEFAULT_PROVIDER_ATTEMPTS, 1, 5),
     providerRetryMs: boundedInteger(envValue(env, 'MCF_MEDIA_RETRY_MS'), DEFAULT_PROVIDER_RETRY_MS, 0, MAX_PROVIDER_RETRY_MS),
-    // The provider's own content filter can reject legitimate (non-sexual)
-    // wrestling prompts. Our local prompt writer already strips unsafe
-    // requests, so operators may turn the provider filter off if needed.
+    // Keep the provider's optional safety checks enabled by default. The
+    // local prompt writer is not a substitute for provider privacy checks.
     safeMode: !['0', 'false', 'no', 'off'].includes(envValue(env, 'MCF_MEDIA_SAFE').toLowerCase()),
     maxGetUrlChars: boundedInteger(envValue(env, 'MCF_MEDIA_MAX_URL_CHARS'), MAX_GET_URL_CHARS, 800, 12000)
   });
@@ -822,7 +823,7 @@ async function llmRefine({ sourceText, mediaType, style, aspectRatio, config, fe
     'Describe two distinct adult wrestlers, the wrestling setting (ring, ropes, canvas, crowd), correct anatomy for the move, camera angle, lighting and visual style.',
     context,
     'Two circular member profile portraits are composited into the lower corners afterward; keep those corners relatively clear and request no text, captions, logos or watermarks.',
-    'All people are fictional consenting adults aged 18 or older; keep it non-explicit, with no identifiable public figures, no extreme violence or blood, and no text overlays.',
+    'All people are fictional consenting adults; keep it non-explicit, with no identifiable public figures, no extreme violence or blood, and no text overlays. Do not include numeric ages or personal information.',
     'Return only the prompt as plain text. No preamble, no quotation marks, no bullet list.'
   ].join(' ');
   const user = [
