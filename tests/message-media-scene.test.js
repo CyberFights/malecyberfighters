@@ -133,7 +133,7 @@ test('video prompts describe the same move without duplicating motion instructio
   assert.match(video, /I land a powerbomb in the ring/i);
   assert.equal((video.match(/powerbomb/gi) || []).length, 1);
   assert.doesNotMatch(video, /seamless loop|continuous camera move|Animate this exact action/i);
-  assert.match(finalizePrompt(video), /fictional consenting adult/);
+  assert.match(finalizePrompt(video), /consenting adult/);
 });
 
 test('long messages and both safety modes stay within the prompt budget', () => {
@@ -141,7 +141,7 @@ test('long messages and both safety modes stay within the prompt budget', () => 
   for (const mediaType of ['image', 'video']) {
     const body = buildPrompt({ sourceText: longTurn, mediaType });
     assert.ok(body.length <= MAX_PROMPT_CHARS, `${mediaType} body fits the cap`);
-    assert.match(finalizePrompt(body), /fictional consenting adult/);
+    assert.match(finalizePrompt(body), /consenting adult/);
     assert.doesNotMatch(finalizePrompt(body, { safeMode: false }), /Safety and quality:/);
   }
 });
@@ -196,7 +196,7 @@ test('scene context is passed to the LLM refiner and reused on fallback', async 
   });
   assert.equal(fallback.refinedBy, 'local');
   assert.match(fallback.prompt, /I hoist you up for a suplex/i);
-  assert.match(fallback.prompt, /fictional consenting adult/);
+  assert.match(fallback.prompt, /consenting adult/);
 });
 
 test('sceneContextLines marks the two chat members and never pins a reference index', () => {
@@ -227,7 +227,7 @@ test('buildSceneContext records the author and detects reference support', () =>
   const withKey = buildSceneContext({
     source: { from: 'rival' },
     participants,
-    config: config({ mediaKey: 'key', publicBaseUrl: 'https://example.test' }),
+    config: config({ mediaKey: 'key', imageReferences: true, publicBaseUrl: 'https://example.test' }),
     referenceImages: publicReferenceImages(participants, { publicBaseUrl: 'https://example.test' })
   });
   assert.equal(withKey.hasReferences, true);
@@ -256,7 +256,8 @@ test('fig4 around the head is a face-up headscissors, not a leglock', () => {
   for (const mediaType of ['image', 'video']) {
     const prompt = finalizePrompt(buildPrompt({ sourceText: turn, mediaType }));
     assert.match(prompt, /figure-four headscissors/i);
-    assert.match(prompt, /legs around your head/i);
+    assert.match(prompt, /head trapped between the attacker's thighs/i);
+    assert.match(prompt, /attacker locks both legs/i);
     assert.match(prompt, /face up/i);
     assert.doesNotMatch(prompt, /Move anatomy:|Match turn \(word for word\)/i);
     assert.ok(prompt.length < 750);
@@ -299,4 +300,54 @@ test('reference context follows the selected provider mode, not the other media 
   assert.equal(video.hasReferences, true);
   assert.doesNotMatch(buildPrompt({ sourceText: 'I throw you', scene: image }), /supplied profile pictures/);
   assert.match(buildPrompt({ sourceText: 'I throw you', scene: video }), /supplied profile pictures/);
+});
+
+test('first-person prompts map profile references to the actual author without exposing usernames', () => {
+  const participants = { self: { username: 'alice' }, other: { username: 'bob' } };
+  const refs = ['https://chat.example.test/a.png', 'https://chat.example.test/b.png'];
+  const cfg = config({ imageReferences: true });
+  for (const [author, expected] of [['alice', /first picture is the author; the second is their opponent/i],
+    ['bob', /second picture is the author; the first is their opponent/i]]) {
+    const scene = buildSceneContext({ source: { from: author }, participants, config: cfg, referenceImages: refs });
+    const prompt = buildPrompt({ sourceText: 'I put you in a headscissors', scene });
+    assert.match(prompt, expected);
+    assert.doesNotMatch(prompt, /alice|bob/i);
+  }
+});
+
+test('grounded headscissors rewrite does not discard extra actions or invent a face-up position', () => {
+  const base = 'Taking you down onto the canvas I wrap my legs around your head and squeeze your head in a fig4 as your laying face up';
+  const prompt = buildPrompt({ sourceText: base });
+  assert.match(prompt, /opponent lies face up/i);
+  assert.match(prompt, /head trapped between the attacker's thighs/i);
+  assert.match(prompt, /attacker locks both legs in a figure-four headscissors/i);
+  assert.doesNotMatch(prompt, /I = author|wrap my legs|squeeze your head/i);
+  const alternate = buildPrompt({ sourceText: "Taking you down onto the mat I wrap my legs around your head in a fig4 as you're lying face up" });
+  assert.match(alternate, /head trapped between the attacker's thighs/i);
+  assert.match(alternate, /opponent lies face up/i);
+  const extended = buildPrompt({ sourceText: base + ' and grab your arm' });
+  assert.match(extended, /grab your arm/i);
+  const neutral = buildPrompt({ sourceText: 'I wrap my legs around your head in a fig4' });
+  assert.doesNotMatch(neutral, /face up/i);
+});
+
+test('LLM context maps appearance references for either message author without changing video frames', async () => {
+  for (const [author, mediaType, expected] of [
+    ['alice', 'image', /first reference is the author/],
+    ['bob', 'image', /second reference is the author/],
+    ['bob', 'video', null]
+  ]) {
+    let system;
+    const scene = { author, self: { username: 'alice' }, other: { username: 'bob' }, hasReferences: true };
+    await refinePrompt({ sourceText: 'I wrap my legs around your head in a fig4', mediaType, scene,
+      config: config({ llmUrl: 'https://llm.example.test/v1/chat/completions' }),
+      fetchImpl: async (_url, options) => {
+        system = JSON.parse(options.body).messages[0].content;
+        return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'Two wrestlers in a headscissors.' } }] }) };
+      }
+    });
+    if (expected) assert.match(system, expected);
+    else assert.doesNotMatch(system, /reference is the author/);
+    assert.match(system, /figure-four headscissors/i);
+  }
 });

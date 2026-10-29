@@ -112,7 +112,10 @@ test('buildPrompt turns a message into image and video generator prompts', () =>
 test('finalizePrompt adds safety constraints once and rejects unsafe requests', () => {
   const once = finalizePrompt('A dramatic wrestling pose');
   assert.match(once, /A dramatic wrestling pose/);
-  assert.match(once, /fictional consenting adult/);
+  assert.match(once, /consenting adult/);
+  assert.doesNotMatch(once, /no real-person|fictional/i, 'the suffix must not contradict profile appearance references');
+  assert.match(once, /no minors/);
+  assert.match(once, /no celebrity likenesses/);
   assert.doesNotMatch(once, /\b18\b/, 'mandatory safety wording should not introduce a numeric age');
   assert.equal(once.split(SAFETY_MARKER).length - 1, 1);
 
@@ -154,7 +157,7 @@ test('refinePrompt uses an LLM when configured and falls back when it fails', as
   });
   assert.equal(refined.refinedBy, 'llm');
   assert.match(refined.prompt, /Two cyber fighters lock up/);
-  assert.match(refined.prompt, /fictional consenting adult/);
+  assert.match(refined.prompt, /consenting adult/);
   assert.equal(requests.length, 1);
   assert.match(requests[0].options.headers.Authorization, /Bearer test-key/);
   const systemMessage = JSON.parse(requests[0].options.body).messages[0].content;
@@ -205,6 +208,9 @@ test('configFromEnv is keyless for images and needs explicit video enablement', 
   assert.equal(openai.imageUrl, 'https://api.openai.com/v1/images/generations');
 
   assert.equal(configFromEnv({ APP_BASE_URL: 'https://chat.example.test' }).publicBaseUrl, 'https://chat.example.test');
+  assert.equal(plain.imageReferences, null);
+  assert.equal(configFromEnv({ MCF_IMAGE_REFERENCES: 'true' }).imageReferences, true);
+  assert.equal(configFromEnv({ MCF_IMAGE_REFERENCES: 'false' }).imageReferences, false);
 });
 
 /* ------------------------------------------------------------------
@@ -302,7 +308,7 @@ test('generateMedia sends both profile pictures as reference images when support
   const calls = [];
   await generateMedia({
     prompt: 'A dramatic wrestling pose',
-    config: testConfig({ mediaKey: 'key', imageUrl: 'https://gen.pollinations.ai/image' }),
+    config: testConfig({ mediaKey: 'key', imageUrl: 'https://gen.pollinations.ai/image', imageModel: 'flux-klein' }),
     fetchImpl: async url => {
       calls.push(url);
       return response({ headers: { 'content-type': 'image/png' }, buffer: PNG });
@@ -350,7 +356,7 @@ test('generateMedia requests a Pollinations-style image and validates the bytes'
   const url = new URL(calls[0].url);
   assert.equal(url.hostname, 'image.pollinations.ai');
   assert.match(decodeURIComponent(url.pathname), /A dramatic wrestling pose/);
-  assert.match(decodeURIComponent(url.pathname), /fictional consenting adult/);
+  assert.match(decodeURIComponent(url.pathname), /consenting adult/);
   assert.equal(url.searchParams.get('safe'), 'true');
   assert.equal(url.searchParams.get('seed'), '7');
 });
@@ -406,7 +412,7 @@ test('generateMedia understands OpenAI-compatible base64 image replies', async (
   assert.equal(generated.mimetype, 'image/png');
   assert.equal(generated.provider, 'openai-compatible');
   assert.equal(sentBody.response_format, 'b64_json');
-  assert.match(sentBody.prompt, /fictional consenting adult/);
+  assert.match(sentBody.prompt, /consenting adult/);
 });
 
 test('generateMedia refuses video when disabled and validates MP4 when enabled', async () => {
@@ -656,7 +662,7 @@ test('generating in the arena hosts the image, stores provenance and broadcasts 
     assert.equal(result.status, 201);
     assert.equal(result.data.ok, true);
     assert.match(result.data.message.imageUrl, /^\/generated\/[a-f0-9]{32}\.png$/);
-    assert.match(result.data.prompt, /fictional consenting adult/);
+    assert.match(result.data.prompt, /consenting adult/);
 
     const created = api.models.public.all().find(doc => doc.generatedMedia);
     assert.ok(created, 'a new public message was stored');
@@ -901,4 +907,49 @@ test('posted metadata and response reflect the prompt actually sent after URL sh
     const stored = api.models.public.all().find(doc => doc.generatedMedia);
     assert.equal(stored.generatedMedia.prompt, result.data.prompt);
   } finally { await api.close(); }
+});
+
+test('prompt and generation pass profile references in viewer/partner order across public, room and DM', async () => {
+  const api = await startApi({
+    config: { mediaKey: 'key', imageModel: 'flux-klein', imageUrl: 'https://gen.pollinations.ai/image', publicBaseUrl: 'https://chat.example.test' },
+    seed: models => {
+      for (const doc of models.users.docs) doc.imageUrl = `https://i.ibb.co/${doc.username}/avatar.png`;
+      for (const doc of [models.public.docs[0], models.roomMessages.docs[0], models.dms.docs[0]]) {
+        doc.text = 'I wrap my legs around your head in a fig4';
+        if (doc.originalText) doc.originalText = doc.text;
+      }
+    }
+  });
+  try {
+    const targets = [
+      { scope: 'public', messageId: PUBLIC_ID },
+      { scope: 'room', messageId: ROOM_MESSAGE_ID, room: ROOM_ID },
+      { scope: 'dm', messageId: DM_ID }
+    ];
+    for (const [i, target] of targets.entries()) {
+      const prompt = await api.call('/prompt', { body: { ...target, mediaType: 'image' } });
+      assert.equal(prompt.status, 200);
+      assert.equal(prompt.data.referenceStatus, 'available');
+      assert.match(prompt.data.prompt, /second picture is the author; the first is their opponent/i);
+      const result = await api.call('/generate', { body: { ...target, mediaType: 'image', prompt: prompt.data.prompt } });
+      assert.equal(result.status, 201);
+      const refs = api.generations[i].referenceImages;
+      assert.equal(refs.length, 2);
+      assert.match(decodeURIComponent(refs[0]), /alice\/avatar\.png/);
+      assert.match(decodeURIComponent(refs[1]), /(?:rival|bob)\/avatar\.png/);
+      assert.equal(api.generations[i].prompt, prompt.data.prompt);
+    }
+  } finally { await api.close(); }
+});
+
+test('prompt reports why profile appearance references are unavailable', async () => {
+  for (const [config, expected] of [[{}, 'unsupported'], [{ imageReferences: true }, 'missing']]) {
+    const api = await startApi({ config });
+    try {
+      const result = await api.call('/prompt', { body: { scope: 'public', messageId: PUBLIC_ID, mediaType: 'image' } });
+      assert.equal(result.status, 200);
+      assert.equal(result.data.referenceStatus, expected);
+      assert.doesNotMatch(result.data.prompt, /supplied profile pictures/);
+    } finally { await api.close(); }
+  }
 });

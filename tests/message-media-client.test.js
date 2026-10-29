@@ -67,7 +67,7 @@ function jsonResponse(data, status = 200) {
   };
 }
 
-async function boot({ videoEnabled = false, generateError = null, generateDetail = '' } = {}) {
+async function boot({ videoEnabled = false, generateError = null, generateDetail = '', referenceStatus = 'unsupported' } = {}) {
   const dom = new JSDOM(PAGE, {
     url: 'https://example.test/',
     runScripts: 'dangerously',
@@ -108,6 +108,7 @@ async function boot({ videoEnabled = false, generateError = null, generateDetail
         sourceText: 'Rex lands a superplex',
         prompt: 'A polished illustration of Rex landing a superplex. Safety and quality: fictional consenting adults.',
         refinedBy: 'local',
+        referenceStatus,
         mediaType: body.mediaType,
         style: body.style,
         aspectRatio: body.aspectRatio
@@ -315,5 +316,20 @@ test('a provider detail containing markup is stripped before display', async () 
     assert.equal(win.document.querySelector('#mcfMediaStatus img'), null, 'markup must not become HTML');
   } finally {
     dom.window.close();
+  }
+});
+
+test('the dialog distinguishes real appearance references from corner badges', async () => {
+  for (const [referenceStatus, expected] of [
+    ['unsupported', /corner badges only.*cannot use them as appearance references/i],
+    ['missing', /corner badges.*both accessible photos are needed/i],
+    ['available', /photos will be sent to the image generator as appearance references.*likeness and pose depend/i]
+  ]) {
+    const { dom, win } = await boot({ referenceStatus });
+    try {
+      win.document.querySelector(`#publicFeed .message-row[data-id="${PUBLIC_ID}"] .mcf-media-btn`).click();
+      await waitFor(() => win.document.getElementById('mcfMediaPrompt') && win.document.getElementById('mcfMediaPrompt').value);
+      assert.match(win.document.getElementById('mcfMediaNote').textContent, expected);
+    } finally { dom.window.close(); }
   }
 });
