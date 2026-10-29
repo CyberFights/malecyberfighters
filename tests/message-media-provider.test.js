@@ -717,3 +717,97 @@ test('default wrestling prompts and old suffixes do not insert a numeric age, wi
     assert.equal(generated.mediaType, 'image');
   }
 });
+
+test('explicit error-image headers on HTTP 200 do not result in posted media or safety retries', async () => {
+  for (const [marker, expected] of [
+    ['content_blocked', 'provider_refused'],
+    ['privacy', 'provider_privacy'],
+    ['rate limit', 'provider_rate_limited']
+  ]) {
+    let calls = 0;
+    let read = false;
+    let cancelled = false;
+    await assert.rejects(() => generateMedia({
+      prompt: 'Two adult wrestlers in a ring',
+      config: testConfig({ mediaKey: 'key', providerAttempts: 3, providerRetryMs: 0 }),
+      referenceImages: ['https://chat.example.test/a.png'],
+      fetchImpl: async () => {
+        calls++;
+        return {
+          ok: true, status: 200,
+          headers: { get: key => ({ 'content-type': 'image/jpeg', 'x-error-type': marker })[String(key).toLowerCase()] || null },
+          body: { cancel: async () => { cancelled = true; } },
+          arrayBuffer: async () => { read = true; return PNG; }
+        };
+      }
+    }), err => err.code === expected && err.providerStatus === 200);
+    assert.equal(calls, 1, `${marker} should not trigger a retry`);
+    assert.equal(read, false);
+    assert.equal(cancelled, true);
+  }
+});
+
+test('safety refusals are not retried without references or with a changed filter', async () => {
+  for (const status of [200, 400]) {
+    let calls = 0;
+    await assert.rejects(() => generateMedia({
+      prompt: 'Two adult wrestlers in a ring',
+      config: testConfig({ mediaKey: 'key', providerAttempts: 3, providerRetryMs: 0 }),
+      referenceImages: ['https://chat.example.test/a.png'],
+      fetchImpl: async url => {
+        calls++;
+        assert.equal(new URL(url).searchParams.get('safe'), 'true');
+        assert.ok(new URL(url).searchParams.get('image'));
+        return response({
+          ok: status === 200, status,
+          headers: { 'content-type': 'application/json' },
+          json: { error: { code: 'content_blocked', message: 'Request blocked by safety filter: sexual' } }
+        });
+      }
+    }), err => err.code === 'provider_refused');
+    assert.equal(calls, 1);
+  }
+});
+
+test('valid images without an error marker are still accepted', async () => {
+  const generated = await generateMedia({
+    prompt: 'Two adult wrestlers in a ring', config: testConfig(),
+    fetchImpl: async () => okImage()
+  });
+  assert.deepEqual(generated.buffer, PNG);
+});
+
+test('marked error image never reaches hosting or chat publication', async () => {
+  const source = new Collection([{
+    _id: 'a'.repeat(24), from: 'bob', display: 'Bob',
+    text: 'I wrap my legs around your head in a fig4', time: new Date()
+  }]);
+  const users = new Collection([{ username: 'alice' }, { username: 'bob' }]);
+  let hosted = 0;
+  let published = 0;
+  const app = express();
+  app.use(express.json());
+  app.use('/api/message-media', createMessageMediaRouter({
+    PublicMessage: source, RoomMessage: source, DM: source, Room: source, User: users,
+    requireUser: (req, _res, next) => { req.username = 'alice'; req.user = { username: 'alice' }; next(); },
+    canAccessRoom: async () => true,
+    canPost: async () => ({ ok: true }),
+    config: testConfig({ providerAttempts: 1 }),
+    fetchImpl: async () => response({ headers: { 'content-type': 'image/jpeg', 'x-error-type': 'content_blocked' }, buffer: PNG }),
+    hostImage: async () => { hosted++; return { imageUrl: '/generated/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png' }; },
+    hostVideo: async () => ({ clipUrl: '/clips/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.mp4' }),
+    publishMessage: async () => { published++; },
+    logger: { error: () => {} }
+  }));
+  await withServer(app, async port => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/message-media/generate`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ scope: 'public', messageId: 'a'.repeat(24), mediaType: 'image', prompt: 'Two adult wrestlers in a ring' })
+    });
+    assert.equal(res.status, 422);
+    assert.equal((await res.json()).error, 'provider_refused');
+  });
+  assert.equal(hosted, 0);
+  assert.equal(published, 0);
+  assert.equal(source.docs.length, 1);
+});
