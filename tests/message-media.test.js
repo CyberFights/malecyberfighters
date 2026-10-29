@@ -114,7 +114,11 @@ test('finalizePrompt adds safety constraints once and rejects unsafe requests', 
   const once = finalizePrompt('A dramatic wrestling pose');
   assert.match(once, /A dramatic wrestling pose/);
   assert.match(once, /fictional consenting adult/);
+  assert.doesNotMatch(once, /\b18\b/, 'mandatory safety wording should not introduce a numeric age');
   assert.equal(once.split(SAFETY_MARKER).length - 1, 1);
+
+  const oldPrompt = 'A dramatic wrestling pose\n\nSafety and quality: every person depicted is a fictional consenting adult (18+); no explicit sexual content.';
+  assert.equal(finalizePrompt(oldPrompt), once, 'saved prompts get the updated mandatory suffix');
 
   const twice = finalizePrompt(once);
   assert.equal(twice, once);
@@ -154,6 +158,10 @@ test('refinePrompt uses an LLM when configured and falls back when it fails', as
   assert.match(refined.prompt, /fictional consenting adult/);
   assert.equal(requests.length, 1);
   assert.match(requests[0].options.headers.Authorization, /Bearer test-key/);
+  const systemMessage = JSON.parse(requests[0].options.body).messages[0].content;
+  assert.match(systemMessage, /fictional consenting adults/);
+  assert.doesNotMatch(systemMessage, /\b18\b/);
+  assert.match(systemMessage, /Do not include numeric ages/);
 
   const fallback = await refinePrompt({
     sourceText: 'they lock up',

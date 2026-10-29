@@ -689,3 +689,31 @@ test('only explicit privacy-only safety blocks get the privacy-specific response
     }), err => err.code !== 'provider_privacy');
   }
 });
+
+test('default wrestling prompts and old suffixes do not insert a numeric age, with safety still enabled', async () => {
+  for (const keyed of [false, true]) {
+    const config = testConfig(keyed ? {
+      mediaKey: 'test-key', imageUrl: 'https://gen.pollinations.ai/image'
+    } : {});
+    const turn = 'I lift you into a powerbomb in the ring';
+    const oldPrompt = buildPrompt({ sourceText: turn }) +
+      '\n\nSafety and quality: every person depicted is a fictional consenting adult (18+); no explicit sexual content.';
+    const referenceImages = ['https://chat.example.test/one.png', 'https://chat.example.test/two.png'];
+    const generated = await generateMedia({
+      prompt: oldPrompt, config, referenceImages,
+      fetchImpl: async url => {
+        const parsed = new URL(url);
+        const actual = decodeURIComponent(parsed.pathname.split('/').pop());
+        assert.equal(parsed.searchParams.get('safe'), 'true');
+        assert.match(actual, /fictional consenting adult/);
+        assert.match(actual, /no explicit sexual content/);
+        assert.match(actual, /no minors/);
+        assert.match(actual, /powerbomb/);
+        assert.doesNotMatch(actual, /\b18\b/);
+        assert.equal(Boolean(parsed.searchParams.get('image')), keyed);
+        return okImage();
+      }
+    });
+    assert.equal(generated.mediaType, 'image');
+  }
+});
