@@ -1,11 +1,4 @@
-/**
- * Wrestling-aware prompt generation. A Visualize prompt must faithfully depict
- * the move described in the source message: keep the turn verbatim, interpret
- * "I"/"you" (or named fighters) as two distinct wrestlers, add correct anatomy
- * for the detected move/hold/submission/strike, pick a wrestling setting, and
- * for video animate that specific action — all while staying within the prompt
- * budget and keeping the safety constraints.
- */
+/** Wrestling scene analysis and concise, faithful Visualize prompts. */
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
@@ -109,57 +102,47 @@ test('a "hook of the head" grapple is not mislabeled as a punch/strike', () => {
 /* buildPrompt — faithful wrestling scene                              */
 /* ------------------------------------------------------------------ */
 
-test('buildPrompt keeps the message verbatim and frames it as a wrestling match', () => {
+test('buildPrompt describes the action once, preserves roles, and uses available references', () => {
   const turn = 'I hook your head and try to hoist you up for a vertical suplex, muscles straining as I lift. yt';
+  const p = buildPrompt({ sourceText: turn, mediaType: 'image', scene: { hasReferences: true } });
+  assert.match(p, /two adult wrestlers/i);
+  assert.match(p, /wrestling ring/i);
+  assert.match(p, /I = author; you = opponent/i);
+  assert.match(p, /I hook your head and try to hoist you up for a vertical suplex/i);
+  assert.match(p, /supplied profile pictures as appearance references/i);
+  assert.doesNotMatch(p, /word for word|Move anatomy:|Ignore quoted dialogue|\byt\b/i);
+  assert.ok(p.length < 500, 'a normal prompt should remain concise');
+});
+
+test('third-person turns keep the named fighters and their action', () => {
+  const turn = 'Rex locks Vyxen in a figure-four leglock in the middle of the ring';
   const p = buildPrompt({ sourceText: turn, mediaType: 'image' });
-  assert.match(p, /scripted pro-wrestling match/i);
-  assert.match(p, /never substitute a different move/i);
-  assert.ok(p.includes(turn), 'the match turn is included word for word');
-  assert.match(p, /suplex: the attacker locks both arms/i); // correct anatomy for the move
-  assert.match(p, /Two distinct adult wrestlers/i);
-  assert.match(p, /first person/i);
-  assert.match(p, /"I\/me\/my" is the narrator/i);
-  assert.match(p, /wrestling ring/i); // setting
-  assert.match(p, /profile portraits/i);
-  assert.doesNotMatch(p, /5-second/); // still image, not video
+  assert.ok(p.includes(turn));
+  assert.doesNotMatch(p, /I = author|supplied profile pictures/i);
 });
 
-test('third-person turns keep the named fighters as written', () => {
-  const p = buildPrompt({ sourceText: 'Rex locks Vyxen in a figure-four leglock in the middle of the ring', mediaType: 'image' });
-  assert.ok(p.includes('Rex locks Vyxen in a figure-four leglock in the middle of the ring'));
-  assert.match(p, /third person/i);
-  assert.match(p, /figure-four|leg submission/i);
-  assert.doesNotMatch(p, /first person/i);
-});
-
-test('buildPrompt applies style and aspect ratio hints', () => {
+test('buildPrompt applies the chosen style without redundant aspect instructions', () => {
   const p = buildPrompt({ sourceText: 'Rex lifts Vyxen above the neon ring', mediaType: 'image', style: 'cyberpunk', aspectRatio: '16:9' });
   assert.match(p, /neon cyberpunk/i);
-  assert.match(p, /wide landscape composition/i);
+  assert.doesNotMatch(p, /Composition:/i);
 });
 
-test('video prompts animate the specific move and keep the whole motion sentence', () => {
+test('video prompts describe the same move without duplicating motion instructions', () => {
   const video = buildPrompt({ sourceText: 'I land a powerbomb in the ring', mediaType: 'video' });
-  assert.match(video, /5-second seamless loop/);
-  assert.match(video, /continuous camera move/);
-  assert.match(video, /Animate this exact action: the attacker lifts, rotates and drives/i);
-  assert.match(video, /no cuts, no captions\.$/);
-
-  const full = finalizePrompt(video);
-  assert.match(full, /no cuts, no captions\.[\s\S]*Safety and quality:/, 'motion sentence is not clipped by the safety suffix');
-  assert.match(full, /fictional consenting adult/);
+  assert.match(video, /5-second video/i);
+  assert.match(video, /I land a powerbomb in the ring/i);
+  assert.equal((video.match(/powerbomb/gi) || []).length, 1);
+  assert.doesNotMatch(video, /seamless loop|continuous camera move|Animate this exact action/i);
+  assert.match(finalizePrompt(video), /fictional consenting adult/);
 });
 
-test('finalizePrompt keeps the wrestling brief within the prompt budget', () => {
-  const longTurn = 'I grab you and fight in the ring. ' .repeat(60);
+test('long messages and both safety modes stay within the prompt budget', () => {
+  const longTurn = 'I grab you and fight in the ring. '.repeat(60);
   for (const mediaType of ['image', 'video']) {
     const body = buildPrompt({ sourceText: longTurn, mediaType });
     assert.ok(body.length <= MAX_PROMPT_CHARS, `${mediaType} body fits the cap`);
-    const full = finalizePrompt(body);
-    assert.match(full, /fictional consenting adult/);
-    assert.match(full, /pro-wrestling match/);
-    // Video must still end with its full motion sentence before the safety line.
-    if (mediaType === 'video') assert.match(full, /no cuts, no captions\.[\s\S]*Safety and quality:/);
+    assert.match(finalizePrompt(body), /fictional consenting adult/);
+    assert.doesNotMatch(finalizePrompt(body, { safeMode: false }), /Safety and quality:/);
   }
 });
 
@@ -199,7 +182,7 @@ test('scene context is passed to the LLM refiner and reused on fallback', async 
   assert.match(system, /PRO WRESTLING/i);
   assert.match(system, /Preserve the exact move/i);
   assert.match(system, /first person/i); // scene analysis folded into the system prompt
-  assert.match(user, /Detected wrestling action:/);
+  assert.match(system, /Move anatomy:.*suplex/i);
   assert.match(user, /a suplex/);
   assert.match(user, /Match turn:/);
 
@@ -212,7 +195,7 @@ test('scene context is passed to the LLM refiner and reused on fallback', async 
     fetchImpl: async () => { throw new Error('refiner offline'); }
   });
   assert.equal(fallback.refinedBy, 'local');
-  assert.match(fallback.prompt, /suplex: the attacker locks both arms/i);
+  assert.match(fallback.prompt, /I hoist you up for a suplex/i);
   assert.match(fallback.prompt, /fictional consenting adult/);
 });
 
@@ -272,10 +255,11 @@ test('fig4 around the head is a face-up headscissors, not a leglock', () => {
   assert.match(analysis.motion, /headscissors around the opponent's head/i);
   for (const mediaType of ['image', 'video']) {
     const prompt = finalizePrompt(buildPrompt({ sourceText: turn, mediaType }));
-    assert.ok(prompt.includes(turn));
     assert.match(prompt, /figure-four headscissors/i);
-    assert.match(prompt, /face up on the canvas/i);
-    if (mediaType === 'video') assert.match(prompt, /tightens the headscissors/i);
+    assert.match(prompt, /legs around your head/i);
+    assert.match(prompt, /face up/i);
+    assert.doesNotMatch(prompt, /Move anatomy:|Match turn \(word for word\)/i);
+    assert.ok(prompt.length < 750);
   }
 });
 
@@ -304,4 +288,15 @@ test('LLM refiner receives headscissors context without a contradictory leglock'
   assert.match(context, /face up on the canvas/i);
   assert.doesNotMatch(context, /twists and crosses the opponent's legs/i);
   assert.ok(context.includes(turn));
+});
+
+test('reference context follows the selected provider mode, not the other media type', () => {
+  const references = ['https://chat.example.test/a.png', 'https://chat.example.test/b.png'];
+  const cfg = config({ imageMode: 'get', videoMode: 'openai' });
+  const image = buildSceneContext({ config: cfg, referenceImages: references, mediaType: 'image' });
+  const video = buildSceneContext({ config: cfg, referenceImages: references, mediaType: 'video' });
+  assert.equal(image.hasReferences, false);
+  assert.equal(video.hasReferences, true);
+  assert.doesNotMatch(buildPrompt({ sourceText: 'I throw you', scene: image }), /supplied profile pictures/);
+  assert.match(buildPrompt({ sourceText: 'I throw you', scene: video }), /supplied profile pictures/);
 });

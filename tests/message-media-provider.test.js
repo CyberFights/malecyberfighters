@@ -323,19 +323,20 @@ test('non-retryable failures stop after one request', async () => {
 test('long wrestling prompts are shortened for GET providers but keep the safety suffix', async () => {
   const source = 'I hook your head, lift you up and slam you down with a powerbomb in the middle of the ring. '.repeat(14);
   const prompt = finalizePrompt(buildPrompt({ sourceText: source, mediaType: 'image', aspectRatio: '16:9' }));
-  assert.ok(prompt.length > 1800);
+  assert.ok(prompt.length > 1000);
 
   let url = '';
   const generated = await generateMedia({
     prompt,
-    config: testConfig({ maxGetUrlChars: 1400 }),
+    config: testConfig({ maxGetUrlChars: 800 }),
     fetchImpl: async value => { url = value; return okImage(); }
   });
   assert.equal(generated.mediaType, 'image');
-  assert.ok(url.length <= 1500, `URL too long: ${url.length}`);
+  assert.ok(url.length <= 800, `URL too long: ${url.length}`);
   const sent = decodeURIComponent(new URL(url).pathname);
   assert.ok(sent.includes(SAFETY_MARKER), 'the safety suffix must survive URL shortening');
   assert.ok(sent.length < prompt.length, 'the provider prompt must actually be shortened');
+  assert.equal(generated.prompt, sent.replace(/^\/prompt\//, ''));
 });
 
 test('ordinary prompts are sent verbatim (no unnecessary truncation)', async () => {
@@ -810,4 +811,77 @@ test('marked error image never reaches hosting or chat publication', async () =>
   assert.equal(hosted, 0);
   assert.equal(published, 0);
   assert.equal(source.docs.length, 1);
+});
+
+test('GET safe=false sends the concise prompt unchanged without the safety suffix', async () => {
+  const turn = 'Taking you down onto the canvas I wrap my legs around your head and squeeze your head in a fig4 as your laying face up';
+  const scene = { hasReferences: true };
+  const prompt = finalizePrompt(buildPrompt({ sourceText: turn, scene }), { safeMode: false });
+  let request;
+  await generateMedia({
+    prompt, config: testConfig({ imageUrl: 'https://gen.pollinations.ai/image', mediaKey: 'key', safeMode: false }),
+    referenceImages: ['https://chat.example.test/a.png', 'https://chat.example.test/b.png'],
+    fetchImpl: async url => { request = new URL(url); return okImage(); }
+  });
+  const sent = decodeURIComponent(request.pathname.replace(/^\/image\//, ''));
+  assert.equal(request.searchParams.get('safe'), 'false');
+  assert.equal(sent, prompt);
+  assert.ok(sent.length < 400);
+  assert.match(sent, /figure-four headscissors/);
+  assert.match(sent, /legs around your head/);
+  assert.match(sent, /face up/);
+  assert.match(sent, /supplied profile pictures/);
+  assert.doesNotMatch(sent, /Safety and quality:|Match turn|Move anatomy:|Ignore quoted dialogue/);
+  assert.ok(request.searchParams.get('image').includes('a.png'));
+  assert.ok(request.searchParams.get('image').includes('b.png'));
+});
+
+test('POST providers receive no legacy suffix in safe=false and retain local validation', async () => {
+  let sent;
+  const config = testConfig({ imageMode: 'openai', imageUrl: 'https://example.test/images', safeMode: false });
+  await generateMedia({
+    prompt: 'Two adults in a wrestling ring.\n\nSafety and quality: old constraints', config,
+    fetchImpl: async (_url, options) => { sent = JSON.parse(options.body); return okImage(); }
+  });
+  assert.equal(sent.prompt, 'Two adults in a wrestling ring.');
+  await assert.rejects(() => generateMedia({
+    prompt: 'A child in the ring', config,
+    fetchImpl: async () => { throw new Error('must not call the provider'); }
+  }), err => err.code === 'unsafe_prompt');
+});
+
+test('refinement respects the operator safe mode for local and LLM prompts', async () => {
+  const { refinePrompt } = require('../messageMedia');
+  for (const isLlm of [false, true]) {
+    const config = testConfig({ safeMode: false, ...(isLlm ? { llmUrl: 'https://llm.example.test/v1/chat/completions' } : {}) });
+    const refined = await refinePrompt({
+      sourceText: 'I lock you in a headscissors', config,
+      fetchImpl: async () => response({ json: { choices: [{ message: { content: 'Two wrestlers in a headscissors.' } }] } })
+    });
+    assert.equal(refined.refinedBy, isLlm ? 'llm' : 'local');
+    assert.doesNotMatch(refined.prompt, /Safety and quality:/);
+  }
+});
+
+test('failed LLM refinement falls back without adding a suffix when safe=false', async () => {
+  const { refinePrompt } = require('../messageMedia');
+  const refined = await refinePrompt({
+    sourceText: 'I take you down to the canvas',
+    config: testConfig({ safeMode: false, llmUrl: 'https://llm.example.test/v1/chat/completions' }),
+    fetchImpl: async () => response({ ok: false, status: 503 })
+  });
+  assert.equal(refined.refinedBy, 'local');
+  assert.match(refined.prompt, /take you down to the canvas/);
+  assert.doesNotMatch(refined.prompt, /Safety and quality:/);
+});
+
+test('both safety modes reject unsafe source text before contacting the LLM', async () => {
+  const { refinePrompt } = require('../messageMedia');
+  for (const safeMode of [true, false]) {
+    await assert.rejects(() => refinePrompt({
+      sourceText: 'I suplex a child',
+      config: testConfig({ safeMode, llmUrl: 'https://llm.example.test/v1/chat/completions' }),
+      fetchImpl: async () => { throw new Error('must not call the LLM'); }
+    }), err => err.code === 'unsafe_prompt');
+  }
 });

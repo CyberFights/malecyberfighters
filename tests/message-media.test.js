@@ -96,7 +96,7 @@ test('buildPrompt turns a message into image and video generator prompts', () =>
   });
   assert.match(image, /Rex lifts Vyxen above the neon ring/);
   assert.match(image, /neon cyberpunk/i);
-  assert.match(image, /wide landscape composition/);
+  assert.doesNotMatch(image, /Composition:/);
   assert.doesNotMatch(image, /5-second/);
 
   const video = buildPrompt({
@@ -105,9 +105,8 @@ test('buildPrompt turns a message into image and video generator prompts', () =>
     style: 'cinematic',
     aspectRatio: '9:16'
   });
-  assert.match(video, /5-second seamless loop/);
-  assert.match(video, /continuous camera move/);
-  assert.match(video, /vertical portrait composition/);
+  assert.match(video, /5-second video/);
+  assert.match(video, /Rex lifts Vyxen above the neon ring/);
 });
 
 test('finalizePrompt adds safety constraints once and rejects unsafe requests', () => {
@@ -159,7 +158,7 @@ test('refinePrompt uses an LLM when configured and falls back when it fails', as
   assert.equal(requests.length, 1);
   assert.match(requests[0].options.headers.Authorization, /Bearer test-key/);
   const systemMessage = JSON.parse(requests[0].options.body).messages[0].content;
-  assert.match(systemMessage, /fictional consenting adults/);
+  assert.match(systemMessage, /two adult wrestlers/i);
   assert.doesNotMatch(systemMessage, /\b18\b/);
   assert.match(systemMessage, /Do not include numeric ages/);
 
@@ -545,14 +544,15 @@ async function startApi(overrides = {}) {
     fetchImpl: async () => response({ buffer: PNG }),
     refinePrompt: async args => {
       prompts.push(args);
-      return refinePrompt({ ...args, config: testConfig(), fetchImpl: async () => response({}) });
+      return refinePrompt({ ...args, fetchImpl: async () => response({}) });
     },
     generateMedia: async args => {
       generations.push(args);
       if (args.mediaType === 'video') {
         return { mediaType: 'video', buffer: MP4, extension: 'mp4', clipType: 'video', provider: 'test', model: 'test', seed: 1 };
       }
-      return { mediaType: 'image', buffer: PNG, mimetype: 'image/png', provider: 'test', model: 'test', seed: 1 };
+      return { mediaType: 'image', buffer: PNG, mimetype: 'image/png', provider: 'test', model: 'test', seed: 1,
+        ...(overrides.sentPrompt ? { prompt: overrides.sentPrompt } : {}) };
     },
     hostImage: async args => {
       hostedImages.push(args);
@@ -634,7 +634,7 @@ test('prompt endpoint refines the STORED message, not client-supplied text', asy
     assert.equal(result.data.participants.other.imageUrl, PROFILE_DATA_URL);
     assert.equal(result.data.sourceText, 'Rex lands a superplex');
     assert.match(result.data.prompt, /Rex lands a superplex/);
-    assert.match(result.data.prompt, /comic-book/i);
+    assert.match(result.data.prompt, /comic[ -]book/i);
     assert.doesNotMatch(result.data.prompt, /IGNORE ME/);
     assert.equal(api.prompts[0].sourceText, 'Rex lands a superplex');
   } finally {
@@ -853,4 +853,52 @@ test('generated messages cannot be used as the source, and bad ids are rejected'
   } finally {
     await api.close();
   }
+});
+
+test('safe mode is controlled by the server for prompt generation, posting and legacy suffixes', async () => {
+  for (const safeMode of [true, false]) {
+    const api = await startApi({ config: { safeMode } });
+    try {
+      const prompt = await api.call('/prompt', {
+        body: { scope: 'public', messageId: PUBLIC_ID, mediaType: 'image', safeMode: !safeMode }
+      });
+      assert.equal(prompt.status, 200);
+      assert.equal(prompt.data.prompt.includes(SAFETY_MARKER), safeMode);
+      const legacy = 'A dramatic ring moment.\n\nSafety and quality: old constraints';
+      const generated = await api.call('/generate', {
+        body: { scope: 'public', messageId: PUBLIC_ID, mediaType: 'image', prompt: legacy, safeMode: !safeMode }
+      });
+      assert.equal(generated.status, 201);
+      assert.equal(generated.data.prompt.includes(SAFETY_MARKER), safeMode);
+      assert.equal(api.generations[0].prompt, generated.data.prompt);
+      const stored = api.models.public.all().find(doc => doc.generatedMedia);
+      assert.equal(stored.generatedMedia.prompt, generated.data.prompt);
+      assert.doesNotMatch(generated.data.prompt, /old constraints/);
+      const auto = await api.call('/generate', {
+        body: { scope: 'public', messageId: PUBLIC_ID, mediaType: 'image', safeMode: !safeMode }
+      });
+      assert.equal(auto.status, 201);
+      assert.equal(auto.data.prompt, prompt.data.prompt);
+      assert.equal(api.generations[1].prompt, prompt.data.prompt);
+      const unsafe = await api.call('/generate', {
+        body: { scope: 'public', messageId: PUBLIC_ID, mediaType: 'image', prompt: 'A child in the ring', safeMode: !safeMode }
+      });
+      assert.equal(unsafe.status, 400);
+      assert.equal(unsafe.data.error, 'unsafe_prompt');
+      assert.equal(api.generations.length, 2);
+    } finally { await api.close(); }
+  }
+});
+
+test('posted metadata and response reflect the prompt actually sent after URL shortening', async () => {
+  const api = await startApi({ sentPrompt: 'Shortened provider prompt…' });
+  try {
+    const result = await api.call('/generate', {
+      body: { scope: 'public', messageId: PUBLIC_ID, mediaType: 'image', prompt: 'A longer wrestling prompt' }
+    });
+    assert.equal(result.status, 201);
+    assert.equal(result.data.prompt, 'Shortened provider prompt…');
+    const stored = api.models.public.all().find(doc => doc.generatedMedia);
+    assert.equal(stored.generatedMedia.prompt, result.data.prompt);
+  } finally { await api.close(); }
 });
