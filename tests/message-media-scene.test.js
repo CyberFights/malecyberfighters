@@ -260,3 +260,48 @@ test('publicReferenceImages keeps self then other, de-duplicating identical URLs
   assert.equal(refs.length, 1);
   assert.equal(refs[0], toPublicImageUrl('https://ibb.co/a.jpg', cfg));
 });
+
+test('fig4 around the head is a face-up headscissors, not a leglock', () => {
+  const turn = 'Taking you down onto the canvas I wrap my legs around your head and squeeze your head in a fig4 as your laying face up';
+  const analysis = analyzeWrestlingScene(turn);
+  assert.equal(analysis.kinds[0], 'submission');
+  assert.match(analysis.cues[0], /figure-four headscissors/i);
+  assert.match(analysis.cues[0], /opponent's head is between the attacker's thighs/i);
+  assert.match(analysis.cues[0], /opponent lies face up on the canvas/i);
+  assert.doesNotMatch(analysis.cues.join(' '), /twists and crosses the opponent's legs/i);
+  assert.match(analysis.motion, /headscissors around the opponent's head/i);
+  for (const mediaType of ['image', 'video']) {
+    const prompt = finalizePrompt(buildPrompt({ sourceText: turn, mediaType }));
+    assert.ok(prompt.includes(turn));
+    assert.match(prompt, /figure-four headscissors/i);
+    assert.match(prompt, /face up on the canvas/i);
+    if (mediaType === 'video') assert.match(prompt, /tightens the headscissors/i);
+  }
+});
+
+test('headscissors wording does not force face-up or turn a figure-four leglock into a headscissors', () => {
+  const neutral = analyzeWrestlingScene('I apply a headscissors on the mat');
+  assert.match(neutral.cues[0], /headscissors/i);
+  assert.doesNotMatch(neutral.cues[0], /face up/i);
+  const leglock = analyzeWrestlingScene('I apply a fig4 leglock to your legs');
+  assert.match(leglock.cues[0], /leg submission/i);
+  assert.doesNotMatch(leglock.cues[0], /headscissors/i);
+});
+
+test('LLM refiner receives headscissors context without a contradictory leglock', async () => {
+  const turn = 'Taking you down onto the canvas I wrap my legs around your head and squeeze your head in a fig4 as your laying face up';
+  let request;
+  await refinePrompt({
+    sourceText: turn, mediaType: 'image',
+    config: config({ llmUrl: 'https://llm.example.test/v1/chat/completions' }),
+    fetchImpl: async (_url, options) => {
+      request = JSON.parse(options.body);
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'Two adult wrestlers in a grounded headscissors' } }] }) };
+    }
+  });
+  const context = request.messages.map(message => message.content).join('\n');
+  assert.match(context, /figure-four headscissors/i);
+  assert.match(context, /face up on the canvas/i);
+  assert.doesNotMatch(context, /twists and crosses the opponent's legs/i);
+  assert.ok(context.includes(turn));
+});

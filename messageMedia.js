@@ -574,6 +574,17 @@ const WRESTLING_CUES = Object.freeze([
   { re: /\b(kick(?:s|ped|ping)?\s*out|kickout|kicks out at (?:one|two|three|1|2|3)|beats? the count)\b/i,
     kind: 'escape',
     cue: "a pin escape: the pinned fighter explodes up, arching their shoulders off the canvas and bucking the covering opponent off just before the three-count" },
+  // A figure-four around the head is a headscissors, not a leglock. Match the
+  // actual anatomy before generic throws or figure-four leg submissions.
+  { re: /\b(?:head[- ]?scissors|headscissor|(?:legs?|thighs?)\s+(?:are\s+)?(?:wrapped\s+)?(?:around|round)\s+(?:(?:your|my|his|her|their|the|an?|opponent(?:'s)?)\s+)?(?:head|neck)|(?:head|neck)\s+(?:is\s+)?(?:trapped|clamped|caught)\s+between\s+(?:(?:my|his|her|their|the|your)\s+)?(?:legs?|thighs?))\b/i,
+    id: 'headscissors',
+    kind: 'submission',
+    cue: text => {
+      const figureFour = /\b(?:fig(?:ure)?[- ]?(?:four|4))\b/i.test(text);
+      const faceUp = /\b(?:face[- ]?up|(?:lying|laying)\s+(?:on\s+)?(?:(?:their|his|her|your|the)\s+)?back)\b/i.test(text);
+      return `a grounded ${figureFour ? 'figure-four ' : ''}headscissors: the attacker wraps their own legs around the opponent's head and crosses or locks their legs, while the opponent's head is between the attacker's thighs${faceUp ? ' and the opponent lies face up on the canvas' : ''}`;
+    },
+    motion: "the attacker tightens the headscissors around the opponent's head" },
   { re: /\b(superplex|suplex|belly[- ]?to[- ]?(?:back|belly)|german suplex|snap suplex|vertical suplex)\b/i,
     kind: 'throw',
     cue: "a suplex: the attacker locks both arms around the opponent's waist from behind, lifts them clear of the mat and bridges backward so the opponent arches toward the canvas" },
@@ -595,7 +606,8 @@ const WRESTLING_CUES = Object.freeze([
   { re: /\b(armbar|cross armbar|flying armbar|arm bar)\b/i,
     kind: 'submission',
     cue: "an armbar: the attacker lies on their back with legs clamped over the opponent's chest, isolating one straight arm and levering the elbow across their hips" },
-  { re: /\b(figure[- ]?four|figure[- ]?4|leglock|leg lock|ankle lock|heel hook|kneebar|knee bar|sharpshooter|boston crab|cloverleaf)\b/i,
+  { re: /\b(fig(?:ure)?[- ]?(?:four|4)|leglock|leg lock|ankle lock|heel hook|kneebar|knee bar|sharpshooter|boston crab|cloverleaf)\b/i,
+    id: 'leg-submission',
     kind: 'submission',
     cue: "a leg submission: the attacker twists and crosses the opponent's legs on the mat, leaning back to torque the knee and ankle while both bodies are grounded" },
   { re: /\b(triangle choke|guillotine|rear choke|sleeper ?hold|sleeper|choke ?hold|chokehold|crossface|camel clutch|chin ?lock|head ?scissors)\b/i,
@@ -700,13 +712,18 @@ function analyzeWrestlingScene(sourceText) {
 
   const cues = [];
   const kinds = [];
+  let dominant = null;
   for (const entry of WRESTLING_CUES) {
     if (!entry.re.test(text)) continue;
+    if (dominant && dominant.id === 'headscissors' && entry.id === 'leg-submission' &&
+        !/\b(?:leglock|leg lock|ankle lock|heel hook|kneebar|knee bar|sharpshooter|boston crab|cloverleaf)\b/i.test(text)) continue;
+    if (!dominant) dominant = entry;
     kinds.push(entry.kind);
-    if (!cues.includes(entry.cue)) cues.push(entry.cue);
+    const cue = typeof entry.cue === 'function' ? entry.cue(text) : entry.cue;
+    if (!cues.includes(cue)) cues.push(cue);
     if (cues.length >= 2) break;
   }
-  const motion = (kinds.length && MOTION_CUES[kinds[0]]) || DEFAULT_MOTION;
+  const motion = (dominant && dominant.motion) || (kinds.length && MOTION_CUES[kinds[0]]) || DEFAULT_MOTION;
   return { perspective, setting, cues, kinds, motion };
 }
 
@@ -1081,10 +1098,18 @@ function classifyProviderFailure(text) {
   }
   // Deliberately specific: our own prompt says "Safety and quality: ..." and a
   // provider error may echo it. Require an actual refusal phrase, not "safety".
-  if (/\b(?:nsfw|content filter|blocked|refused|prohibited|inappropriate|moderation|flagged|not allowed|filtered|violates (?:our |the )?policy|safety (?:filter|system|check|rejection))\b/.test(value)) {
+  if (/\b(?:nsfw|content[_ -]blocked|content filter|blocked|refused|prohibited|inappropriate|moderation|flagged|not allowed|filtered|violates (?:our |the )?policy|safety (?:filter|system|check|rejection))\b/.test(value)) {
     return 'provider_refused';
   }
   return '';
+}
+
+async function discardProviderBody(response) {
+  if (response.body && typeof response.body.cancel === 'function') {
+    try { await response.body.cancel(); } catch (_) { /* already closed */ }
+  } else if (response.body && typeof response.body.destroy === 'function') {
+    response.body.destroy();
+  }
 }
 
 /** Read an error body without ever trusting it (tag-stripped and redacted). */
@@ -1092,11 +1117,7 @@ async function readProviderErrorBody(response, secrets, contentType) {
   // Some providers return an error card as a JPEG. Never decode or expose its
   // bytes as text, and never mistake a non-2xx image for generated media.
   if (/^(?:image|video|audio)\//i.test(contentType)) {
-    if (response.body && typeof response.body.cancel === 'function') {
-      try { await response.body.cancel(); } catch (_) { /* already closed */ }
-    } else if (response.body && typeof response.body.destroy === 'function') {
-      response.body.destroy();
-    }
+    await discardProviderBody(response);
     return 'The generator returned an image or media error without a readable explanation';
   }
   let raw = '';
@@ -1236,6 +1257,32 @@ async function readMediaResponse(response, { fetchImpl, maxBytes, timeoutMs, dep
     });
   }
 
+  // Some providers mark an error image using X-Error-Type despite HTTP 200.
+  // Never treat that explicitly marked card as generated content. Without an
+  // error marker we cannot reliably distinguish an image of a dialog from a
+  // genuine generation by inspecting its pixels alone.
+  const errorHeader = response.headers && response.headers.get
+    ? String(response.headers.get('x-error-type') || '').trim()
+    : '';
+  if (errorHeader) {
+    await discardProviderBody(response);
+    const detail = safeDetail(redactSecrets(errorHeader, secrets), 180);
+    const kind = /^privacy(?:[_ -]blocked)?$/i.test(detail)
+      ? 'provider_privacy'
+      : (classifyProviderFailure(detail.replace(/[_-]/g, ' ')) || 'provider_error');
+    const message = kind === 'provider_privacy'
+      ? "The generator's privacy filter blocked the request"
+      : kind === 'provider_refused'
+        ? 'The generator refused the request'
+        : kind === 'provider_rate_limited'
+          ? 'The generator is rate-limited'
+          : 'The generator returned a marked error instead of media';
+    throw providerFailure({
+      code: kind, message, status, detail, retryAfter, contentType, secrets,
+      retryable: kind === 'provider_error'
+    });
+  }
+
   if (contentLength && contentLength > maxBytes) {
     throw codedError('media_too_large', 'The generator returned a file that is too large');
   }
@@ -1269,8 +1316,8 @@ async function readMediaResponse(response, { fetchImpl, maxBytes, timeoutMs, dep
       retryAfter,
       contentType,
       secrets,
-      // Do not retry an explicit privacy block with the same prompt.
-      retryable: kind !== 'provider_privacy' && (!retryAfter || retryAfter * 1000 <= MAX_PROVIDER_RETRY_MS)
+      // Do not retry an explicit safety or privacy refusal with the same prompt.
+      retryable: !['provider_privacy', 'provider_refused'].includes(kind) && (!retryAfter || retryAfter * 1000 <= MAX_PROVIDER_RETRY_MS)
     });
   }
 
@@ -1303,8 +1350,8 @@ async function readMediaResponse(response, { fetchImpl, maxBytes, timeoutMs, dep
       code: kind,
       message: messages[kind],
       status, detail, retryAfter, contentType, secrets,
-      // An explicit privacy block should not be retried without edits.
-      retryable: kind !== 'provider_privacy' && (!retryAfter || retryAfter * 1000 <= MAX_PROVIDER_RETRY_MS)
+      // An explicit safety or privacy block should not be retried without edits.
+      retryable: !['provider_privacy', 'provider_refused'].includes(kind) && (!retryAfter || retryAfter * 1000 <= MAX_PROVIDER_RETRY_MS)
     });
   }
   return { buffer, contentType };
@@ -1428,11 +1475,10 @@ async function generateMedia({
     .filter(value => /^https?:\/\//i.test(value))
     .slice(0, 2);
   const referencesEnabled = !!config.mediaKey || config.imageMode === 'openai' || config.videoMode === 'openai';
-  // Some image models reject a reference-image parameter outright. If a
-  // request with references is refused, drop them on the next attempt: the
-  // local portrait overlay still guarantees both profile pictures. The
-  // provider's content filter is NEVER relaxed automatically — that stays an
-  // explicit operator choice (MCF_MEDIA_SAFE) and a surfaced refusal error.
+  // Some image models reject a reference-image parameter outright. For a
+  // non-safety provider error, a retry may drop them; the local portrait
+  // overlay still supplies both pictures. Explicit safety and privacy
+  // refusals are never retried with altered references or filters.
   let useReferences = referencesEnabled && references.length > 0;
   const useSafeFilter = config.safeMode !== false;
 
@@ -1558,10 +1604,10 @@ async function generateMedia({
     } catch (err) {
       lastError = err;
       let retryable = !!err && err.retryable === true;
-      // A 4xx refusal may simply mean this model does not accept the `image`
-      // reference parameter. Retry once without it before giving up.
+      // Retry unsupported reference parameters without references, but never
+      // attempt to work around an explicit safety or privacy refusal.
       if (!retryable && useReferences && err &&
-          (err.code === 'provider_refused' || err.code === 'provider_error' || err.code === 'invalid_media')) {
+          (err.code === 'provider_error' || err.code === 'invalid_media')) {
         useReferences = false;
         retryable = true;
       }

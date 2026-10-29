@@ -45,3 +45,4 @@
 - Visualize: request readable JSON errors from the classic image provider instead of JPEG error cards, while still accepting generated images.
 - Visualize: explain provider privacy-filter refusals in the prompt dialog and avoid automatic retries without member edits.
 - Visualize: keep the fictional adult-only requirement without adding a numeric age to every prompt, which can trigger a provider privacy filter.
+- Visualize: recognize figure-four headscissors and face-up positioning, and reject provider responses explicitly marked as error images even when their HTTP status is 200.
