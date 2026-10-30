@@ -870,11 +870,13 @@ test('failed LLM refinement falls back without adding a suffix when safe=false',
 test('both safety modes reject unsafe source text before contacting the LLM', async () => {
   const { refinePrompt } = require('../messageMedia');
   for (const safeMode of [true, false]) {
+    let calls = 0;
     await assert.rejects(() => refinePrompt({
       sourceText: 'I suplex a child',
       config: testConfig({ safeMode, llmUrl: 'https://llm.example.test/v1/chat/completions' }),
-      fetchImpl: async () => { throw new Error('must not call the LLM'); }
+      fetchImpl: async () => { calls++; return response({ json: { choices: [{ message: { content: 'Two adults wrestle.' } }] } }); }
     }), err => err.code === 'unsafe_prompt');
+    assert.equal(calls, 0);
   }
 });
 
@@ -931,4 +933,20 @@ test('long GET prompts retain the participant reference mapping when shortened',
   assert.match(actual, /supplied profile pictures/i);
   assert.match(actual, /second picture is the author; the first is their opponent/i);
   assert.equal(generated.prompt, actual);
+});
+
+test('Klein GET receives the concise matched-name prompt and reference URLs in order', async () => {
+  const message = 'Alex grabs a chair and strikes Jordan before hitting a DDT onto the ring apron.';
+  const scene = { hasReferences: true, self: { display: 'Alex', username: 'alex' }, other: { display: 'Jordan', username: 'jordan' } };
+  const prompt = buildPrompt({ sourceText: message, scene });
+  const refs = ['https://chat.example.test/alex.png', 'https://chat.example.test/jordan.png'];
+  let url;
+  await generateMedia({ prompt, referenceImages: refs,
+    config: testConfig({ mediaKey: 'key', imageUrl: 'https://gen.pollinations.ai/image', imageModel: 'flux-klein', safeMode: false }),
+    fetchImpl: async value => { url = new URL(value); return okImage(); }
+  });
+  assert.equal(url.searchParams.get('image'), refs.join(','));
+  assert.equal(decodeURIComponent(url.pathname.replace(/^\/image\//, '')), prompt);
+  assert.match(prompt, /first picture is Alex; the second is Jordan/);
+  assert.ok(prompt.includes(message));
 });

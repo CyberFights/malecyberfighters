@@ -953,3 +953,48 @@ test('prompt reports why profile appearance references are unavailable', async (
     } finally { await api.close(); }
   }
 });
+
+test('unsafe source text is rejected even if the submitted prompt is edited', async () => {
+  const api = await startApi({ seed: models => { models.public.docs[0].text = 'I suplex a child'; } });
+  try {
+    const target = { scope: 'public', messageId: PUBLIC_ID, mediaType: 'image' };
+    const refined = await api.call('/prompt', { body: target });
+    assert.equal(refined.status, 400);
+    assert.equal(refined.data.error, 'unsafe_prompt');
+    const generated = await api.call('/generate', { body: { ...target, prompt: 'Two wrestlers in a ring' } });
+    assert.equal(generated.status, 400);
+    assert.equal(generated.data.error, 'unsafe_prompt');
+    assert.equal(api.prompts.length, 0);
+    assert.equal(api.generations.length, 0);
+    assert.equal(api.published.length, 0);
+  } finally { await api.close(); }
+});
+
+test('Klein-inspired prompt and ordered references flow through the public Visualize API', async () => {
+  const message = 'Alex grabs a steel chair and brutally strikes Jordan before hitting a DDT onto the ring apron.';
+  const api = await startApi({
+    config: { mediaKey: 'key', imageModel: 'flux-klein', imageUrl: 'https://gen.pollinations.ai/image', safeMode: false, publicBaseUrl: 'https://chat.example.test' },
+    seed: models => {
+      models.public.docs[0].text = message;
+      Object.assign(models.users.docs.find(user => user.username === 'alice'), { display: 'Alex', imageUrl: 'https://i.ibb.co/alex/avatar.png' });
+      Object.assign(models.users.docs.find(user => user.username === 'rival'), { display: 'Jordan', imageUrl: 'https://i.ibb.co/jordan/avatar.png' });
+    }
+  });
+  try {
+    const target = { scope: 'public', messageId: PUBLIC_ID, mediaType: 'image', style: 'photoreal' };
+    const refined = await api.call('/prompt', { body: target });
+    assert.equal(refined.status, 200);
+    assert.equal(refined.data.referenceStatus, 'available');
+    assert.match(refined.data.prompt, /first picture is Alex; the second is Jordan/i);
+    assert.match(refined.data.prompt, /on a wrestling ring apron/i);
+    assert.ok(refined.data.prompt.includes(message));
+    assert.doesNotMatch(refined.data.prompt, /Safety and quality:/);
+    const posted = await api.call('/generate', { body: { ...target, prompt: refined.data.prompt } });
+    assert.equal(posted.status, 201);
+    assert.equal(api.generations[0].prompt, refined.data.prompt);
+    assert.match(decodeURIComponent(api.generations[0].referenceImages[0]), /alex\/avatar\.png/);
+    assert.match(decodeURIComponent(api.generations[0].referenceImages[1]), /jordan\/avatar\.png/);
+    const created = api.models.public.all().find(doc => doc.generatedMedia);
+    assert.equal(created.generatedMedia.prompt, refined.data.prompt);
+  } finally { await api.close(); }
+});
