@@ -351,3 +351,77 @@ test('LLM context maps appearance references for either message author without c
     assert.match(system, /figure-four headscissors/i);
   }
 });
+
+test('Klein-inspired builder keeps the full multi-action turn, apron, style and matched photo order', () => {
+  const message = 'Alex grabs a steel chair and brutally strikes Jordan before hitting a DDT onto the ring apron.';
+  const scene = { hasReferences: true, author: 'alex', self: { username: 'alex', display: 'Alex' }, other: { username: 'jordan', display: 'Jordan' } };
+  const prompt = buildPrompt({ sourceText: message, style: 'photoreal', scene });
+  assert.match(prompt, /on a wrestling ring apron/i);
+  assert.match(prompt, /medium-wide view/i);
+  assert.match(prompt, /appearance references for faces, hair and build/i);
+  assert.match(prompt, /first picture is Alex; the second is Jordan/i);
+  assert.ok(prompt.includes(message));
+  assert.equal(prompt.split(message).length - 1, 1);
+  assert.match(prompt, /photorealistic/i);
+  assert.doesNotMatch(prompt, /facing off|inside a professional wrestling ring|packed arena|on the canvas/i);
+  assert.ok(prompt.length < 500);
+});
+
+test('specific location and camera cues do not invent a setting or confuse face-up with close-up', () => {
+  const examples = [
+    ['Jordan is thrown onto the ring apron', /on a wrestling ring apron/i],
+    ['they brawl at ringside', /at ringside/i],
+    ['I chase you backstage past the ring', /backstage/i],
+    ['we wrestle in a locker room', /in a locker room/i],
+    ['I challenge you on the entrance ramp', /on an entrance stage/i],
+    ['we grapple in a parking lot', /in a parking area/i],
+    ['we argue in the office', /in an office/i]
+  ];
+  for (const [turn, place] of examples) assert.match(buildPrompt({ sourceText: turn }), place);
+  const pose = buildPrompt({ sourceText: 'I pin you face up on the mat' });
+  assert.match(pose, /medium-wide view/);
+  assert.doesNotMatch(pose, /close-up|aerial/i);
+  assert.match(buildPrompt({ sourceText: 'A close-up shot of the two wrestlers in the ring' }), /close-up view/);
+  assert.match(buildPrompt({ sourceText: 'An aerial shot of the wrestlers in the ring' }), /high-angle view/);
+});
+
+test('third-person reference names are used only when both match exact source names', () => {
+  const scene = { hasReferences: true, self: { username: 'alex', display: 'Alex' }, other: { username: 'jordan', display: 'Jordan' } };
+  const matched = buildPrompt({ sourceText: 'Jordan counters Alex with a DDT', scene });
+  assert.match(matched, /first picture is Alex; the second is Jordan/i);
+  assert.match(matched, /Jordan counters Alex with a DDT/);
+  for (const sourceText of ['Alexandra counters Jordan with a DDT', 'Alex counters a masked fighter', 'They grapple in the ring']) {
+    const prompt = buildPrompt({ sourceText, scene });
+    assert.doesNotMatch(prompt, /first picture is Alex; the second is Jordan/i);
+    assert.match(prompt, /supplied profile pictures/i);
+  }
+  const video = buildPrompt({ sourceText: 'Alex counters Jordan with a DDT', mediaType: 'video', scene });
+  assert.doesNotMatch(video, /first picture is Alex/i);
+  assert.doesNotMatch(buildPrompt({ sourceText: 'Alex counters Jordan with a DDT', scene: { ...scene, hasReferences: false } }), /supplied profile pictures/i);
+});
+
+test('LLM receives the specific multi-action location without conflicting anatomy', async () => {
+  const sourceText = 'Alex grabs a chair and strikes Jordan before hitting a DDT onto the ring apron';
+  let messages;
+  const scene = { hasReferences: true, self: { username: 'alex', display: 'Alex' }, other: { username: 'jordan', display: 'Jordan' } };
+  await refinePrompt({ sourceText, scene, config: config({ llmUrl: 'https://llm.example.test/v1/chat/completions' }),
+    fetchImpl: async (_url, options) => {
+      messages = JSON.parse(options.body).messages;
+      return { ok: true, json: async () => ({ choices: [{ message: { content: 'Alex strikes Jordan with a chair then delivers a DDT on the ring apron.' } }] }) };
+    }
+  });
+  assert.match(messages[0].content, /first picture is Alex; the second is Jordan/i);
+  assert.match(messages[0].content, /apron of a wrestling ring/i);
+  assert.match(messages[0].content, /preserve the described actions and location/i);
+  assert.doesNotMatch(messages[0].content, /head-and-shoulders first into the mat/i);
+  assert.ok(messages[1].content.includes(sourceText));
+});
+
+test('source actions longer than the snippet’s 260-character limit remain intact', () => {
+  const message = 'Alex and Jordan grapple on the entrance ramp, ' + 'trading holds and shifting position. '.repeat(8) + 'Alex then catches Jordan with a DDT.';
+  assert.ok(message.length > 260);
+  const prompt = buildPrompt({ sourceText: message });
+  assert.ok(prompt.includes(message));
+  assert.match(prompt, /on an entrance stage/i);
+  assert.match(prompt, /catches Jordan with a DDT/);
+});
