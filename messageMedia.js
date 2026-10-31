@@ -626,9 +626,12 @@ const WRESTLING_CUES = Object.freeze([
   { re: /\b(headlock|side headlock|front facelock|facelock)\b/i,
     kind: 'hold',
     cue: "a headlock: the attacker encircles the opponent's head with one arm, tucking it against their own ribs while the opponent bends at the waist" },
-  { re: /\b(bearhug|bear hug|body ?scissors|waist ?lock|waistlock)\b/i,
+  { re: /\bbear ?hug\b/i,
     kind: 'hold',
-    cue: "a bearhug: the attacker wraps both arms tightly around the opponent's torso from the front, squeezing while their feet are planted wide" },
+    cue: "a bearhug: the attacker wraps both arms tightly around the opponent's torso and squeezes" },
+  { re: /\b(body ?scissors|waist ?lock|waistlock)\b/i,
+    kind: 'hold',
+    cue: 'a grappling hold controlling the opponent around the waist' },
   { re: /\b(full nelson|half nelson|nelson|hammerlock|wrist ?lock|wristlock|arm ?lock|armlock|chicken ?wing)\b/i,
     kind: 'hold',
     cue: "a grappling hold: the attacker controls the opponent's arms from behind, trapping them while the opponent bends and strains" },
@@ -712,11 +715,21 @@ function detectCameraView(text) {
   return 'medium-wide view';
 }
 
+/** Recognize only a clear, completed lift of the addressed opponent. */
+function hasLiftedBearhug(text) {
+  return /\bbear ?hug\b/i.test(text) && !/\?/.test(text) &&
+    /\b(?:lift(?:s|ed|ing)?|hoist(?:s|ed|ing)?|rais(?:e|es|ed|ing))\s+(?:you|u)\s+(?:up\s+)?(?:off|clear of)\s+(?:the\s+)?(?:mat|canvas|floor|ground)\b/i.test(text) &&
+    !/\b(?:not|never|cannot|can't|couldn't|didn't|trying|tries|try|attempt(?:s|ed|ing)?|fails?|failed|unable|almost|might|would|if|go(?:es|ing)? to|about to|counter(?:s|ed|ing)?|escap(?:e|es|ed|ing)|then|before|after)\b/i.test(text) &&
+    !/\b(?:feet|foot)\s+(?:(?:are|is|stay|remain)\s+)?(?:still\s+)?(?:planted|grounded|touching|on the (?:mat|canvas|floor|ground))\b/i.test(text) &&
+    !/\b(?:you|u)\s+(?:are\s+)?(?:lift(?:s|ed|ing)?|hoist(?:s|ed|ing)?)\b/i.test(text);
+}
+
 /** Read a match turn and return the facts a wrestling prompt must preserve. */
 function analyzeWrestlingScene(sourceText) {
   const text = String(sourceText || '');
   const firstPerson = /\b(i|i'm|i've|i'll|i'd|me|my|mine|myself|we|us|our)\b/i.test(text) ||
-    /\b(you|you're|you've|your|yours|yourself|ya)\b/i.test(text);
+    /\b(you|you're|you've|your|yours|yourself|ya)\b/i.test(text) ||
+    /\b(?:lift(?:s|ed|ing)?|squeez(?:e|es|ed|ing))\s+u\b/i.test(text);
   // Third person can be written with pronouns ("he lifts her") OR narrated as a
   // match report using the fighters' names ("Marco drives a knee into Ty's
   // gut"). Detect two capitalised name-like words for the latter so the writer
@@ -733,6 +746,7 @@ function analyzeWrestlingScene(sourceText) {
   const place = settingMatch ? settingMatch.place : 'in a wrestling ring';
   const camera = detectCameraView(text);
   const sequential = /\b(?:then|before|after|followed by)\b/i.test(text);
+  const liftedBearhug = firstPerson && !sequential && hasLiftedBearhug(text);
 
   const cues = [];
   const kinds = [];
@@ -748,7 +762,7 @@ function analyzeWrestlingScene(sourceText) {
     if (cues.length >= 2) break;
   }
   const motion = (dominant && dominant.motion) || (kinds.length && MOTION_CUES[kinds[0]]) || DEFAULT_MOTION;
-  return { perspective, setting, place, camera, sequential, cues, kinds, motion };
+  return { perspective, setting, place, camera, sequential, liftedBearhug, cues, kinds, motion };
 }
 
 /**
@@ -782,6 +796,9 @@ function sceneContextLines(analysis = {}, scene = {}, cueCount = 1) {
     lines.push(cues.length
       ? `Move anatomy: ${cues.join('; ')}.`
       : 'Move anatomy: a realistic wrestling exchange, correct limbs, believable contact.');
+  }
+  if (analysis.liftedBearhug) {
+    lines.push('The narrator lifts the opponent in the bearhug, with both of the opponent’s feet visibly off the floor.');
   }
   return lines;
 }
@@ -831,8 +848,16 @@ function buildPrompt({ sourceText, mediaType = 'image', style = 'cinematic', asp
   if (groundedHeadscissors) {
     action = `The author's wrestler takes their opponent onto the ${groundedHeadscissors[1].toLowerCase()}. The opponent lies face up, their head trapped between the attacker's thighs as the attacker locks both legs in a figure-four headscissors`;
   }
+  // Collapse only this complete, unambiguous bearhug turn. For longer or
+  // different turns, preserve all of the member's original action details.
+  const simpleLiftedBearhug = a.liftedBearhug && /^(?:i\s+)?squeez(?:e|es|ed|ing)\s+(?:you|u)\s+tight(?:ly)?\s*,?\s*(?:and\s+)?lift(?:s|ed|ing)?\s+(?:you|u)\s+(?:up\s+)?off\s+(?:the\s+)?(mat|canvas|floor|ground)\s*,?\s*(?:and\s+)?squeez(?:e|es|ed|ing)\s+(?:you|u)\s+in\s+(?:a\s+)?bear ?hug[.!]?$/i.exec(action);
+  if (simpleLiftedBearhug) {
+    action = `The author's wrestler squeezes their opponent in a bearhug and lifts them completely off the ${simpleLiftedBearhug[1].toLowerCase()}, with both of the opponent's feet visibly in the air`;
+  } else if (a.liftedBearhug) {
+    action = `${action.replace(/[.!?…]$/, '')}. Both of the opponent's feet are visibly off the ground`;
+  }
   const subject = isVideo ? 'A 5-second video' : 'An image';
-  const perspective = a.perspective === 'first' && !groundedHeadscissors ? ' (I = author; you = opponent)' : '';
+  const perspective = a.perspective === 'first' && !groundedHeadscissors && !simpleLiftedBearhug ? ' (I = author; you = opponent)' : '';
   let references = '';
   if (scene.hasReferences) {
     references = ' Use the supplied profile pictures as appearance references for faces, hair and build.';

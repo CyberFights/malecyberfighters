@@ -950,3 +950,23 @@ test('Klein GET receives the concise matched-name prompt and reference URLs in o
   assert.match(prompt, /first picture is Alex; the second is Jordan/);
   assert.ok(prompt.includes(message));
 });
+
+test('the provider receives the refined lifted bearhug and preserves reference order', async () => {
+  const sourceText = 'Squeezing you tight lifting you up off the mat squeezing u in a bearhug';
+  const scene = { hasReferences: true, author: 'bob', self: { username: 'alice' }, other: { username: 'bob' } };
+  const prompt = finalizePrompt(buildPrompt({ sourceText, scene }), { safeMode: false });
+  const referenceImages = ['https://chat.example.test/a.png', 'https://chat.example.test/b.png'];
+  let request;
+  const generated = await generateMedia({ prompt, referenceImages,
+    config: testConfig({ imageUrl: 'https://gen.pollinations.ai/image', imageModel: 'flux-klein', mediaKey: 'key', safeMode: false }),
+    fetchImpl: async url => { request = new URL(url); return okImage(); }
+  });
+  const sent = decodeURIComponent(request.pathname.replace(/^\/image\//, ''));
+  assert.equal(sent, prompt);
+  assert.equal(generated.prompt, sent);
+  assert.equal(request.searchParams.get('image'), referenceImages.join(','));
+  assert.equal(request.searchParams.get('safe'), 'false');
+  assert.match(sent, /lifts them completely off the mat/i);
+  assert.match(sent, /both of the opponent's feet visibly in the air/i);
+  assert.doesNotMatch(sent, /Safety and quality:/);
+});

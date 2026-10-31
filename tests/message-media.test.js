@@ -998,3 +998,26 @@ test('Klein-inspired prompt and ordered references flow through the public Visua
     assert.equal(created.generatedMedia.prompt, refined.data.prompt);
   } finally { await api.close(); }
 });
+
+test('the source bearhug is refined and posted with the same lifted-pose prompt', async () => {
+  const source = 'Squeezing you tight lifting you up off the mat squeezing u in a bearhug';
+  const api = await startApi({ config: { safeMode: false }, seed: models => {
+    models.dms.docs[0].originalText = source;
+    models.dms.docs[0].text = source;
+  } });
+  try {
+    const target = { scope: 'dm', messageId: DM_ID, mediaType: 'image' };
+    const refined = await api.call('/prompt', { body: target });
+    assert.equal(refined.status, 200);
+    assert.match(refined.data.prompt, /lifts them completely off the mat/i);
+    assert.match(refined.data.prompt, /opponent's feet visibly in the air/i);
+    assert.equal(refined.data.sourceText, source);
+    const posted = await api.call('/generate', { body: { ...target, prompt: refined.data.prompt } });
+    assert.equal(posted.status, 201);
+    assert.equal(api.generations[0].prompt, refined.data.prompt);
+    assert.equal(posted.data.prompt, refined.data.prompt);
+    const record = api.models.dms.all().find(doc => doc.generatedMedia);
+    assert.equal(record.generatedMedia.prompt, refined.data.prompt);
+    assert.deepEqual(record.generatedMedia.participants.map(person => person.username), ['alice', 'bob']);
+  } finally { await api.close(); }
+});
