@@ -425,3 +425,68 @@ test('source actions longer than the snippet’s 260-character limit remain inta
   assert.match(prompt, /on an entrance stage/i);
   assert.match(prompt, /catches Jordan with a DDT/);
 });
+
+test('the supplied bearhug turn describes the opponent lifted completely off the mat', () => {
+  const sourceText = 'Squeezing you tight lifting you up off the mat squeezing u in a bearhug';
+  const a = analyzeWrestlingScene(sourceText);
+  assert.equal(a.liftedBearhug, true);
+  assert.equal(a.perspective, 'first');
+  assert.match(a.cues[0], /bearhug/i);
+  assert.doesNotMatch(a.cues[0], /feet are planted|from the front/i);
+  for (const mediaType of ['image', 'video']) {
+    const scene = { hasReferences: true, author: 'bob', self: { username: 'alice' }, other: { username: 'bob' } };
+    const body = buildPrompt({ sourceText, mediaType, scene });
+    assert.match(body, /author's wrestler squeezes their opponent in a bearhug/i);
+    assert.match(body, /lifts them completely off the mat/i);
+    assert.match(body, /both of the opponent's feet visibly in the air/i);
+    assert.doesNotMatch(body, /squeezing u|feet are planted/i);
+    assert.ok(body.length < 500);
+    if (mediaType === 'image') assert.match(body, /second picture is the author; the first is their opponent/i);
+    assert.match(finalizePrompt(body), /Safety and quality:/);
+    assert.doesNotMatch(finalizePrompt(body, { safeMode: false }), /Safety and quality:/);
+  }
+});
+
+test('longer bearhug descriptions retain their details, while uncertain or reversed lifts are not invented', () => {
+  const original = 'I lift you off the mat in a bearhug while spinning around';
+  const prompt = buildPrompt({ sourceText: original });
+  assert.ok(prompt.includes(original));
+  assert.match(prompt, /opponent's feet are visibly off the ground/i);
+  for (const turn of [
+    'I try lifting you off the mat in a bearhug',
+    'I do not lift you off the mat in a bearhug',
+    'I lift you off the mat in a bearhug but your feet stay planted',
+    'I almost lift you off the mat in a bearhug',
+    'I go to lift you off the mat in a bearhug',
+    'You lift me off the mat in a bearhug',
+    'I lift you off the mat in a bearhug then you escape',
+    'I squeeze you in a bearhug',
+    'I lift you off the mat in a waistlock',
+    'I lift you off the mat in a body scissors'
+  ]) {
+    const result = buildPrompt({ sourceText: turn });
+    assert.ok(result.includes(turn), turn);
+    assert.doesNotMatch(result, /opponent's feet (?:are )?visibly/i, turn);
+    assert.equal(analyzeWrestlingScene(turn).liftedBearhug, false, turn);
+  }
+  assert.doesNotMatch(analyzeWrestlingScene('I lock on a waistlock').cues[0], /bearhug/i);
+  assert.doesNotMatch(analyzeWrestlingScene('I apply body scissors').cues[0], /bearhug/i);
+});
+
+test('the LLM sees the lifted opponent explicitly and fallback remains correct', async () => {
+  const sourceText = 'Squeezing you tight lifting you up off the mat squeezing u in a bearhug';
+  let system;
+  const args = { sourceText, config: config({ safeMode: false, llmUrl: 'https://llm.example.test/v1/chat/completions' }) };
+  const result = await refinePrompt({ ...args, fetchImpl: async (_url, options) => {
+    system = JSON.parse(options.body).messages[0].content;
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'A wrestler lifts their opponent clear of the mat in a bearhug.' } }] }) };
+  } });
+  assert.equal(result.refinedBy, 'llm');
+  assert.match(system, /opponent’s feet visibly off the floor/i);
+  assert.doesNotMatch(system, /feet are planted wide|from the front/i);
+  assert.doesNotMatch(result.prompt, /Safety and quality:/);
+  const fallback = await refinePrompt({ ...args, fetchImpl: async () => { throw new Error('offline'); } });
+  assert.equal(fallback.refinedBy, 'local');
+  assert.match(fallback.prompt, /both of the opponent's feet visibly in the air/i);
+  assert.doesNotMatch(fallback.prompt, /Safety and quality:/);
+});
