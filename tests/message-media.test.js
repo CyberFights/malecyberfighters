@@ -190,27 +190,19 @@ test('an unsafe LLM answer is discarded in favour of the safe local prompt', asy
 
 test('configFromEnv is keyless for images and needs explicit video enablement', () => {
   const plain = configFromEnv({});
-  assert.equal(plain.imageUrl, 'https://image.pollinations.ai/prompt');
-  assert.equal(plain.imageMode, 'get');
+  assert.equal(plain.imageUrl, 'https://api.magnific.com/v1/ai/text-to-image/seedream-v4-5-edit');
+  assert.equal(plain.imageMode, 'magnific');
+  assert.equal(plain.magnificKey, '');
   assert.equal(plain.videoEnabled, false);
   assert.equal(plain.llmUrl, '');
 
-  const keyed = configFromEnv({ MCF_MEDIA_API_KEY: 'secret' });
-  assert.equal(keyed.imageUrl, 'https://gen.pollinations.ai/image');
+  const keyed = configFromEnv({ MAGNIFIC_API_KEY: 'magnific-secret', MCF_MEDIA_API_KEY: 'video-secret' });
+  assert.equal(keyed.magnificKey, 'magnific-secret');
   assert.equal(keyed.videoEnabled, true);
-  assert.equal(keyed.mediaKey, 'secret');
-
-  const custom = configFromEnv({ MCF_VIDEO_API_URL: 'http://127.0.0.1:9999/video' });
-  assert.equal(custom.videoEnabled, true);
-
-  const openai = configFromEnv({ MCF_IMAGE_API_MODE: 'openai' });
-  assert.equal(openai.imageMode, 'openai');
-  assert.equal(openai.imageUrl, 'https://api.openai.com/v1/images/generations');
-
+  assert.equal(keyed.mediaKey, 'video-secret');
+  assert.equal(configFromEnv({ MCF_VIDEO_API_URL: 'http://127.0.0.1:9999/video' }).videoEnabled, true);
+  assert.equal(configFromEnv({ MCF_IMAGE_API_MODE: 'openai', MCF_IMAGE_API_URL: 'https://example.test' }).imageMode, 'magnific');
   assert.equal(configFromEnv({ APP_BASE_URL: 'https://chat.example.test' }).publicBaseUrl, 'https://chat.example.test');
-  assert.equal(plain.imageReferences, null);
-  assert.equal(configFromEnv({ MCF_IMAGE_REFERENCES: 'true' }).imageReferences, true);
-  assert.equal(configFromEnv({ MCF_IMAGE_REFERENCES: 'false' }).imageReferences, false);
 });
 
 /* ------------------------------------------------------------------
@@ -547,13 +539,14 @@ async function startApi(overrides = {}) {
       (Array.isArray(room.invitedUsers) && room.invitedUsers.includes(username)),
     canPost: async () => canPostResult,
     config,
-    fetchImpl: async () => response({ buffer: PNG }),
+    fetchImpl: overrides.fetchImpl || (async () => response({ buffer: PNG })),
     refinePrompt: async args => {
       prompts.push(args);
       return refinePrompt({ ...args, fetchImpl: async () => response({}) });
     },
     generateMedia: async args => {
       generations.push(args);
+      if (overrides.realGenerator) return generateMedia(args);
       if (args.mediaType === 'video') {
         return { mediaType: 'video', buffer: MP4, extension: 'mp4', clipType: 'video', provider: 'test', model: 'test', seed: 1 };
       }
@@ -1019,5 +1012,99 @@ test('the source bearhug is refined and posted with the same lifted-pose prompt'
     const record = api.models.dms.all().find(doc => doc.generatedMedia);
     assert.equal(record.generatedMedia.prompt, refined.data.prompt);
     assert.deepEqual(record.generatedMedia.participants.map(person => person.username), ['alice', 'bob']);
+  } finally { await api.close(); }
+});
+
+test('Magnific Visualize routes send ordered actual profile references for public, room and DM messages', async () => {
+  const Jimp = require('jimp');
+  const avatars = {};
+  for (const [name, color] of [['alice', 0xff0000ff], ['bob', 0x0000ffff], ['rival', 0x00ff00ff]]) {
+    const buffer = await new Jimp(24, 24, color).getBufferAsync(Jimp.MIME_PNG);
+    avatars[name] = `data:image/png;base64,${buffer.toString('base64')}`;
+  }
+  const output = await new Jimp(64, 64, 0xffffffff).getBufferAsync(Jimp.MIME_PNG);
+  const tasks = [];
+  const fetchImpl = async (url, options) => {
+    if (options.method === 'POST') {
+      tasks.push(JSON.parse(options.body));
+      return new Response(JSON.stringify({ data: { task_id: '046b6c7f-0b8a-43b9-b35d-6489e6daee91', status: 'COMPLETED', generated: ['https://ai-statics.freepik.com/output.png'] } }), { headers: { 'content-type': 'application/json' } });
+    }
+    assert.equal(url, 'https://ai-statics.freepik.com/output.png');
+    assert.equal(options.headers['x-magnific-api-key'], undefined);
+    return new Response(output, { headers: { 'content-type': 'image/png' } });
+  };
+  const api = await startApi({
+    config: { imageMode: 'magnific', imageUrl: 'https://api.magnific.com/v1/ai/text-to-image/seedream-v4-5-edit', magnificKey: 'server-only-key', safeMode: true },
+    realGenerator: true,
+    fetchImpl,
+    seed: models => {
+      for (const doc of models.users.docs) doc.imageUrl = avatars[doc.username];
+      models.public.docs[0].text = 'I squeeze you in a bearhug';
+      models.roomMessages.docs[0].text = 'I squeeze you in a bearhug';
+      models.dms.docs[0].originalText = 'I squeeze you in a bearhug';
+    }
+  });
+  try {
+    for (const [scope, messageId, room, otherColor] of [
+      ['public', PUBLIC_ID, undefined, 0x00ff00ff],
+      ['room', ROOM_MESSAGE_ID, ROOM_ID, 0x0000ffff],
+      ['dm', DM_ID, undefined, 0x0000ffff]
+    ]) {
+      const body = { scope, messageId, mediaType: 'image', ...(room ? { room } : {}) };
+      const preview = await api.call('/prompt', { body });
+      assert.equal(preview.status, 200, scope);
+      assert.equal(preview.data.referenceProvider, 'magnific');
+      assert.match(preview.data.prompt, /@img1.*@img2/);
+      assert.match(preview.data.prompt, /second picture is the author/i);
+      assert.doesNotMatch(preview.data.prompt, /Safety and quality/);
+      const posted = await api.call('/generate', { body: { ...body, prompt: preview.data.prompt } });
+      assert.equal(posted.status, 201, `${scope}: ${JSON.stringify(posted.data)}`);
+      const task = tasks.at(-1);
+      assert.equal(task.prompt, preview.data.prompt);
+      const [first, second] = await Promise.all(task.reference_images.map(ref => Jimp.read(Buffer.from(ref, 'base64'))));
+      assert.equal(first.getPixelColor(256, 256), 0xff0000ff, `${scope} viewer first`);
+      assert.equal(second.getPixelColor(256, 256), otherColor, `${scope} partner second`);
+      assert.equal(task.aspect_ratio, 'square_1_1');
+      assert.equal(task.enable_safety_checker, false);
+      assert.doesNotMatch(JSON.stringify(posted.data), /server-only-key/);
+    }
+    assert.equal(api.hostedImages.length, 3);
+    assert.equal(api.published.length, 3);
+  } finally { await api.close(); }
+});
+
+test('Magnific image route submits an initials reference when the other profile has no image', async () => {
+  const api = await startApi({
+    config: { imageMode: 'magnific', magnificKey: 'key', safeMode: true },
+    seed: models => { models.users.docs.find(user => user.username === 'rival').imageUrl = null; }
+  });
+  try {
+    const body = { scope: 'public', messageId: PUBLIC_ID, mediaType: 'image' };
+    const preview = await api.call('/prompt', { body });
+    assert.equal(preview.data.referenceStatus, 'missing');
+    assert.match(preview.data.prompt, /@img1.*@img2/);
+    const posted = await api.call('/generate', { body: { ...body, prompt: 'A suplex in the ring' } });
+    assert.equal(posted.status, 201);
+    assert.equal(api.generations[0].referenceImages.length, 2);
+    assert.match(api.generations[0].prompt, /@img1.*@img2/);
+    assert.match(api.generations[0].prompt, /A suplex in the ring/);
+    assert.doesNotMatch(api.generations[0].prompt, /Safety and quality/);
+  } finally { await api.close(); }
+});
+
+test('Magnific route reports missing key without publishing or exposing secrets', async () => {
+  let calls = 0;
+  const api = await startApi({
+    config: { imageMode: 'magnific', magnificKey: '' },
+    realGenerator: true,
+    fetchImpl: async () => { calls++; throw Error('unexpected network request'); }
+  });
+  try {
+    const response = await api.call('/generate', { body: { scope: 'public', messageId: PUBLIC_ID, mediaType: 'image', prompt: 'A suplex' } });
+    assert.equal(response.status, 502);
+    assert.equal(response.data.error, 'provider_config');
+    assert.equal(calls, 0);
+    assert.equal(api.hostedImages.length, 0);
+    assert.equal(api.published.length, 0);
   } finally { await api.close(); }
 });

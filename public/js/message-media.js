@@ -59,9 +59,9 @@
     provider_auth: 'The image generator rejected this server\'s API key. Ask an admin to check the media key.',
     provider_refused: 'The generator refused this prompt. Edit the wording and try again, or pick a shorter message.',
     provider_privacy: 'The generator flagged this prompt for privacy. Remove personal details such as names or contact information, then try again. The filter can also flag fictional details by mistake.',
-    provider_timeout: 'The generator is taking longer than usual — the media will still appear in chat if it finishes.',
+    provider_timeout: 'Generation timed out and will not be posted. The provider may still finish or charge for the task.',
     provider_error: 'The image generator failed. Please try again.',
-    provider_config: 'The image generator is not configured correctly.',
+    provider_config: 'The generator is not configured correctly. Ask an admin to check the server configuration and Magnific API key.',
     invalid_media: 'The generator returned an unusable file. Please try again.',
     composition_failed: 'The generated image could not be prepared with both profile pictures. Please try again.',
     media_too_large: 'The generator returned a file that is too large.',
@@ -459,11 +459,17 @@
     els.source.textContent = data.sourceText || currentTarget.sourceText || '';
     renderParticipants(data.participants);
     if (options.mediaType === 'image') {
-      els.note.textContent = data.referenceStatus === 'available'
-        ? 'Both profile photos will be sent to the image generator as appearance references and shown as corner badges. Likeness and pose depend on the generator.'
-        : data.referenceStatus === 'missing'
-          ? 'Profile pictures appear as corner badges, but both accessible photos are needed for appearance matching.'
-          : 'Profile pictures appear as corner badges only. This generator cannot use them as appearance references; an admin can configure a reference-capable model.';
+      if (data.referenceProvider === 'magnific') {
+        els.note.textContent = data.referenceStatus === 'available'
+          ? 'Profile photos are sent as @img1 (you) and @img2 (the other participant), if accessible, and shown as corner badges. Missing photos use initials. Likeness and pose depend on the generator.'
+          : 'Missing or inaccessible profile photos use initials as references and corner badges; those initials cannot provide likeness.';
+      } else {
+        els.note.textContent = data.referenceStatus === 'available'
+          ? 'Both profile photos will be sent to the image generator as appearance references and shown as corner badges. Likeness and pose depend on the generator.'
+          : data.referenceStatus === 'missing'
+            ? 'Profile pictures appear as corner badges, but both accessible photos are needed for appearance matching.'
+            : 'Profile pictures appear as corner badges only. This generator cannot use them as appearance references; an admin can configure a reference-capable model.';
+      }
     } else {
       els.note.textContent = 'Video generation depends on the selected model; profile images may be used as start and end frames, not appearance references.';
     }
@@ -519,7 +525,7 @@
       style: options.style,
       aspectRatio: options.aspectRatio,
       prompt: prompt
-    }, options.mediaType === 'video' ? 200000 : 120000);
+    }, options.mediaType === 'video' ? 200000 : 150000);
 
     setBusy(false);
     if (!data.ok) {

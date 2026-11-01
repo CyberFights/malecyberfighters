@@ -67,7 +67,7 @@ function jsonResponse(data, status = 200) {
   };
 }
 
-async function boot({ videoEnabled = false, generateError = null, generateDetail = '', referenceStatus = 'unsupported' } = {}) {
+async function boot({ videoEnabled = false, generateError = null, generateDetail = '', referenceStatus = 'unsupported', referenceProvider = 'other' } = {}) {
   const dom = new JSDOM(PAGE, {
     url: 'https://example.test/',
     runScripts: 'dangerously',
@@ -109,6 +109,7 @@ async function boot({ videoEnabled = false, generateError = null, generateDetail
         prompt: 'A polished illustration of Rex landing a superplex. Safety and quality: fictional consenting adults.',
         refinedBy: 'local',
         referenceStatus,
+        referenceProvider,
         mediaType: body.mediaType,
         style: body.style,
         aspectRatio: body.aspectRatio
@@ -326,6 +327,21 @@ test('the dialog distinguishes real appearance references from corner badges', a
     ['available', /photos will be sent to the image generator as appearance references.*likeness and pose depend/i]
   ]) {
     const { dom, win } = await boot({ referenceStatus });
+    try {
+      win.document.querySelector(`#publicFeed .message-row[data-id="${PUBLIC_ID}"] .mcf-media-btn`).click();
+      await waitFor(() => win.document.getElementById('mcfMediaPrompt') && win.document.getElementById('mcfMediaPrompt').value);
+      assert.match(win.document.getElementById('mcfMediaNote').textContent, expected);
+    } finally { dom.window.close(); }
+  }
+});
+
+
+test('Magnific dialog explains @img ordering and initials fallbacks', async () => {
+  for (const [referenceStatus, expected] of [
+    ['available', /@img1 \(you\).*@img2 \(the other participant\).*missing photos use initials/i],
+    ['missing', /initials as references and corner badges/i]
+  ]) {
+    const { dom, win } = await boot({ referenceStatus, referenceProvider: 'magnific' });
     try {
       win.document.querySelector(`#publicFeed .message-row[data-id="${PUBLIC_ID}"] .mcf-media-btn`).click();
       await waitFor(() => win.document.getElementById('mcfMediaPrompt') && win.document.getElementById('mcfMediaPrompt').value);
