@@ -2,7 +2,7 @@
    message-media.js — ✨ Visualize a chat message
    ------------------------------------------------------------
    One MutationObserver decorates .message-row / .message markup in
-   the arena, custom rooms and DMs on desktop AND mobile. Clicking the
+   custom rooms and DMs on desktop AND mobile. Clicking the
    action opens a modal that:
 
      1. asks the server to refine the STORED message into a proper
@@ -216,13 +216,11 @@
     if (!messageId) return null;
 
     var dmContainer = row.closest('#dmMessages, [id^="pmBody_"]');
-    var publicFeed = row.closest('#publicFeed');
     var roomFeed = row.closest('#roomFeed');
     var sourceText = rowText(row);
     if (!sourceText) return null;
 
     if (dmContainer) return { scope: 'dm', room: '', messageId: messageId, sourceText: sourceText };
-    if (publicFeed) return { scope: 'public', room: '', messageId: messageId, sourceText: sourceText };
     if (roomFeed) {
       var popup = document.getElementById('roomChatPopup');
       var room = popup && popup.dataset.room ? String(popup.dataset.room).trim() : '';
@@ -244,7 +242,20 @@
         row.parentElement.classList.contains('message-row')) return;
 
     var target = findRowTarget(row);
-    if (!target) return;
+    if (!target) {
+      // A row can be moved between feeds by client code. Remove any old
+      // Visualize action if it is now in the public chat, without touching
+      // the message's existing reply/edit actions.
+      if (row.closest && row.closest('#publicFeed')) {
+        var oldButton = row.querySelector('.mcf-media-btn');
+        if (oldButton) {
+          var oldBar = oldButton.parentElement;
+          oldButton.remove();
+          if (oldBar && oldBar.classList.contains('mcf-media-actions-added') && !oldBar.children.length) oldBar.remove();
+        }
+      }
+      return;
+    }
 
     var existing = row.querySelector && row.querySelector('.mcf-media-btn');
     if (existing) {
