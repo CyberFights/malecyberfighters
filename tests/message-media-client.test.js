@@ -23,7 +23,7 @@ const PAGE = `<!doctype html><html><body>
   <div id="roomChatPopup" data-room="${ROOM_ID}">
     <div id="publicFeed" class="public-feed">
       <div class="message-row" data-id="${PUBLIC_ID}">
-        <div class="message"><div class="message-text">Rex lands a superplex</div></div>
+        <div class="message"><div class="message-text">Rex lands a superplex</div><div class="message-actions"><button class="action-reply">Reply</button></div></div>
       </div>
       <div class="message-row" data-id="${GENERATED_ID}" data-generated-media="1">
         <div class="message"><div class="message-text">🎨 AI image from @rival's message</div></div>
@@ -130,23 +130,20 @@ async function boot({ videoEnabled = false, generateError = null, generateDetail
 
   win.eval(CORE);
   win.eval(CLIENT);
-  await waitFor(() => win.document.querySelectorAll('.mcf-media-btn').length >= 4);
+  await waitFor(() => win.document.querySelectorAll('.mcf-media-btn').length >= 3);
 
   return { dom, win, requests };
 }
 
-test('decorates arena, room and DM rows exactly once, skipping AI-generated rows', async () => {
+test('decorates room and DM rows exactly once, but never public or AI-generated rows', async () => {
   const { dom, win } = await boot();
   try {
-    assert.equal(win.document.querySelectorAll('.mcf-media-btn').length, 4);
+    assert.equal(win.document.querySelectorAll('.mcf-media-btn').length, 3);
 
-    const publicTarget = win.MCFMessageMedia.targetFor(
-      win.document.querySelector(`#publicFeed .message-row[data-id="${PUBLIC_ID}"]`)
-    );
-    assert.equal(publicTarget.scope, 'public');
-    assert.equal(publicTarget.room, '');
-    assert.equal(publicTarget.messageId, PUBLIC_ID);
-    assert.equal(publicTarget.sourceText, 'Rex lands a superplex');
+    const publicRow = win.document.querySelector(`#publicFeed .message-row[data-id="${PUBLIC_ID}"]`);
+    assert.equal(win.MCFMessageMedia.targetFor(publicRow), null);
+    assert.equal(publicRow.querySelector('.mcf-media-btn'), null);
+    assert.ok(publicRow.querySelector('.action-reply'), 'public reply actions remain available');
 
     const roomTarget = win.MCFMessageMedia.targetFor(
       win.document.querySelector(`#roomFeed .message-row[data-id="${ROOM_MESSAGE_ID}"]`)
@@ -178,16 +175,16 @@ test('decorates arena, room and DM rows exactly once, skipping AI-generated rows
     // Re-running the observer/scan must not stack duplicate buttons.
     win.MCFMessageMedia.scan(win.document);
     win.MCFMessageMedia.decorate(win.document.querySelector(`#publicFeed .message-row[data-id="${PUBLIC_ID}"]`));
-    assert.equal(win.document.querySelectorAll('.mcf-media-btn').length, 4);
+    assert.equal(win.document.querySelectorAll('.mcf-media-btn').length, 3);
   } finally {
     dom.window.close();
   }
 });
 
-test('opens a refined prompt, edits it, and posts an image into the arena', async () => {
+test('opens a refined prompt, edits it, and posts an image into the DM', async () => {
   const { dom, win, requests } = await boot();
   try {
-    win.document.querySelector(`#publicFeed .message-row[data-id="${PUBLIC_ID}"] .mcf-media-btn`).click();
+    win.document.querySelector(`#dmMessages .message-row[data-dm-id="${DM_ID}"] .mcf-media-btn`).click();
 
     await waitFor(() => !!win.document.getElementById('mcfMediaPrompt'));
     const promptEl = win.document.getElementById('mcfMediaPrompt');
@@ -201,8 +198,8 @@ test('opens a refined prompt, edits it, and posts an image into the arena', asyn
     assert.match(win.document.getElementById('mcfMediaStatus').textContent, /Prompt ready/);
 
     const promptRequest = requests.find(request => request.url.endsWith('/prompt'));
-    assert.equal(promptRequest.body.scope, 'public');
-    assert.equal(promptRequest.body.messageId, PUBLIC_ID);
+    assert.equal(promptRequest.body.scope, 'dm');
+    assert.equal(promptRequest.body.messageId, DM_ID);
 
     promptEl.value = 'My edited generator prompt';
     promptEl.dispatchEvent(new win.Event('input', { bubbles: true }));
@@ -210,8 +207,8 @@ test('opens a refined prompt, edits it, and posts an image into the arena', asyn
 
     assert.equal(await waitFor(() => requests.some(request => request.url.endsWith('/generate'))), true);
     const generate = requests.find(request => request.url.endsWith('/generate'));
-    assert.equal(generate.body.scope, 'public');
-    assert.equal(generate.body.messageId, PUBLIC_ID);
+    assert.equal(generate.body.scope, 'dm');
+    assert.equal(generate.body.messageId, DM_ID);
     assert.equal(generate.body.mediaType, 'image');
     assert.equal(generate.body.prompt, 'My edited generator prompt');
 
@@ -328,7 +325,7 @@ test('the dialog distinguishes real appearance references from corner badges', a
   ]) {
     const { dom, win } = await boot({ referenceStatus });
     try {
-      win.document.querySelector(`#publicFeed .message-row[data-id="${PUBLIC_ID}"] .mcf-media-btn`).click();
+      win.document.querySelector(`#dmMessages .message-row[data-dm-id="${DM_ID}"] .mcf-media-btn`).click();
       await waitFor(() => win.document.getElementById('mcfMediaPrompt') && win.document.getElementById('mcfMediaPrompt').value);
       assert.match(win.document.getElementById('mcfMediaNote').textContent, expected);
     } finally { dom.window.close(); }
@@ -343,9 +340,38 @@ test('Magnific dialog explains @img ordering and initials fallbacks', async () =
   ]) {
     const { dom, win } = await boot({ referenceStatus, referenceProvider: 'magnific' });
     try {
-      win.document.querySelector(`#publicFeed .message-row[data-id="${PUBLIC_ID}"] .mcf-media-btn`).click();
+      win.document.querySelector(`#dmMessages .message-row[data-dm-id="${DM_ID}"] .mcf-media-btn`).click();
       await waitFor(() => win.document.getElementById('mcfMediaPrompt') && win.document.getElementById('mcfMediaPrompt').value);
       assert.match(win.document.getElementById('mcfMediaNote').textContent, expected);
     } finally { dom.window.close(); }
   }
+});
+
+
+test('new or late-identified public messages never receive Visualize while DMs and rooms do', async () => {
+  const { dom, win } = await boot();
+  try {
+    const publicFeed = win.document.getElementById('publicFeed');
+    const dmFeed = win.document.getElementById('dmMessages');
+    const roomFeed = win.document.getElementById('roomFeed');
+    function addRow(feed, attribute) {
+      const row = win.document.createElement('div');
+      row.className = 'message-row';
+      row.innerHTML = '<div class="message"><div class="message-text">A new message</div></div>';
+      feed.appendChild(row);
+      row.setAttribute(attribute, '1'.repeat(24));
+      return row;
+    }
+    const arenaRow = addRow(publicFeed, 'data-id');
+    const dmRow = addRow(dmFeed, 'data-dm-id');
+    const roomRow = addRow(roomFeed, 'data-id');
+    assert.equal(await waitFor(() => dmRow.querySelector('.mcf-media-btn') && roomRow.querySelector('.mcf-media-btn')), true);
+    assert.equal(arenaRow.querySelector('.mcf-media-btn'), null);
+    win.MCFMessageMedia.scan(win.document);
+    assert.equal(arenaRow.querySelector('.mcf-media-btn'), null);
+    assert.equal(dmRow.querySelectorAll('.mcf-media-btn').length, 1);
+    assert.equal(roomRow.querySelectorAll('.mcf-media-btn').length, 1);
+    publicFeed.appendChild(dmRow);
+    assert.equal(await waitFor(() => !dmRow.querySelector('.mcf-media-btn')), true, 'moving a row into public chat removes its stale action');
+  } finally { dom.window.close(); }
 });
