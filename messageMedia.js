@@ -18,6 +18,7 @@ const crypto = require('crypto');
 const Jimp = require('jimp');
 const {
   isImgBBUrl,
+  detectRasterImageType,
   validateRasterUpload
 } = require('./imageLibrary');
 
@@ -32,6 +33,8 @@ const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 const MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024;
 const PROFILE_FETCH_TIMEOUT_MS = 12 * 1000;
 const IMAGE_TIMEOUT_MS = 90 * 1000;
+const MAGNIFIC_URL = 'https://api.magnific.com/v1/ai/text-to-image/seedream-v4-5-edit';
+const MAGNIFIC_POLL_MS = 2000;
 const VIDEO_TIMEOUT_MS = 180 * 1000;
 const LLM_TIMEOUT_MS = 20 * 1000;
 
@@ -182,20 +185,14 @@ function providerLabel(config, mediaType) {
 }
 
 /**
- * Provider configuration. Images work out of the box through Pollinations'
- * keyless classic endpoint. A key unlocks the unified API and video; an LLM
- * endpoint is optional because the built-in prompt writer needs no network.
+ * Image generation uses Magnific. Video and the optional prompt refiner
+ * retain their independent provider configuration.
  */
 function configFromEnv(env = process.env) {
   const mediaKey = envValue(env, 'MCF_MEDIA_API_KEY');
-  const imageMode = envValue(env, 'MCF_IMAGE_API_MODE').toLowerCase() === 'openai' ? 'openai' : 'get';
+  const imageMode = 'magnific';
+  const imageUrl = MAGNIFIC_URL;
   const videoMode = envValue(env, 'MCF_VIDEO_API_MODE').toLowerCase() === 'openai' ? 'openai' : 'get';
-  // OpenAI-compatible POST mode needs a POST endpoint; the keyless Pollinations
-  // GET endpoint cannot accept that body, so pick a sensible default.
-  const defaultImageUrl = imageMode === 'openai'
-    ? 'https://api.openai.com/v1/images/generations'
-    : (mediaKey ? 'https://gen.pollinations.ai/image' : 'https://image.pollinations.ai/prompt');
-  const imageUrl = envValue(env, 'MCF_IMAGE_API_URL') || defaultImageUrl;
   const videoUrl = envValue(env, 'MCF_VIDEO_API_URL') || 'https://gen.pollinations.ai/video';
   const llmUrl = envValue(env, 'MCF_PROMPT_LLM_URL') ||
     (envValue(env, 'MCF_PROMPT_LLM_API_KEY') ? 'https://gen.pollinations.ai/v1/chat/completions' : '');
@@ -204,10 +201,11 @@ function configFromEnv(env = process.env) {
 
   return Object.freeze({
     mediaKey,
+    magnificKey: envValue(env, 'MAGNIFIC_API_KEY'),
     publicBaseUrl: envValue(env, 'APP_BASE_URL'),
     imageUrl,
     imageMode,
-    imageModel: envValue(env, 'MCF_IMAGE_MODEL') || 'flux',
+    imageModel: 'seedream-v4-5-edit',
     // Explicit opt-in for a custom provider that accepts two image URLs.
     // Leave unset to detect the known Pollinations multi-reference model.
     imageReferences: envValue(env, 'MCF_IMAGE_REFERENCES')
@@ -501,13 +499,20 @@ async function composeProfilePortraits({ baseBuffer, participants = {} } = {}) {
     base.composite(labelBg, labelX, labelY);
   }
 
-  const buffer = await base.getBufferAsync(Jimp.MIME_PNG);
+  let mimetype = Jimp.MIME_PNG;
+  let buffer = await base.getBufferAsync(mimetype);
+  // Large 4MP images can exceed the PNG limit; a JPEG retains the scene and
+  // badges while fitting the media storage limit.
+  if (buffer.length > MAX_IMAGE_BYTES) {
+    mimetype = Jimp.MIME_JPEG;
+    buffer = await base.quality(90).getBufferAsync(mimetype);
+  }
   if (buffer.length > MAX_IMAGE_BYTES) {
     throw codedError('media_too_large', 'The finished image is too large to post');
   }
-  const validation = validateRasterUpload({ buffer, size: buffer.length, mimetype: 'image/png' });
-  if (!validation.ok) throw codedError('composition_failed', 'The finished image is not a valid PNG');
-  return { buffer, mimetype: 'image/png' };
+  const validation = validateGeneratedRaster(buffer, mimetype);
+  if (!validation.ok) throw codedError('composition_failed', 'The finished image is not a valid raster');
+  return { buffer, mimetype };
 }
 
 /**
@@ -528,13 +533,13 @@ function sanitizeSourceText(value) {
     .trim();
 }
 
-function sanitizePrompt(value) {
+function sanitizePrompt(value, maxLength = MAX_PROMPT_CHARS) {
   return String(value == null ? '' : value)
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, ' ')
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
-    .slice(0, MAX_PROMPT_CHARS)
+    .slice(0, maxLength)
     .trim();
 }
 
@@ -549,8 +554,8 @@ function stripSafetySuffix(value) {
 }
 
 /** Sanitize and validate on every path, regardless of provider safety mode. */
-function finalizePrompt(candidate, { safeMode = true } = {}) {
-  const prompt = sanitizePrompt(stripSafetySuffix(candidate));
+function finalizePrompt(candidate, { safeMode = true, maxLength = MAX_PROMPT_CHARS } = {}) {
+  const prompt = sanitizePrompt(stripSafetySuffix(candidate), maxLength);
   if (!prompt) throw codedError('empty_prompt', 'The generator prompt is empty');
   if (containsUnsafeRequest(prompt)) {
     throw codedError('unsafe_prompt', 'That prompt asks for content the generator cannot produce');
@@ -860,7 +865,9 @@ function buildPrompt({ sourceText, mediaType = 'image', style = 'cinematic', asp
   const perspective = a.perspective === 'first' && !groundedHeadscissors && !simpleLiftedBearhug ? ' (I = author; you = opponent)' : '';
   let references = '';
   if (scene.hasReferences) {
-    references = ' Use the supplied profile pictures as appearance references for faces, hair and build.';
+    references = scene.magnific
+      ? ' Use @img1 for the current member and @img2 for the other participant as appearance references.'
+      : ' Use the supplied profile pictures as appearance references for faces, hair and build.';
     if (!isVideo && scene.author && scene.self && scene.other && a.perspective === 'first') {
       const author = String(scene.author).toLowerCase();
       if (author === String(scene.self.username || '').toLowerCase()) {
@@ -989,7 +996,7 @@ async function refinePrompt({
     aspectRatio: chosenRatio,
     scene,
     analysis,
-    safeMode: !config || config.safeMode !== false
+    safeMode: media === 'image' && config && config.imageMode === 'magnific' ? false : !config || config.safeMode !== false
   };
 
   let candidate = buildPrompt(options);
@@ -1020,7 +1027,7 @@ async function refinePrompt({
     return {
       ok: true,
       sourceText: source,
-      prompt: finalizePrompt(candidate, options),
+      prompt: scene.magnific ? ensureMagnificReferences(finalizePrompt(candidate, options)) : finalizePrompt(candidate, options),
       refinedBy,
       mediaType: media,
       style: chosenStyle,
@@ -1031,7 +1038,7 @@ async function refinePrompt({
       return {
         ok: true,
         sourceText: source,
-        prompt: finalizePrompt(buildPrompt(options), options),
+        prompt: scene.magnific ? ensureMagnificReferences(finalizePrompt(buildPrompt(options), options)) : finalizePrompt(buildPrompt(options), options),
         refinedBy: 'local',
         mediaType: media,
         style: chosenStyle,
@@ -1499,10 +1506,173 @@ function detectClipType(buffer) {
   return null;
 }
 
-/**
- * Ask the configured provider for media bytes. Supports Pollinations-style GET
- * endpoints and OpenAI-compatible POST /images/generations style endpoints.
- */
+// Generated images have their own larger byte budget; profile uploads retain
+// imageLibrary's 5 MB limit. Verify both signature and declared content type.
+function validateGeneratedRaster(buffer, mimetype) {
+  if (!Buffer.isBuffer(buffer) || !buffer.length || buffer.length > MAX_IMAGE_BYTES) return { ok: false, error: 'file_too_large' };
+  const detected = detectRasterImageType(buffer);
+  const declared = String(mimetype || '').toLowerCase();
+  const normalized = declared === 'image/jpg' || declared === 'image/pjpeg' ? 'image/jpeg' : declared;
+  if (!detected || (normalized && normalized !== 'application/octet-stream' && normalized !== detected)) return { ok: false, error: 'invalid_file_type' };
+  return { ok: true, mimetype: detected };
+}
+
+// Keep the editable action intact and make the stable participant order explicit.
+function ensureMagnificReferences(prompt) {
+  const text = String(prompt || '');
+  if (/@img1\b/i.test(text) && /@img2\b/i.test(text)) return text;
+  // Prefix rather than append: sanitizePrompt's limit must never truncate the mapping.
+  return `Use @img1 for the current member and @img2 for the other participant. ${text}`;
+}
+
+// Supply two independent, ordered PNGs, even if the two URLs are identical or
+// a member has no photo. Magnific requires 256px minimum and PNG/JPEG.
+async function makeMagnificReferences(participants) {
+  const font = await Jimp.loadFont(Jimp.FONT_SANS_64_WHITE);
+  return Promise.all([participants.self, participants.other].map(async participant => {
+    let image;
+    if (participant && Buffer.isBuffer(participant.buffer)) {
+      try { image = await Jimp.read(participant.buffer); } catch (_) { /* use initials */ }
+    }
+    if (image) {
+      image.contain(512, 512);
+    } else {
+      image = new Jimp(512, 512, avatarColor(participant && participant.username));
+      const initial = String((participant && (participant.display || participant.username)) || '?').trim().charAt(0).toUpperCase() || '?';
+      image.print(font, Math.round((512 - Jimp.measureText(font, initial)) / 2),
+        Math.round((512 - Jimp.measureTextHeight(font, initial, 512)) / 2), initial);
+    }
+    return (await image.getBufferAsync(Jimp.MIME_PNG)).toString('base64');
+  }));
+}
+
+// Consume a response within the single generation deadline and enforce limits
+// while streaming. Never include provider bodies or network exception text in
+// errors: they can echo the key, prompt, or the private reference images.
+async function magnificRequest(fetchImpl, url, options, deadline, maxBytes) {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) throw codedError('provider_timeout', 'The generator took too long to respond');
+  const controller = new AbortController();
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(codedError('provider_timeout', 'The generator took too long to respond'));
+    }, remaining);
+  });
+  try {
+    return await Promise.race([(async () => {
+      const response = await fetchImpl(url, { ...options, redirect: 'manual', signal: controller.signal });
+      if (!response.ok) {
+        const status = Number(response.status) || 500;
+        const code = status === 401 || status === 403 ? 'provider_auth' :
+          status === 402 || status === 429 ? 'provider_rate_limited' : 'provider_error';
+        throw codedError(code, `Magnific returned HTTP ${status}`, { providerStatus: status });
+      }
+      const declared = Number(response.headers && response.headers.get('content-length')) || 0;
+      if (declared > maxBytes) throw codedError('media_too_large', 'The generator response is too large');
+      let buffer;
+      if (response.body && response.body[Symbol.asyncIterator]) {
+        const chunks = [];
+        let total = 0;
+        for await (const chunk of response.body) {
+          total += chunk.length;
+          if (total > maxBytes) {
+            controller.abort();
+            throw codedError('media_too_large', 'The generator response is too large');
+          }
+          chunks.push(Buffer.from(chunk));
+        }
+        buffer = Buffer.concat(chunks);
+      } else {
+        buffer = Buffer.from(await response.arrayBuffer());
+        if (buffer.length > maxBytes) throw codedError('media_too_large', 'The generator response is too large');
+      }
+      return { buffer, contentType: String(response.headers && response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase() };
+    })(), timeout]);
+  } catch (err) {
+    controller.abort();
+    if (err && (String(err.code || '').startsWith('provider_') || err.code === 'media_too_large')) throw err;
+    throw codedError('provider_error', 'Could not reach Magnific');
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function generateMagnificImage({ prompt, aspectRatio, config, fetchImpl, referenceImages }) {
+  if (!config.magnificKey) throw codedError('provider_config', 'Magnific image generation is not configured');
+  if (!Array.isArray(referenceImages) || referenceImages.length !== 2 ||
+      referenceImages.some(value => typeof value !== 'string' || value.length > 10 * 1024 * 1024 * 4 / 3 + 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(value))) {
+    throw codedError('provider_config', 'Two profile references are required for image generation');
+  }
+  const finalPrompt = ensureMagnificReferences(finalizePrompt(prompt, { safeMode: false, maxLength: 4096 - 80 }));
+  const ratios = { '1:1': 'square_1_1', '16:9': 'widescreen_16_9', '9:16': 'social_story_9_16', '4:3': 'classic_4_3' };
+  const deadline = Date.now() + (config.imageTimeoutMs || IMAGE_TIMEOUT_MS);
+  const auth = { 'x-magnific-api-key': config.magnificKey, Accept: 'application/json' };
+  const body = JSON.stringify({
+    prompt: finalPrompt,
+    reference_images: referenceImages,
+    aspect_ratio: ratios[normalizeAspectRatio(aspectRatio)],
+    seed: 12345,
+    enable_safety_checker: false
+  });
+  const parseTask = reply => {
+    try {
+      const data = JSON.parse(reply.buffer.toString('utf8'));
+      if (data && data.data && typeof data.data === 'object') return data.data;
+    } catch (_) { /* malformed response */ }
+    throw codedError('provider_error', 'Magnific returned an invalid task response', { providerStatus: 200 });
+  };
+  // One POST only: retrying task creation could incur duplicate charges.
+  let task = parseTask(await magnificRequest(fetchImpl, MAGNIFIC_URL, {
+    method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' }, body
+  }, deadline, 64 * 1024));
+  const taskId = String(task.task_id || '');
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(taskId)) {
+    throw codedError('provider_error', 'Magnific returned an invalid task ID');
+  }
+  let pollFailures = 0;
+  for (;;) {
+    if (task.status === 'FAILED') throw codedError('provider_error', 'Magnific could not complete the image');
+    if (task.status === 'COMPLETED') break;
+    if (!['CREATED', 'IN_PROGRESS'].includes(task.status)) throw codedError('provider_error', 'Magnific returned an unknown task status');
+    const delay = Math.min(config.magnificPollMs == null ? MAGNIFIC_POLL_MS : Math.max(0, config.magnificPollMs), Math.max(0, deadline - Date.now()));
+    if (delay) await sleep(delay);
+    try {
+      const reply = await magnificRequest(fetchImpl, `${MAGNIFIC_URL}/${taskId}`, {
+        method: 'GET', headers: auth
+      }, deadline, 64 * 1024);
+      task = parseTask(reply);
+      pollFailures = 0;
+    } catch (err) {
+      // Only retry status checks, never task creation. Transient poll errors
+      // need not abandon an already-paid task on the first failed request.
+      const transient = (err.code === 'provider_error' && (!err.providerStatus || err.providerStatus >= 500)) ||
+        (err.code === 'provider_rate_limited' && err.providerStatus === 429);
+      if (!transient || ++pollFailures >= 3) throw err;
+      continue;
+    }
+    if (task.task_id && task.task_id !== taskId) throw codedError('provider_error', 'Magnific returned a different task ID');
+  }
+  const output = Array.isArray(task.generated) && task.generated[0];
+  let outputUrl;
+  try { outputUrl = new URL(output); } catch (_) { throw codedError('invalid_media', 'Magnific returned an invalid image URL'); }
+  // Only Magnific's documented Freepik CDN; no redirects, credentials or
+  // arbitrary provider-supplied URL may reach a private network or receive a key.
+  if (outputUrl.protocol !== 'https:' || outputUrl.username || outputUrl.password || outputUrl.port ||
+      !(outputUrl.hostname === 'freepik.com' || outputUrl.hostname.endsWith('.freepik.com'))) {
+    throw codedError('invalid_media', 'Magnific returned an untrusted image URL');
+  }
+  const result = await magnificRequest(fetchImpl, outputUrl.href, {
+    method: 'GET', headers: { Accept: 'image/png,image/jpeg,image/*' }
+  }, deadline, MAX_IMAGE_BYTES);
+  const validation = validateGeneratedRaster(result.buffer, result.contentType || 'application/octet-stream');
+  if (!validation.ok) throw codedError('invalid_media', 'Magnific returned an invalid image');
+  return { mediaType: 'image', buffer: result.buffer, mimetype: validation.mimetype,
+    provider: 'magnific', model: 'seedream-v4-5-edit', seed: 12345, prompt: finalPrompt };
+}
+
+/** Generate image or video bytes using the configured provider. */
 async function generateMedia({
   mediaType = 'image',
   prompt,
@@ -1516,6 +1686,9 @@ async function generateMedia({
   const media = normalizeMediaType(mediaType) || 'image';
   if (media === 'video' && !config.videoEnabled) {
     throw codedError('video_unavailable', 'Video generation is not configured on this server');
+  }
+  if (media === 'image' && config.imageMode === 'magnific') {
+    return generateMagnificImage({ prompt, aspectRatio, config, fetchImpl, referenceImages });
   }
   const finalPrompt = finalizePrompt(prompt, { safeMode: config.safeMode });
   const ratio = aspectRatioSpec(aspectRatio);
@@ -1667,11 +1840,7 @@ async function generateMedia({
         };
       }
 
-      const validation = validateRasterUpload({
-        buffer,
-        size: buffer.length,
-        mimetype: contentType || 'application/octet-stream'
-      });
+      const validation = validateGeneratedRaster(buffer, contentType || 'application/octet-stream');
       if (!validation.ok) {
         throw providerFailure({
           code: 'invalid_media', message: `The generator did not return a valid raster image (${validation.error})`,
@@ -1715,6 +1884,7 @@ function isHostedImageUrl(value) {
 
 /** Whether the configured image endpoint is known or declared to accept two references. */
 function supportsImageReferences(config = {}) {
+  if (config.imageMode === 'magnific') return true;
   if (typeof config.imageReferences === 'boolean') return config.imageReferences;
   let host = '';
   try { host = new URL(config.imageUrl).hostname.toLowerCase(); } catch (_) { return false; }
@@ -1739,6 +1909,7 @@ function publicReferenceImages(participants, config = {}) {
 function buildSceneContext({ source, participants, config, referenceImages = [], mediaType = 'image' } = {}) {
   const self = (participants && participants.self) || {};
   const other = (participants && participants.other) || {};
+  const magnific = mediaType === 'image' && config && config.imageMode === 'magnific';
   const referenceSupport = mediaType === 'video'
     ? !!(config && (config.mediaKey || config.videoMode === 'openai'))
     : supportsImageReferences(config);
@@ -1746,8 +1917,10 @@ function buildSceneContext({ source, participants, config, referenceImages = [],
     author: (source && (source.from || source.otherUsername)) || '',
     self: { username: self.username || '', display: self.display || '' },
     other: { username: other.username || '', display: other.display || '' },
-    hasReferences: referenceSupport && referenceImages.length >= 2,
-    referenceStatus: !referenceSupport ? 'unsupported' : referenceImages.length < 2 ? 'missing' : 'available'
+    magnific: !!magnific,
+    hasReferences: !!magnific || (referenceSupport && referenceImages.length >= 2),
+    referenceStatus: magnific ? (self.imageUrl && other.imageUrl ? 'available' : 'missing') :
+      !referenceSupport ? 'unsupported' : referenceImages.length < 2 ? 'missing' : 'available'
   };
 }
 
@@ -1982,9 +2155,10 @@ function createMessageMediaRouter({
         target: source.target,
         participants,
         sourceText: refined.sourceText,
-        prompt: refined.prompt,
+        prompt: scene.magnific ? ensureMagnificReferences(finalizePrompt(refined.prompt, { safeMode: false })) : refined.prompt,
         refinedBy: refined.refinedBy,
         referenceStatus: scene.referenceStatus,
+        referenceProvider: scene.magnific ? 'magnific' : 'other',
         mediaType: request.mediaType,
         style: request.style,
         aspectRatio: request.aspectRatio
@@ -2025,6 +2199,10 @@ function createMessageMediaRouter({
         return res.status(gate && gate.status ? gate.status : statusForError(error)).json(publicError(error));
       }
 
+      if (request.mediaType === 'image' && config.imageMode === 'magnific' && !config.magnificKey) {
+        throw codedError('provider_config', 'Magnific image generation is not configured');
+      }
+
       // Resolve the two members whose profile pictures belong in the result.
       // In a DM that is the conversation partner; in the arena / a room it is
       // the author of the selected message.
@@ -2041,15 +2219,17 @@ function createMessageMediaRouter({
         self: { ...participants.self, ...(selfImage || {}) },
         other: { ...participants.other, ...(otherImage || {}) }
       };
-      const referenceImages = publicReferenceImages(participants, config);
+      const referenceImages = request.mediaType === 'image' && config.imageMode === 'magnific'
+        ? await makeMagnificReferences(portraitParticipants)
+        : publicReferenceImages(participants, config);
       const scene = buildSceneContext({ source, participants, config, referenceImages, mediaType: request.mediaType });
 
-      // A member may edit the refined prompt; the server always validates it
-      // and applies the operator's safety setting, never a client-supplied one.
+      // A member may edit the refined prompt; local validation always applies.
+      // Magnific's safety checker is disabled; video keeps the operator setting.
       const suppliedPrompt = req.body && typeof req.body.prompt === 'string' ? req.body.prompt : '';
       let finalPrompt;
       if (suppliedPrompt.trim()) {
-        finalPrompt = finalizePrompt(suppliedPrompt, { safeMode: config.safeMode });
+        finalPrompt = finalizePrompt(suppliedPrompt, { safeMode: scene.magnific ? false : config.safeMode });
       } else {
         const refined = await refinePromptImpl({
           sourceText: source.sourceText,
@@ -2060,8 +2240,10 @@ function createMessageMediaRouter({
           fetchImpl,
           scene
         });
-        finalPrompt = finalizePrompt(refined.prompt, { safeMode: config.safeMode });
+        finalPrompt = finalizePrompt(refined.prompt, { safeMode: scene.magnific ? false : config.safeMode });
       }
+
+      if (scene.magnific) finalPrompt = ensureMagnificReferences(finalPrompt);
 
       const generated = await generateMediaImpl({
         mediaType: request.mediaType,
@@ -2257,6 +2439,7 @@ module.exports = {
   loadProfileImage,
   resolveParticipants,
   composeProfilePortraits,
+  makeMagnificReferences,
   parseTargetRequest,
   resolveTarget,
   isHostedImageUrl,
