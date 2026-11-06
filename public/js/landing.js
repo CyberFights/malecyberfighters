@@ -6,6 +6,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (!gate || !gif || !btn) return;
 
+  // The promotional landing page at / is the primary age gate. Its confirmed
+  // entry hands off here so visitors do not have to answer the same question
+  // twice. Direct /arena visits (or blocked storage) keep the original gate.
+  let ageConfirmed = false;
+  try { ageConfirmed = window.sessionStorage.getItem('mcfAgeConfirmed') === 'true'; } catch (_) {}
+  if (ageConfirmed) {
+    gate.style.display = "none";
+    gif.style.display = "none";
+    return;
+  }
+
   btn.addEventListener("click", () => {
     // WebP first, GIF for browsers without animated WebP. Injected on click
     // rather than written into the markup so the animation is never downloaded

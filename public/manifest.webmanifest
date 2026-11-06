@@ -2,7 +2,7 @@
   "name": "Male Cyber Fighters",
   "short_name": "Cyber Fights",
   "description": "The realtime Male Cyber Fighters arena, rooms and direct messages.",
-  "start_url": "/",
+  "start_url": "/arena",
   "scope": "/",
   "display": "standalone",
   "background_color": "#020617",
