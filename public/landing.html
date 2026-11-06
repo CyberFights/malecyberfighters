@@ -1,22 +1,270 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="robots" content="noindex, follow">
-<title>Age Confirmation</title>
-<link rel="stylesheet" href="/landing.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Male Cyber Fighters — Your Next Rival Is Waiting</title>
+<meta name="description" content="Step into Male Cyber Fighters, the free 18+ cyber wrestling community. Meet rivals in live chat, build your fighter, play freeform or dice matches, and turn every fight into a story.">
+<meta name="theme-color" content="#090a09">
+<meta name="rating" content="adult">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://male-cyber-fighters.com/">
+<link rel="icon" type="image/png" sizes="192x192" href="/images/mcf-192.png">
+<link rel="apple-touch-icon" href="/images/mcf-180.png">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Male Cyber Fighters">
+<meta property="og:url" content="https://male-cyber-fighters.com/">
+<meta property="og:title" content="Your Next Rival Is Waiting — Male Cyber Fighters">
+<meta property="og:description" content="Free 18+ cyber wrestling, live chat, dice matches, private rooms and fight stories. Your match. Your rules.">
+<meta property="og:image" content="https://male-cyber-fighters.com/images/arena-faceoff.png">
+<meta property="og:image:alt" content="Two wrestlers facing off in the Male Cyber Fighters arena">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Your Next Rival Is Waiting — Male Cyber Fighters">
+<meta name="twitter:description" content="Step into the free 18+ cyber wrestling community. Your match. Your rules.">
+<meta name="twitter:image" content="https://male-cyber-fighters.com/images/arena-faceoff.png">
+
+<link rel="preload" as="image" href="/images/arena-faceoff.webp" type="image/webp" fetchpriority="high">
+<link rel="stylesheet" href="/landing.css?v=3">
+<script src="/landing.js?v=3" defer></script>
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to content</a>
 
-<div id="ageGate">
-  <div id="ageBox">
-    <h2>Are you 18 or older</h2>
-    <button id="confirmBtn">Yes, Enter</button>
+<header class="site-header" id="siteHeader">
+  <a class="brand" href="#top" aria-label="Male Cyber Fighters — back to top">
+    <img class="brand-mark" src="/images/mcf-192.png" alt="" width="48" height="48">
+    <span class="brand-name">Male Cyber <strong>Fighters</strong></span>
+  </a>
+
+  <button class="nav-toggle" id="navToggle" type="button" aria-expanded="false" aria-controls="headerMenu" aria-label="Open navigation">
+    <span></span><span></span>
+  </button>
+
+  <div class="header-menu" id="headerMenu">
+    <nav class="main-nav" aria-label="Main navigation">
+      <a href="#community">The community</a>
+      <a href="#fighter">Your fighter</a>
+      <a href="#how-it-works">How it works</a>
+    </nav>
+    <div class="header-actions">
+      <button class="share-button" type="button" data-share aria-label="Share Male Cyber Fighters">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.5M8.2 13.2l7.6 4.5"></path></svg>
+        <span>Share</span>
+      </button>
+      <a class="button button--small js-enter" href="/arena">
+        Enter the arena
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+      </a>
+    </div>
   </div>
-</div>
+</header>
 
-<div id="introGif"></div>
+<main id="main-content">
+  <section class="hero" id="top" aria-labelledby="hero-title">
+    <picture class="hero-media" aria-hidden="true">
+      <source srcset="/images/arena-faceoff.webp" type="image/webp">
+      <img src="/images/arena-faceoff.png" alt="" width="1376" height="768" fetchpriority="high">
+    </picture>
+    <div class="hero-grid" aria-hidden="true"></div>
 
-<script src="/landing.js"></script>
+    <div class="hero-content">
+      <p class="eyebrow hero-eyebrow"><span class="status-dot"></span>The home of cyber wrestling <span class="age-chip">18+</span></p>
+      <h1 id="hero-title">Your next<br>
+        <em>rival</em> is<br>
+        waiting.</h1>
+      <p class="hero-copy">The free 18+ community where every fight becomes a story. Meet your match, build your fighter, and step into the ring—right from your browser.</p>
+      <div class="hero-actions">
+        <a class="button button--primary js-enter" href="/arena">
+          Enter the arena
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+        </a>
+        <a class="text-link" href="#how-it-works">New here? Learn the ropes <span aria-hidden="true">↘</span></a>
+      </div>
+      <ul class="hero-benefits" aria-label="Membership benefits">
+        <li><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3 3 7-7"></path></svg>Free to join</li>
+        <li><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3 3 7-7"></path></svg>No download</li>
+        <li><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3 3 7-7"></path></svg>Your rules</li>
+      </ul>
+    </div>
+
+    <div class="hero-rail">
+      <p><span>Live chat</span><i></i><span>Dice matches</span><i></i><span>Fight stories</span></p>
+      <a href="#community" aria-label="Discover the community">Discover more <span aria-hidden="true">↓</span></a>
+    </div>
+  </section>
+
+  <div class="ticker" aria-label="Community features">
+    <div class="ticker-track">
+      <span>Freeform fights</span><b>✦</b>
+      <span>HP dice matches</span><b>✦</b>
+      <span>Private rooms</span><b>✦</b>
+      <span>Fighter profiles</span><b>✦</b>
+      <span>Original stories</span><b>✦</b>
+      <span>Global community</span><b>✦</b>
+    </div>
+  </div>
+
+  <section class="community section" id="community" aria-labelledby="community-title">
+    <div class="section-heading reveal">
+      <div>
+        <p class="eyebrow"><span>01</span> Inside the community</p>
+        <h2 id="community-title">Not just a chat.<br><em>Your fight universe.</em></h2>
+      </div>
+      <p>From the first challenge to the final pin, everything you need to make the match yours is already here.</p>
+    </div>
+
+    <div class="feature-grid">
+      <article class="feature-card arena-card reveal">
+        <div class="feature-copy">
+          <p class="card-kicker">The live arena</p>
+          <h3>Find your people.<br>Start your rivalry.</h3>
+          <p>Jump into public chat, create a private room, or take the fight to DMs. There is always another way to meet your match.</p>
+        </div>
+        <div class="chat-preview" aria-label="Example arena conversation">
+          <div class="preview-header">
+            <span><i></i>Arena preview</span>
+            <span>Public room</span>
+          </div>
+          <div class="chat-message">
+            <span class="chat-avatar chat-avatar--orange">J</span>
+            <div><p class="chat-author">Jax <time>Now</time></p><p>Anyone up for a match?</p></div>
+          </div>
+          <div class="chat-message chat-message--you">
+            <span class="chat-avatar">Y</span>
+            <div><p class="chat-author">You <time>Now</time></p><p>Freeform or dice? Your call.</p></div>
+          </div>
+          <div class="typing-line"><span></span><span></span><span></span> Your next rival could be typing…</div>
+        </div>
+      </article>
+
+      <article class="feature-card fighter-card reveal" id="fighter">
+        <div class="feature-copy">
+          <p class="card-kicker">Your fighter</p>
+          <h3>Make an<br>entrance.</h3>
+          <p>Build a profile with your style, your stats, and your attitude. Let the community know exactly who has stepped through the ropes.</p>
+        </div>
+        <div class="fighter-preview" aria-label="Example fighter profile">
+          <div class="fighter-preview-top"><span>Fighter profile</span><span>MCF / 001</span></div>
+          <div class="fighter-monogram">YOU<span>↗</span></div>
+          <div class="fighter-tags"><span>Heel</span><span>Pro</span><span>Freeform</span></div>
+          <div class="fighter-preview-bottom"><span>Your look. Your legacy.</span><strong>18+</strong></div>
+        </div>
+      </article>
+
+      <article class="feature-card modes-card reveal">
+        <div class="feature-copy">
+          <p class="card-kicker">Choose your match</p>
+          <h3>Story or score.<br>You make the call.</h3>
+        </div>
+        <div class="mode-tabs" role="tablist" aria-label="Preview match styles">
+          <button id="freeformTab" type="button" role="tab" aria-selected="true" aria-controls="freeformPanel" data-mode="freeform">Freeform</button>
+          <button id="diceTab" type="button" role="tab" aria-selected="false" aria-controls="dicePanel" tabindex="-1" data-mode="dice">Dice match</button>
+        </div>
+        <div class="mode-panels">
+          <div class="mode-panel" id="freeformPanel" role="tabpanel" aria-labelledby="freeformTab" data-mode-panel="freeform">
+            <div class="freeform-scene" aria-hidden="true"><span>YOU</span><p>“Let’s make this one worth remembering.”</p><span>RIVAL</span><p>“Your move.”</p></div>
+            <p>Collaborate in text, set the pace together, and let imagination decide where the fight goes.</p>
+          </div>
+          <div class="mode-panel" id="dicePanel" role="tabpanel" aria-labelledby="diceTab" data-mode-panel="dice" hidden>
+            <div class="dice-scene" aria-hidden="true">
+              <div><span>You</span><b>100 HP</b><i><span style="width:100%"></span></i></div>
+              <div><span>Rival</span><b>72 HP</b><i><span style="width:72%"></span></i></div>
+              <strong><small>D20</small>16</strong>
+            </div>
+            <p>Add health, stamina, dice rolls, and real move effects for a match that can surprise both fighters.</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="feature-card stories-card reveal">
+        <img src="/images/mcf1.png" alt="" width="1024" height="1024" loading="lazy">
+        <div class="stories-overlay"></div>
+        <div class="feature-copy">
+          <p class="card-kicker">Stories &amp; legacies</p>
+          <h3>Every fight<br>leaves a story.</h3>
+          <p>Turn your matches into original fight stories, share them with the community, and build your name one chapter at a time.</p>
+          <a class="text-link text-link--light js-enter" href="/arena">Write your first chapter <span aria-hidden="true">↗</span></a>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section class="how section" id="how-it-works" aria-labelledby="how-title">
+    <div class="section-heading reveal">
+      <div>
+        <p class="eyebrow"><span>02</span> Your first match</p>
+        <h2 id="how-title">From hello<br><em>to headlock.</em></h2>
+      </div>
+      <p>No complicated setup. No download. Just three steps between you and your first night in the arena.</p>
+    </div>
+
+    <ol class="steps">
+      <li class="step reveal">
+        <span class="step-number">01</span>
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="11" r="6"></circle><path d="M5 28c1-7 5-10 11-10s10 3 11 10"></path></svg>
+        <h3>Create your fighter</h3>
+        <p>Pick a name, shape your profile, and tag the styles that make you who you are.</p>
+      </li>
+      <li class="step reveal">
+        <span class="step-number">02</span>
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="11" cy="11" r="5"></circle><circle cx="22" cy="12" r="4"></circle><path d="M3 27c1-6 4-9 9-9s8 3 9 9M20 19c5-1 8 2 9 7"></path></svg>
+        <h3>Find your match</h3>
+        <p>Meet rivals in the Arena, search fighter tags, or post a challenge in the forums.</p>
+      </li>
+      <li class="step reveal">
+        <span class="step-number">03</span>
+        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 5h18v22H7zM11 10h10M11 15h10M11 20h6"></path></svg>
+        <h3>Set the rules. Fight.</h3>
+        <p>Agree on the match and limits, choose freeform or dice, then ring the bell.</p>
+      </li>
+    </ol>
+
+    <div class="guide-banner reveal">
+      <div><span>New to cyber wrestling?</span><p>Our beginner’s guide takes you from your first hello to your first pin.</p></div>
+      <a class="text-link" href="/guide">Read the beginner’s guide <span aria-hidden="true">↗</span></a>
+    </div>
+  </section>
+
+  <section class="final-cta section" aria-labelledby="cta-title">
+    <div class="cta-emblem" aria-hidden="true">MCF</div>
+    <p class="eyebrow reveal"><span class="status-dot"></span>The ring is open</p>
+    <h2 id="cta-title" class="reveal">Ready to make<br><em>your mark?</em></h2>
+    <p class="reveal">Your next rival is one message away.</p>
+    <div class="cta-actions reveal">
+      <a class="button button--primary js-enter" href="/arena">Join the fight—free <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></a>
+      <button class="text-link text-link--light" type="button" data-share>Share with a future rival <span aria-hidden="true">↗</span></button>
+    </div>
+    <p class="cta-note reveal">Adults 18+ only <span>•</span> Respect and consent come first</p>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <a class="brand brand--footer" href="#top">
+    <img class="brand-mark" src="/images/mcf-192.png" alt="" width="40" height="40" loading="lazy">
+    <span class="brand-name">Male Cyber <strong>Fighters</strong></span>
+  </a>
+  <nav aria-label="Footer navigation">
+    <a href="/guide">Beginner’s guide</a>
+    <a href="/legal/tos.html">Terms</a>
+    <a href="/legal/privacy.html">Privacy</a>
+  </nav>
+  <p>© <span id="currentYear">2026</span> Male Cyber Fighters <span>18+</span></p>
+</footer>
+
+<dialog class="age-gate" id="ageGate" aria-labelledby="ageTitle" aria-describedby="ageDescription">
+  <div class="age-card">
+    <span class="age-emblem" aria-hidden="true">18+</span>
+    <p class="eyebrow">Before you step in</p>
+    <h2 id="ageTitle">Are you 18<br>or older?</h2>
+    <p id="ageDescription">Male Cyber Fighters is an adults-only cyber wrestling and roleplay community. Some content is not appropriate for anyone under 18.</p>
+    <a class="button button--primary" id="confirmBtn" href="/arena">Yes, enter the arena <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></a>
+    <button class="age-decline" id="declineBtn" type="button">I’m not 18 yet</button>
+    <small>By entering, you agree to the site’s <a href="/legal/tos.html">Terms</a> and <a href="/legal/privacy.html">Privacy Policy</a>.</small>
+  </div>
+</dialog>
+
+<div class="intro-gif" id="introGif" aria-hidden="true" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>

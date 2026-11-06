@@ -62,7 +62,7 @@
       }
 
       showSuccess('Your password has been reset. Redirecting to login…');
-      setTimeout(function () { window.location.href = '/'; }, 1800);
+      setTimeout(function () { window.location.href = '/arena'; }, 1800);
     } catch (err) {
       showError('Network error. Please try again.');
       submitBtn.disabled = false;

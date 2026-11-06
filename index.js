@@ -176,7 +176,7 @@ const stylesheetTag = cssFile =>
 // whichever copy of the shell is being served.
 const STYLESHEET_LINK_RE = /<link\s+rel=["']stylesheet["']\s+href=["'][^"']*\/css\/[^"']+["']\s*>/i;
 
-app.get('/', (req, res, next) => {
+function serveAppShell(req, res, next) {
   const cssFile = isMobileClient(req) ? 'mobile.css' : 'desktop.css';
   const indexPath = appShellPath();
 
@@ -193,7 +193,15 @@ app.get('/', (req, res, next) => {
 
     res.send(page);
   });
+}
+
+// The promotional page is also the main age gate. Confirming there hands the
+// visitor to the app; direct /arena visits still see the original gate.
+app.get('/arena', serveAppShell);
+app.get('/', (req, res, next) => {
+  res.sendFile(assets.pageFile('landing.html'), err => { if (err) next(err); });
 });
+app.get('/promo', (req, res) => res.redirect('/'));
 
 // ---------- STORY PERMALINKS ----------
 // /story/<id> boots the app and lets public/js/story-ui.js open the story from
@@ -6531,31 +6539,38 @@ socket.on("editPublicMessage", async (data) => {
   });
 
   socket.on('disconnect', async () => {
-    // 'disconnect' fires after socket.io has already dropped this socket from
-    // its rooms, so anything still listed here is another session of the same
-    // user (a second tab, the desktop app, the phone). Only mark the user
-    // offline once their last session is gone, and move `socketId` — which the
-    // audio-call signalling still uses — onto a socket that is actually alive.
-    const survivor = socket.username
-      ? [...io.sockets.sockets.values()].find(s => s.username === socket.username)
-      : null;
+    // Presence cleanup must never become an unhandled rejection: an unavailable
+    // database should degrade this socket's cleanup, not terminate the server.
+    let survivor = null;
+    try {
+      // 'disconnect' fires after socket.io has already dropped this socket from
+      // its rooms, so anything still listed here is another session of the same
+      // user (a second tab, the desktop app, the phone). Only mark the user
+      // offline once their last session is gone, and move `socketId` — which the
+      // audio-call signalling still uses — onto a socket that is actually alive.
+      survivor = socket.username
+        ? [...io.sockets.sockets.values()].find(s => s.username === socket.username)
+        : null;
 
-    const u = survivor
-      ? await User.findOneAndUpdate(
-        { username: socket.username },
-        { online: true, socketId: survivor.id, lastSeenAt: new Date() }
-      )
-      : await User.findOneAndUpdate(
-        { socketId: socket.id },
-        { online: false, socketId: null, lastSeenAt: new Date() }
-      );
+      const u = survivor
+        ? await User.findOneAndUpdate(
+          { username: socket.username },
+          { online: true, socketId: survivor.id, lastSeenAt: new Date() }
+        )
+        : await User.findOneAndUpdate(
+          { socketId: socket.id },
+          { online: false, socketId: null, lastSeenAt: new Date() }
+        );
 
-    if (u && !survivor) {
-      const onlineUsers = await User.find({ online: true })
-        .select('username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt lfg achievements role createdAt -_id')
-        .lean();
+      if (u && !survivor) {
+        const onlineUsers = await User.find({ online: true })
+          .select('username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt lfg achievements role createdAt -_id')
+          .lean();
 
-      io.emit('presence', onlineUsers);
+        io.emit('presence', onlineUsers);
+      }
+    } catch (err) {
+      console.error('socket disconnect presence error:', err.message || err);
     }
 
     if (socket.currentRoom) {

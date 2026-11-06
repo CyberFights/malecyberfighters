@@ -115,7 +115,7 @@ self.addEventListener('push', event => {
     // per message.
     tag: payload.tag || 'mcf-push',
     renotify: false,
-    data: payload.data || { url: '/' }
+    data: payload.data || { url: '/arena' }
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
@@ -124,7 +124,7 @@ self.addEventListener('push', event => {
 self.addEventListener('notificationclick', event => {
   event.notification.close();
 
-  const target = (event.notification.data && event.notification.data.url) || '/';
+  const target = (event.notification.data && event.notification.data.url) || '/arena';
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true })
