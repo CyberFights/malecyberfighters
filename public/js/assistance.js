@@ -1033,8 +1033,9 @@
     {
       id: 'rules',
       title: 'Site rules',
-      keywords: ['rules', 'site rules', 'server rules', 'chat rules', 'conduct rules', 'banned', 'ban', 'zero tolerance', 'allowed', 'respect'],
+      keywords: ['rules', 'site rules', 'server rules', 'chat rules', 'conduct rules', 'banned', 'ban', 'zero tolerance', 'allowed', 'respect', 'male only', 'men only', 'male profiles', 'female', 'gender', 'woman', 'women'],
       answer: 'The Site Rules window has the full rules; the short version is this.\n' +
+        'Male profiles only: Male Cyber Fighters is a men’s community, so every profile must belong to a male member — no female or non-male personas.\n' +
         'Be respectful: banter is playful and mutual, and it stops when someone asks it to. No harassment, hate speech, threats, doxxing, spamming, impersonating staff, or pushing past a limit someone has set. Zero tolerance applies to hate speech, threats of violence, sexual harassment, targeted harassment and dodging blocks or bans.\n' +
         'If something goes wrong: stop engaging, block the person, and report it. Moderators can warn, mute, remove messages and ban, and their decisions are final.',
       action: {
