@@ -718,3 +718,211 @@ html[data-mcf-theme="light"] .actions .nav-group-menu {
 @media (prefers-reduced-motion: reduce) {
   .image-library-nav-link { transition: none; }
 }
+
+/* ============================================================
+   Federations — registration form, federation card, Join list
+   and the members-only chatroom (public/js/federations.js)
+============================================================ */
+
+.mcf-fed-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 0 10px;
+}
+
+.mcf-fed-hero-image,
+.mcf-fed-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1px solid rgba(127, 216, 255, 0.3);
+  background: rgba(127, 216, 255, 0.08);
+  flex: 0 0 auto;
+}
+
+.mcf-fed-thumb { width: 46px; height: 46px; border-radius: 10px; }
+
+.mcf-fed-hero-empty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--accent, #7fd8ff);
+}
+
+.mcf-fed-name { margin: 0 0 2px; font-size: 18px; }
+.mcf-fed-hero p { margin: 0; }
+
+.mcf-fed-block { margin-top: 10px; }
+.mcf-fed-block h4 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent, #7fd8ff);
+}
+
+.mcf-fed-copy {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.mcf-fed-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.mcf-fed-list li {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(127, 216, 255, 0.06);
+  border: 1px solid rgba(127, 216, 255, 0.14);
+}
+
+.mcf-fed-tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(127, 216, 255, 0.35);
+  font-size: 11px;
+  color: var(--accent, #7fd8ff);
+  white-space: nowrap;
+}
+
+/* ---------- registration form ---------- */
+
+.mcf-fed-roles { display: flex; flex-direction: column; gap: 6px; }
+
+.mcf-fed-role-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.mcf-fed-role-remove {
+  background: transparent;
+  border: 1px solid rgba(127, 216, 255, 0.3);
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  padding: 6px 9px;
+  line-height: 1;
+}
+.mcf-fed-role-remove:hover { background: rgba(255, 122, 156, 0.16); }
+
+.mcf-fed-image-row { display: flex; align-items: center; gap: 12px; }
+
+.mcf-fed-image-preview {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1px solid rgba(127, 216, 255, 0.3);
+}
+
+/* ---------- join list ---------- */
+
+.mcf-fed-notice {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 213, 128, 0.4);
+  background: rgba(255, 213, 128, 0.1);
+  font-size: 13px;
+}
+
+.mcf-fed-join-list { display: flex; flex-direction: column; gap: 8px; }
+
+.mcf-fed-join-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(127, 216, 255, 0.18);
+  background: rgba(127, 216, 255, 0.05);
+}
+
+.mcf-fed-join-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.mcf-fed-join-copy strong { font-size: 15px; }
+.mcf-fed-join-copy .small { overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- chatroom ---------- */
+
+.mcf-fed-chat-log {
+  min-height: 140px;
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(127, 216, 255, 0.18);
+  background: rgba(2, 10, 24, 0.45);
+}
+
+.mcf-fed-chat-msg { font-size: 14px; }
+
+.mcf-fed-chat-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+}
+.mcf-fed-chat-meta time { color: var(--muted, #b8c7d9); }
+
+.mcf-fed-chat-text {
+  white-space: pre-wrap;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.mcf-fed-chat-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+.mcf-fed-chat-form .mcf-input { flex: 1; min-width: 0; }
+
+/* ---------- light theme ---------- */
+
+html[data-mcf-theme="light"] .mcf-fed-chat-log {
+  background: rgba(10, 60, 110, 0.05);
+  border-color: rgba(10, 60, 110, 0.25);
+}
+html[data-mcf-theme="light"] .mcf-fed-list li,
+html[data-mcf-theme="light"] .mcf-fed-join-row {
+  background: rgba(10, 60, 110, 0.04);
+  border-color: rgba(10, 60, 110, 0.2);
+}
+html[data-mcf-theme="light"] .mcf-fed-notice {
+  background: rgba(255, 213, 128, 0.25);
+  border-color: rgba(150, 110, 20, 0.4);
+}
+
+/* Phones: the role rows stack instead of squeezing three controls. */
+@media (max-width: 600px) {
+  .mcf-fed-role-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .mcf-fed-role-row [data-role-desc] { grid-column: 1 / -1; }
+  .mcf-fed-chat-form { flex-wrap: wrap; }
+}

@@ -189,7 +189,8 @@
     </div>
   </div>
 
-  <!-- ACTION BUTTONS, grouped by category. Each .nav-group is a category
+  <!-- ACTION BUTTONS, grouped by category (Account, Chatrooms, Community,
+       Federations, Matches, Games, Help). Each .nav-group is a category
        toggle plus a .nav-group-menu that holds the original buttons — same
        ids, same handlers. Tapping a category drops its menu open; see
        /js/nav-groups.js (behaviour) and the .nav-group rules in mobile.css /
@@ -224,6 +225,16 @@
         <button id="btnForums" class="ghost" type="button">Forums</button>
         <button id="btnArchives" class="ghost" type="button">Archives(Stories)</button>
         <a class="image-library-nav-link" href="/image-library.html">Image Library</a>
+      </div>
+    </div>
+
+    <div class="nav-group" data-nav-group="federations">
+      <button id="navFederations" class="nav-group-toggle" type="button" aria-expanded="false">Federations<span class="nav-group-badge" hidden></span><span class="nav-caret" aria-hidden="true"></span></button>
+      <div class="nav-group-menu" role="group" aria-label="Federations" hidden>
+        <button id="btnFederationCreate" class="ghost" type="button">Create</button>
+        <button id="btnFederationManage" class="ghost" type="button">Manage</button>
+        <button id="btnFederationJoin" class="ghost" type="button">Join</button>
+        <button id="btnFederationChat" class="ghost" type="button">Chatroom</button>
       </div>
     </div>
 
@@ -368,6 +379,16 @@
         <button id="btnForums" class="ghost" type="button">Forums</button>
         <button id="btnArchives" class="ghost" type="button">Archives</button>
         <a class="image-library-nav-link" href="/image-library.html">Image Library</a>
+      </div>
+    </div>
+
+    <div class="nav-group" data-nav-group="federations">
+      <button id="navFederations" class="nav-group-toggle" type="button" aria-expanded="false">Federations<span class="nav-group-badge" hidden></span><span class="nav-caret" aria-hidden="true"></span></button>
+      <div class="nav-group-menu" role="group" aria-label="Federations" hidden>
+        <button id="btnFederationCreate" class="ghost" type="button">Create</button>
+        <button id="btnFederationManage" class="ghost" type="button">Manage</button>
+        <button id="btnFederationJoin" class="ghost" type="button">Join</button>
+        <button id="btnFederationChat" class="ghost" type="button">Chatroom</button>
       </div>
     </div>
 
@@ -1815,6 +1836,7 @@ Moderator decisions are final. </p>
 <script src="/js/preferences.js?v=1"></script>
 <script src="/js/lfg.js?v=1"></script>
 <script src="/js/challenges.js?v=1"></script>
+<script src="/js/federations.js?v=1"></script>
 <script src="/js/match-history.js?v=1"></script>
 <script src="/js/achievements.js?v=1"></script>
 <script src="/js/message-extras.js?v=1"></script>

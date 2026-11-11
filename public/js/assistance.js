@@ -1481,6 +1481,19 @@
       }
     },
     {
+      id: 'federations',
+      title: 'Federations — create, manage, join, chatroom',
+      keywords: ['federation', 'federations', 'create federation', 'manage federation', 'join federation', 'federation chat', 'federation chatroom', 'federation rules', 'federation roles', 'promotion', 'run a federation'],
+      answer: 'A federation is your own promotion: a name, rules, roles you can hand out, an image and a description.\n' +
+        'Open Federations in the action row. Create opens the registration form (you can run only one, and you cannot be in two federations at once). Manage shows yours — rules, roles and members. Join lists every federation with a Join button. Chatroom is the members-only room for your federation.\n' +
+        'Once you run one, the federation is on your profile info and in every federation list on the site.',
+      action: {
+        label: 'Open Create Federation',
+        buttonId: 'btnFederationCreate',
+        done: 'Opening the federation registration form for you.'
+      }
+    },
+    {
       id: 'match-record',
       title: 'Match record — wins, losses, draws and rivalries',
       keywords: ['record', 'my record', 'match record', 'win loss', 'wins', 'losses', 'draws', 'record book', 'match history', 'my matches', 'rivalry', 'rivalries', 'rematch', 'head to head', 'head-to-head', 'log a match', 'logged match', 'confirm match', 'confirm a match'],
