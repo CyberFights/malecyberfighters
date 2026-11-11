@@ -48,6 +48,13 @@
     already_member: 'You are already a member of this federation.',
     not_found: 'That federation no longer exists.',
     not_a_member: 'Only members can open this federation’s chatroom.',
+    not_a_manager: 'Only the owner and co-owners/admins can manage this federation.',
+    member_not_found: 'That member is no longer in the federation.',
+    cannot_change_owner: 'The owner’s role cannot be changed.',
+    cannot_change_own_role: 'You cannot change your own role.',
+    cannot_remove_owner: 'The owner cannot be removed from their own federation.',
+    insufficient_privileges: 'Only the federation owner can do that.',
+    invalid_role: 'Pick a role from the list.',
     not_allowed: 'That account cannot use federations.',
     server_error: 'Something went wrong — try again in a moment.'
   };
@@ -70,12 +77,16 @@
    * so the next Create press already knows the member runs a federation.
    */
   function cacheMembership(federation) {
-    if (!federation) return;
-    var patch = {
-      id: federation.id,
-      name: federation.name,
-      role: federation.isOwner ? 'owner' : 'member'
-    };
+    var patch = null;
+    if (federation) {
+      patch = {
+        id: federation.id,
+        name: federation.name,
+        // co-owner and owner-written admin roles are cached as they are, so
+        // the action row can say who manages the federation.
+        role: federation.viewerRole || (federation.isOwner ? 'owner' : 'member')
+      };
+    }
     ['cw_session_v1', 'currentUser'].forEach(function (key) {
       try {
         var raw = localStorage.getItem(key);
@@ -136,7 +147,7 @@
     });
   }
 
-  function emptyRole() { return { name: '', description: '' }; }
+  function emptyRole() { return { name: '', description: '', admin: false }; }
 
   function showCreateForm() {
     state = { imageUrl: '', roles: [emptyRole()], saving: false };
@@ -159,7 +170,7 @@
         '<div id="mcfFedRoles" class="mcf-fed-roles"></div>' +
         '<div class="mcf-row-actions">' +
           '<button type="button" class="ghost small-btn" id="mcfFedAddRole">Add a role</button>' +
-          '<span class="small muted">Up to ' + ROLE_LIMIT + ' — e.g. Commissioner, Champion, Enforcer. Owner and Member exist already.</span>' +
+          '<span class="small muted">Up to ' + ROLE_LIMIT + ' — e.g. Commissioner, Champion, Enforcer. Owner, Co-owner and Member exist already; tick “Can manage” to let a role manage the federation.</span>' +
         '</div>' +
       '</div>' +
       '<div class="mcf-field"><label for="mcfFedImage">Federation image</label>' +
@@ -190,7 +201,12 @@
     });
 
     box.body.querySelector('#mcfFedImage').addEventListener('change', function (event) {
-      uploadImage(event.target.files && event.target.files[0], box);
+      uploadFederationImage(
+        event.target.files && event.target.files[0],
+        box.body.querySelector('#mcfFedImageStatus'),
+        box.body.querySelector('#mcfFedImagePreview'),
+        function (url) { state.imageUrl = url; }
+      );
     });
 
     box.body.querySelector('#mcfFedCancel').addEventListener('click', function () {
@@ -206,6 +222,7 @@
     return '<div class="mcf-fed-role-row" data-role="' + index + '">' +
       '<input class="mcf-input" type="text" data-role-name maxlength="24" aria-label="Role name" placeholder="Role name" value="' + MCF.escapeHtml(role.name) + '">' +
       '<input class="mcf-input" type="text" data-role-desc maxlength="120" aria-label="Role description" placeholder="What it is for (optional)" value="' + MCF.escapeHtml(role.description) + '">' +
+      '<label class="mcf-fed-role-admin"><input type="checkbox" data-role-admin' + (role.admin ? ' checked' : '') + '> Can manage</label>' +
       '<button type="button" class="mcf-fed-role-remove" data-role-remove aria-label="Remove role">✕</button>' +
     '</div>';
   }
@@ -232,14 +249,18 @@
     state.roles = Array.prototype.map.call(rows, function (row) {
       return {
         name: row.querySelector('[data-role-name]').value,
-        description: row.querySelector('[data-role-desc]').value
+        description: row.querySelector('[data-role-desc]').value,
+        admin: row.querySelector('[data-role-admin]').checked
       };
     });
   }
 
-  function uploadImage(file, box) {
-    var status = box.body.querySelector('#mcfFedImageStatus');
-    var preview = box.body.querySelector('#mcfFedImagePreview');
+  /**
+   * Upload a federation image through the shared endpoint. Shared by the
+   * Create form and the Manage → Details tab; the caller decides where the
+   * returned URL is stored.
+   */
+  function uploadFederationImage(file, status, preview, onUploaded) {
     if (!file) return;
 
     if (!/^image\//.test(file.type)) {
@@ -267,12 +288,12 @@
           if (status) status.textContent = 'Upload failed — try another image.';
           return;
         }
-        state.imageUrl = data.imageUrl;
         if (status) status.textContent = 'Image uploaded.';
         if (preview) {
           preview.src = data.imageUrl;
           preview.hidden = false;
         }
+        if (typeof onUploaded === 'function') onUploaded(data.imageUrl);
       })
       .catch(function () {
         if (status) status.textContent = 'Upload error — try again.';
@@ -293,7 +314,11 @@
       rules: box.body.querySelector('#mcfFedRules').value,
       imageUrl: state.imageUrl,
       // Blank rows are ignored by the server; trim the obvious ones here too.
-      roles: state.roles.filter(function (role) { return String(role.name || '').trim(); })
+      roles: state.roles
+        .filter(function (role) { return String(role.name || '').trim(); })
+        .map(function (role) {
+          return { name: role.name, description: role.description, admin: !!role.admin };
+        })
     };
 
     if (!payload.name.trim() || !payload.description.trim()) {
@@ -324,8 +349,28 @@
   }
 
   /* ---------------------------------------------------------
-     MANAGE — your federation as it stands
+     MANAGE — owners, co-owners and admins only
   --------------------------------------------------------- */
+
+  function roleFor(federation, roleId) {
+    return (federation.roles || []).filter(function (role) { return role.id === roleId; })[0] || null;
+  }
+
+  function roleName(federation, roleId) {
+    var match = roleFor(federation, roleId);
+    return match ? match.name : (roleId || 'Member');
+  }
+
+  function isAdminRole(federation, roleId) {
+    var role = roleFor(federation, roleId);
+    return !!(role && role.admin);
+  }
+
+  function presenceLabel(member) {
+    if (member.online) return 'Online now';
+    var ago = MCF.agoLabel(member.lastSeenAt);
+    return ago ? 'Last online ' + ago : 'Offline';
+  }
 
   function openManage() {
     if (!session()) {
@@ -342,13 +387,355 @@
         joinPrompt('manage');
         return;
       }
-      showFederation(data.federation);
+      // Manage belongs to the owner and the federation's admins. Everyone
+      // else gets the read-only card, never the roster controls.
+      if (!data.federation.canManage) {
+        showManagerOnly(data.federation);
+        return;
+      }
+      showManageWindow(data.federation);
     });
   }
 
-  function roleName(federation, roleId) {
-    var match = (federation.roles || []).filter(function (role) { return role.id === roleId; })[0];
-    return match ? match.name : (roleId || 'Member');
+  function showManagerOnly(federation) {
+    var box = MCF.popup({ title: 'Manage ' + federation.name, label: 'Manage ' + federation.name });
+    box.body.innerHTML =
+      '<p class="mcf-fed-notice">Only the owner and the federation’s co-owners/admins can manage ' +
+        MCF.escapeHtml(federation.name) + '.</p>' +
+      '<p class="small muted">Your role is <strong>' +
+        MCF.escapeHtml(roleName(federation, federation.viewerRole)) + '</strong>. ' +
+        'Ask the owner if you need to hand out roles or edit the federation.</p>' +
+      '<div class="mcf-row-actions">' +
+        '<button type="button" class="small-btn" id="mcfFedViewFromManage">View federation</button>' +
+        '<button type="button" class="ghost small-btn" id="mcfFedChatFromManage">Open chatroom</button>' +
+      '</div>';
+
+    box.body.querySelector('#mcfFedViewFromManage').addEventListener('click', function () {
+      box.close();
+      showFederation(federation);
+    });
+    box.body.querySelector('#mcfFedChatFromManage').addEventListener('click', function () {
+      box.close();
+      openChatroom();
+    });
+  }
+
+  function tabButton(id, label, active) {
+    return '<button type="button" role="tab" class="mcf-fed-tab' + (active ? ' mcf-fed-tab-on' : '') + '"' +
+      ' aria-selected="' + (active ? 'true' : 'false') + '"' +
+      ' data-fed-tab="' + id + '" aria-controls="mcfFedManagePanel">' +
+      MCF.escapeHtml(label) + '</button>';
+  }
+
+  function showManageWindow(initial) {
+    var state = { federation: initial, tab: 'members', busy: false, imageUrl: initial.imageUrl || '' };
+
+    var box = MCF.popup({
+      title: initial.name + ' — manage',
+      label: 'Manage ' + initial.name,
+      wide: true
+    });
+
+    function apply(federation) {
+      if (!federation) return;
+      state.federation = federation;
+      if (state.tab === 'details') state.imageUrl = federation.imageUrl || '';
+      render();
+      cacheMembership(federation.canManage || federation.isMember ? federation : null);
+    }
+
+    function refresh() {
+      return MCF.getJSON('/api/federations/mine').then(function (data) {
+        if (!data || !data.ok || !data.federation) {
+          MCF.toast('Could not refresh the federation', 'error');
+          return null;
+        }
+        apply(data.federation);
+        return data.federation;
+      });
+    }
+
+    function render() {
+      var fed = state.federation;
+      box.setTitle(fed.name + ' — manage');
+      box.body.innerHTML =
+        '<div class="mcf-fed-tabs" role="tablist" aria-label="Manage federation">' +
+          tabButton('members', 'Members', state.tab === 'members') +
+          tabButton('details', 'Federation details', state.tab === 'details') +
+        '</div>' +
+        '<div id="mcfFedManagePanel" role="tabpanel"></div>';
+
+      box.body.querySelectorAll('[data-fed-tab]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          state.tab = button.dataset.fedTab;
+          render();
+        });
+      });
+
+      var panel = box.body.querySelector('#mcfFedManagePanel');
+      if (state.tab === 'members') renderMembers(panel);
+      else renderDetails(panel);
+    }
+
+    /* ---------- tab 1: the roster ---------- */
+
+    function renderMembers(panel) {
+      var fed = state.federation;
+      var me = session();
+      var viewerIsOwner = fed.isOwner;
+
+      var rows = (fed.members || []).map(function (member) {
+        var targetIsOwner = member.username === fed.owner;
+        var targetIsAdmin = isAdminRole(fed, member.roleId);
+        var isSelf = !!me && member.username === me.username;
+
+        // The owner outranks everyone; an admin cannot edit a peer, and
+        // nobody edits their own row.
+        var canTouch = !targetIsOwner && !isSelf && (viewerIsOwner || !targetIsAdmin);
+
+        var assignable = (fed.roles || []).filter(function (role) {
+          if (role.id === 'owner') return false;
+          if (role.admin && !viewerIsOwner) return false;
+          return true;
+        });
+
+        var roleCell;
+        if (targetIsOwner) {
+          roleCell = '<span class="mcf-fed-tag">Owner</span>';
+        } else if (canTouch) {
+          roleCell = '<select class="mcf-fed-role-select" data-fed-role="' +
+            MCF.escapeHtml(member.username) + '" aria-label="Role for ' +
+            MCF.escapeHtml(member.display || member.username) + '">' +
+            assignable.map(function (role) {
+              return '<option value="' + MCF.escapeHtml(role.id) + '"' +
+                (role.id === member.roleId ? ' selected' : '') + '>' +
+                MCF.escapeHtml(role.name) + (role.admin ? ' (admin)' : '') +
+                '</option>';
+            }).join('') +
+          '</select>';
+        } else {
+          roleCell = '<span class="small muted">' + MCF.escapeHtml(roleName(fed, member.roleId)) + '</span>';
+        }
+
+        var remove = canTouch
+          ? '<button type="button" class="ghost small-btn mcf-fed-remove" data-fed-remove="' +
+            MCF.escapeHtml(member.username) + '">Remove</button>'
+          : '';
+
+        // Your own row has no role menu (no self-demotion) but a member who is
+        // not the owner can always walk out.
+        if (isSelf && !targetIsOwner) {
+          remove = '<button type="button" class="ghost small-btn mcf-fed-remove" data-fed-leave="' +
+            MCF.escapeHtml(member.username) + '">Leave</button>';
+        }
+
+        return '<div class="mcf-fed-manage-row">' +
+          '<div class="mcf-fed-manage-person">' +
+            '<strong>' + MCF.escapeHtml(member.display || member.username) + '</strong>' +
+            ' <span class="small muted">@' + MCF.escapeHtml(member.username) + '</span>' +
+            ' <span class="mcf-fed-presence' + (member.online ? ' mcf-fed-presence-online' : '') + '">' +
+              MCF.escapeHtml(presenceLabel(member)) + '</span>' +
+          '</div>' +
+          '<div class="mcf-fed-manage-actions">' + roleCell + remove + '</div>' +
+        '</div>';
+      }).join('');
+
+      panel.innerHTML =
+        '<p class="small muted">' + (viewerIsOwner
+          ? 'You run this federation: hand out roles, or remove a member.'
+          : 'You are an admin here. The owner manages other admins.') + '</p>' +
+        '<div class="mcf-fed-manage-list">' + rows + '</div>' +
+        '<div class="mcf-row-actions">' +
+          '<button type="button" class="ghost small-btn" id="mcfFedRefreshMembers">Refresh</button>' +
+          '<span class="small muted" id="mcfFedManageStatus"></span>' +
+        '</div>';
+
+      panel.querySelector('#mcfFedRefreshMembers').addEventListener('click', function () {
+        refresh();
+      });
+
+      panel.querySelectorAll('[data-fed-role]').forEach(function (select) {
+        select.addEventListener('change', function () {
+          setRole(select, select.dataset.fedRole, select.value);
+        });
+      });
+
+      function arm(button, label, confirmLabel, username) {
+        button.addEventListener('click', function () {
+          // Two taps: the first arms the button for a few seconds.
+          if (button.dataset.confirm !== '1') {
+            button.dataset.confirm = '1';
+            button.textContent = confirmLabel;
+            setTimeout(function () {
+              if (button.isConnected) {
+                button.dataset.confirm = '';
+                button.textContent = label;
+              }
+            }, 4000);
+            return;
+          }
+          removeMember(username);
+        });
+      }
+
+      panel.querySelectorAll('[data-fed-remove]').forEach(function (button) {
+        arm(button, 'Remove', 'Confirm remove', button.dataset.fedRemove);
+      });
+      panel.querySelectorAll('[data-fed-leave]').forEach(function (button) {
+        arm(button, 'Leave', 'Confirm leave', button.dataset.fedLeave);
+      });
+    }
+
+    function manageStatus(message) {
+      var el = box.body.querySelector('#mcfFedManageStatus');
+      if (el) el.textContent = message || '';
+    }
+
+    function setRole(select, username, roleId) {
+      if (state.busy) return;
+      state.busy = true;
+      select.disabled = true;
+      manageStatus('Saving…');
+
+      MCF.postJSON(
+        '/api/federations/' + encodeURIComponent(state.federation.id) +
+          '/members/' + encodeURIComponent(username) + '/role',
+        { roleId: roleId }
+      ).then(function (data) {
+        state.busy = false;
+        select.disabled = false;
+
+        if (!data || !data.ok) {
+          var message = errorText(data && data.error);
+          manageStatus(message);
+          MCF.toast(message, 'error');
+          refresh();
+          return;
+        }
+        apply(data.federation);
+        MCF.toast('Role updated', 'success');
+      });
+    }
+
+    function removeMember(username) {
+      if (state.busy) return;
+      state.busy = true;
+      manageStatus('Removing…');
+
+      MCF.authFetch(
+        '/api/federations/' + encodeURIComponent(state.federation.id) +
+          '/members/' + encodeURIComponent(username),
+        { method: 'DELETE' }
+      )
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          state.busy = false;
+
+          if (!data || !data.ok) {
+            var message = errorText(data && data.error);
+            manageStatus(message);
+            MCF.toast(message, 'error');
+            refresh();
+            return;
+          }
+
+          if (data.selfRemoved) {
+            cacheMembership(null);
+            box.close();
+            MCF.toast('You left ' + state.federation.name, 'success');
+            return;
+          }
+
+          apply(data.federation);
+          MCF.toast('@' + username + ' was removed', 'success');
+        })
+        .catch(function () {
+          state.busy = false;
+          manageStatus('Could not remove that member.');
+        });
+    }
+
+    /* ---------- tab 2: the details ---------- */
+
+    function renderDetails(panel) {
+      var fed = state.federation;
+      var preview = fed.imageUrl
+        ? '<img id="mcfFedDetailsPreview" class="mcf-fed-image-preview" src="' +
+          MCF.escapeHtml(fed.imageUrl) + '" alt="">'
+        : '<img id="mcfFedDetailsPreview" class="mcf-fed-image-preview" alt="" hidden>';
+
+      panel.innerHTML =
+        '<p class="small muted">This is what the Join list shows, plus the rules your members play by.</p>' +
+        '<div class="mcf-field"><label for="mcfFedDetailsName">Federation name</label>' +
+          '<input class="mcf-input" type="text" id="mcfFedDetailsName" maxlength="40" value="' +
+            MCF.escapeHtml(fed.name) + '"></div>' +
+        '<div class="mcf-field"><label for="mcfFedDetailsDescription">Description</label>' +
+          '<textarea class="mcf-input" id="mcfFedDetailsDescription" rows="3" maxlength="600">' +
+            MCF.escapeHtml(fed.description) + '</textarea></div>' +
+        '<div class="mcf-field"><label for="mcfFedDetailsRules">Rules</label>' +
+          '<textarea class="mcf-input" id="mcfFedDetailsRules" rows="4" maxlength="1500">' +
+            MCF.escapeHtml(fed.rules) + '</textarea></div>' +
+        '<div class="mcf-field"><label for="mcfFedDetailsImage">Federation image</label>' +
+          '<div class="mcf-fed-image-row">' + preview +
+            '<div>' +
+              '<input type="file" id="mcfFedDetailsImage" accept="image/*">' +
+              '<div class="small muted" id="mcfFedDetailsImageStatus">Leave it alone to keep the current image.</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="mcf-row-actions">' +
+          '<button type="button" class="small-btn" id="mcfFedDetailsSave">Save details</button>' +
+          '<span class="small muted" id="mcfFedManageStatus"></span>' +
+        '</div>';
+
+      panel.querySelector('#mcfFedDetailsImage').addEventListener('change', function (event) {
+        uploadFederationImage(
+          event.target.files && event.target.files[0],
+          panel.querySelector('#mcfFedDetailsImageStatus'),
+          panel.querySelector('#mcfFedDetailsPreview'),
+          function (url) { state.imageUrl = url; }
+        );
+      });
+
+      panel.querySelector('#mcfFedDetailsSave').addEventListener('click', function () {
+        if (state.busy) return;
+        state.busy = true;
+        var button = panel.querySelector('#mcfFedDetailsSave');
+        button.disabled = true;
+        manageStatus('Saving…');
+
+        MCF.authFetch('/api/federations/' + encodeURIComponent(fed.id), {
+          method: 'PATCH',
+          body: JSON.stringify({
+            name: panel.querySelector('#mcfFedDetailsName').value,
+            description: panel.querySelector('#mcfFedDetailsDescription').value,
+            rules: panel.querySelector('#mcfFedDetailsRules').value,
+            imageUrl: state.imageUrl
+          })
+        })
+          .then(function (res) { return res.json(); })
+          .then(function (data) {
+            state.busy = false;
+            button.disabled = false;
+
+            if (!data || !data.ok) {
+              var message = errorText(data && data.error);
+              manageStatus(message);
+              MCF.toast(message, 'error');
+              return;
+            }
+            apply(data.federation);
+            MCF.toast('Federation details saved', 'success');
+          })
+          .catch(function () {
+            state.busy = false;
+            button.disabled = false;
+            manageStatus('Could not save the details.');
+          });
+      });
+    }
+
+    render();
   }
 
   function showFederation(federation) {
@@ -356,6 +743,7 @@
 
     var roles = (federation.roles || []).map(function (role) {
       return '<li><strong>' + MCF.escapeHtml(role.name) + '</strong>' +
+        (role.admin ? ' <span class="mcf-fed-tag">admin</span>' : '') +
         (role.description ? ' <span class="small muted">— ' + MCF.escapeHtml(role.description) + '</span>' : '') +
         (role.builtIn ? ' <span class="mcf-fed-tag">built in</span>' : '') +
         '</li>';
@@ -379,7 +767,11 @@
           '<p class="small muted">Run by @' + MCF.escapeHtml(federation.owner) + ' · ' +
             federation.memberCount + (federation.memberCount === 1 ? ' member' : ' members') + '</p>' +
           '<p class="small muted">' +
-            (federation.isOwner ? 'You run this federation.' : 'You are a member of this federation.') +
+            (federation.isOwner
+              ? 'You run this federation.'
+              : (federation.canManage
+                ? 'You help manage this federation.'
+                : 'You are a member of this federation.')) +
           '</p>' +
         '</div>' +
       '</div>' +
@@ -398,15 +790,25 @@
           ? '<ul class="mcf-fed-list">' + members + '</ul>'
           : '<p class="small muted">Member list is visible to members.</p>') +
       '</div>' +
-      '<p class="small muted">More federation tools — editing the bylaws, handing out roles, titles — are coming next.</p>' +
       '<div class="mcf-row-actions">' +
-        '<button type="button" class="small-btn" id="mcfFedOpenChat">Open chatroom</button>' +
+        (federation.canManage
+          ? '<button type="button" class="small-btn" id="mcfFedManageFromCard">Manage federation</button>'
+          : '') +
+        '<button type="button" class="ghost small-btn" id="mcfFedOpenChat">Open chatroom</button>' +
       '</div>';
 
     box.body.querySelector('#mcfFedOpenChat').addEventListener('click', function () {
       box.close();
       openChatroom();
     });
+
+    var manageButton = box.body.querySelector('#mcfFedManageFromCard');
+    if (manageButton) {
+      manageButton.addEventListener('click', function () {
+        box.close();
+        openManage();
+      });
+    }
   }
 
   /* ---------------------------------------------------------

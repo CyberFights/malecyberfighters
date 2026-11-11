@@ -1579,7 +1579,10 @@ const federationMessageSchema = new mongoose.Schema({
 const federationRoleSchema = new mongoose.Schema({
   id: { type: String, required: true },
   name: { type: String, required: true },
-  description: { type: String, default: '' }
+  description: { type: String, default: '' },
+  // Owner-written roles marked admin can manage the federation (see
+  // federations.js); the built-in Owner and Co-owner roles are always admin.
+  admin: { type: Boolean, default: false }
 }, { _id: false });
 
 const federationMemberSchema = new mongoose.Schema({

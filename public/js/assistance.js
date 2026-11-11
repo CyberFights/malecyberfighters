@@ -1485,8 +1485,8 @@
       title: 'Federations — create, manage, join, chatroom',
       keywords: ['federation', 'federations', 'create federation', 'manage federation', 'join federation', 'federation chat', 'federation chatroom', 'federation rules', 'federation roles', 'promotion', 'run a federation'],
       answer: 'A federation is your own promotion: a name, rules, roles you can hand out, an image and a description.\n' +
-        'Open Federations in the action row. Create opens the registration form (you can run only one, and you cannot be in two federations at once). Manage shows yours — rules, roles and members. Join lists every federation with a Join button. Chatroom is the members-only room for your federation.\n' +
-        'Once you run one, the federation is on your profile info and in every federation list on the site.',
+        'Open Federations in the action row. Create opens the registration form (you can run only one, and you cannot be in two federations at once). Join lists every federation with a Join button, and Chatroom is the members-only room.\n' +
+        'Manage belongs to the owner and the federation’s co-owners/admins. Its Members tab lists everyone with when they were last online, a role menu to assign or change a role, and Remove. The Federation details tab edits the name, description, rules and image. A custom role can be given management rights when you create it.',
       action: {
         label: 'Open Create Federation',
         buttonId: 'btnFederationCreate',

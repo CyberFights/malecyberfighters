@@ -86,10 +86,24 @@ function createStore() {
     updateOne: async (filter, update) => {
       const doc = state.federations.find(candidate => String(candidate._id) === String(filter._id));
       if (!doc) return { matchedCount: 0 };
+
       if (update.$pull && update.$pull.members) {
         doc.members = (doc.members || []).filter(
           member => member.username !== update.$pull.members.username
         );
+      }
+
+      if (update.$set) {
+        Object.entries(update.$set).forEach(([key, value]) => {
+          if (key.indexOf('members.$.') === 0) {
+            const field = key.slice('members.$.'.length);
+            const member = (doc.members || [])
+              .find(entry => entry.username === filter['members.username']);
+            if (member) member[field] = clone(value);
+            return;
+          }
+          doc[key] = clone(value);
+        });
       }
       return { matchedCount: 1 };
     },
@@ -101,13 +115,49 @@ function createStore() {
     }
   };
 
+  function applySet(target, set) {
+    Object.entries(set || {}).forEach(([key, value]) => {
+      if (key.indexOf('.') === -1) {
+        target[key] = clone(value);
+        return;
+      }
+      const parts = key.split('.');
+      let cursor = target;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!cursor[parts[i]] || typeof cursor[parts[i]] !== 'object') cursor[parts[i]] = {};
+        cursor = cursor[parts[i]];
+      }
+      cursor[parts[parts.length - 1]] = clone(value);
+    });
+  }
+
   const User = {
     findOne: filter => query(state.users.get(filter.username) || null),
+
+    find: filter => {
+      const names = filter && filter.username && filter.username.$in;
+      const users = Array.from(state.users.values())
+        .filter(user => !names || names.indexOf(user.username) !== -1);
+      return query(users);
+    },
+
     updateOne: async (filter, update) => {
       const user = state.users.get(filter.username);
       if (!user) return { matchedCount: 0 };
-      if (update.$set) Object.assign(user, clone(update.$set));
+      applySet(user, update.$set);
       return { matchedCount: 1 };
+    },
+
+    updateMany: async (filter, update) => {
+      const id = filter && filter['federation.id'];
+      let matched = 0;
+      state.users.forEach(user => {
+        if (!user.federation || !user.federation.id) return;
+        if (id != null && String(user.federation.id) !== String(id)) return;
+        matched += 1;
+        applySet(user, update.$set);
+      });
+      return { matchedCount: matched };
     }
   };
 
@@ -207,7 +257,7 @@ test('create stores the federation and points the owner at it', async () => {
     assert.equal(res.body.federation.memberCount, 1);
     assert.deepEqual(
       res.body.federation.roles.map(role => role.id),
-      ['owner', 'member', 'commissioner']
+      ['owner', 'co-owner', 'member', 'commissioner']
     );
 
     // The federation itself is in Mongo…
@@ -483,6 +533,268 @@ test('the chatroom is members only, and messages come back newest-last', async (
     });
     assert.equal(empty.status, 400);
     assert.equal(empty.body.error, 'message_required');
+  } finally {
+    await api.close();
+  }
+});
+
+/* ---------------------------------------------------------------
+   Manage: who may, and what each tab does
+--------------------------------------------------------------- */
+
+/** Owner "boss", promoted co-owner "co", plain member "rookie". */
+async function setupManagedFederation() {
+  const store = createStore();
+  addUser(store, 'boss');
+  addUser(store, 'co', { online: true });
+  addUser(store, 'rookie', { lastSeenAt: new Date('2026-01-02T10:00:00Z') });
+  addUser(store, 'stranger');
+  const api = await startApi(store);
+
+  const created = await api.call('POST', '/api/federations', { user: 'boss', body: registration() });
+  const id = created.body.federation.id;
+
+  await api.call('POST', `/api/federations/${id}/join`, { user: 'co', body: {} });
+  await api.call('POST', `/api/federations/${id}/join`, { user: 'rookie', body: {} });
+  await api.call('POST', `/api/federations/${id}/members/co/role`, {
+    user: 'boss',
+    body: { roleId: 'co-owner' }
+  });
+
+  return { store, api, id };
+}
+
+test('only the owner and admins may open Manage — /mine says who can', async () => {
+  const { api, id } = await setupManagedFederation();
+  try {
+    const owner = await api.call('GET', '/api/federations/mine', { user: 'boss' });
+    assert.equal(owner.body.federation.canManage, true);
+    assert.equal(owner.body.federation.viewerRole, 'owner');
+
+    const coOwner = await api.call('GET', '/api/federations/mine', { user: 'co' });
+    assert.equal(coOwner.body.federation.canManage, true);
+    assert.equal(coOwner.body.federation.viewerRole, 'co-owner');
+
+    const member = await api.call('GET', '/api/federations/mine', { user: 'rookie' });
+    assert.equal(member.body.federation.canManage, false);
+    assert.equal(member.body.federation.viewerRole, 'member');
+
+    // Logged-in outsider: no membership, no management.
+    const outsider = await api.call('GET', '/api/federations/mine', { user: 'stranger' });
+    assert.equal(outsider.body.federation, null);
+    assert.equal(outsider.body.membership, null);
+
+    assert.ok(id);
+  } finally {
+    await api.close();
+  }
+});
+
+test('the roster carries each member’s last-online presence', async () => {
+  const { api } = await setupManagedFederation();
+  try {
+    const res = await api.call('GET', '/api/federations/mine', { user: 'boss' });
+    const byName = {};
+    res.body.federation.members.forEach(member => { byName[member.username] = member; });
+
+    assert.equal(byName.co.online, true, 'a live socket shows online');
+    assert.equal(byName.rookie.online, false);
+    assert.equal(byName.rookie.lastSeenAt, '2026-01-02T10:00:00.000Z');
+  } finally {
+    await api.close();
+  }
+});
+
+test('a plain member cannot edit the details or the roster', async () => {
+  const { api, id } = await setupManagedFederation();
+  try {
+    const edit = await api.call('PATCH', `/api/federations/${id}`, {
+      user: 'rookie',
+      body: { name: 'Hijacked Ring', description: 'A takeover attempt that should fail.' }
+    });
+    assert.equal(edit.status, 403);
+    assert.equal(edit.body.error, 'not_a_manager');
+
+    const role = await api.call('POST', `/api/federations/${id}/members/boss/role`, {
+      user: 'rookie',
+      body: { roleId: 'member' }
+    });
+    assert.equal(role.status, 403);
+    assert.equal(role.body.error, 'not_a_manager');
+
+    const remove = await api.call('DELETE', `/api/federations/${id}/members/co`, { user: 'rookie' });
+    assert.equal(remove.status, 403);
+    assert.equal(remove.body.error, 'not_a_manager');
+  } finally {
+    await api.close();
+  }
+});
+
+test('the details tab saves name, description, rules and image', async () => {
+  const { store, api, id } = await setupManagedFederation();
+  try {
+    const res = await api.call('PATCH', `/api/federations/${id}`, {
+      user: 'co',
+      body: {
+        name: 'Iron Ring Wrestling',
+        description: 'The same federation, with a sharper name.',
+        rules: 'Pinfall, submission or KO.',
+        imageUrl: 'https://i.ibb.co/new/ring.png'
+      }
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.federation.name, 'Iron Ring Wrestling');
+    assert.equal(res.body.federation.rules, 'Pinfall, submission or KO.');
+
+    // A rename reaches every member's own pointer, not just the document.
+    ['boss', 'co', 'rookie'].forEach(username => {
+      assert.equal(store.state.users.get(username).federation.name, 'Iron Ring Wrestling', username);
+    });
+
+    const sameName = await api.call('PATCH', `/api/federations/${id}`, {
+      user: 'boss',
+      body: { name: 'Iron Ring Wrestling', description: 'Saving the same name again is fine.' }
+    });
+    assert.equal(sameName.status, 200, 'a rename to its own name is not a duplicate');
+
+    const bad = await api.call('PATCH', `/api/federations/${id}`, {
+      user: 'boss',
+      body: { name: 'No', description: 'Too short a name for the form.' }
+    });
+    assert.equal(bad.status, 400);
+    assert.equal(bad.body.error, 'name_short');
+  } finally {
+    await api.close();
+  }
+});
+
+test('a rename cannot steal another federation’s name', async () => {
+  const store = createStore();
+  addUser(store, 'boss');
+  addUser(store, 'rival');
+  const api = await startApi(store);
+  try {
+    const first = await api.call('POST', '/api/federations', { user: 'boss', body: registration() });
+    await api.call('POST', '/api/federations', {
+      user: 'rival',
+      body: registration({ name: 'Rival Ring', description: 'A different federation entirely.' })
+    });
+
+    const res = await api.call('PATCH', `/api/federations/${first.body.federation.id}`, {
+      user: 'boss',
+      body: { name: 'rival ring', description: 'Trying to take the other name.' }
+    });
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error, 'name_taken');
+  } finally {
+    await api.close();
+  }
+});
+
+test('the owner hands out roles; the pointer follows the member', async () => {
+  const { store, api, id } = await setupManagedFederation();
+  try {
+    const res = await api.call('POST', `/api/federations/${id}/members/rookie/role`, {
+      user: 'boss',
+      body: { roleId: 'commissioner' }
+    });
+    assert.equal(res.status, 200);
+    const rookie = store.state.users.get('rookie');
+    assert.equal(rookie.federation.role, 'commissioner');
+
+    const memberRow = res.body.federation.members.find(member => member.username === 'rookie');
+    assert.equal(memberRow.roleId, 'commissioner');
+
+    const badRole = await api.call('POST', `/api/federations/${id}/members/rookie/role`, {
+      user: 'boss',
+      body: { roleId: 'emperor' }
+    });
+    assert.equal(badRole.status, 400);
+    assert.equal(badRole.body.error, 'invalid_role');
+
+    const ownerRole = await api.call('POST', `/api/federations/${id}/members/rookie/role`, {
+      user: 'boss',
+      body: { roleId: 'owner' }
+    });
+    assert.equal(ownerRole.status, 400, 'ownership is not a role the form can hand out');
+  } finally {
+    await api.close();
+  }
+});
+
+test('admins cannot mint admins, touch peers, or edit their own row', async () => {
+  const { api, id } = await setupManagedFederation();
+  try {
+    // Admin → another member as a *plain* role: allowed.
+    const ok = await api.call('POST', `/api/federations/${id}/members/rookie/role`, {
+      user: 'co',
+      body: { roleId: 'commissioner' }
+    });
+    assert.equal(ok.status, 200);
+
+    // Admin → admin role: only the owner may promote.
+    const promote = await api.call('POST', `/api/federations/${id}/members/rookie/role`, {
+      user: 'co',
+      body: { roleId: 'co-owner' }
+    });
+    assert.equal(promote.status, 403);
+    assert.equal(promote.body.error, 'insufficient_privileges');
+
+    // Admin → another admin's row: out of their league.
+    const peer = await api.call('POST', `/api/federations/${id}/members/boss/role`, {
+      user: 'co',
+      body: { roleId: 'member' }
+    });
+    assert.equal(peer.status, 409, 'the owner row is immutable');
+
+    // Admin → their own row: a mis-tap should not demote them.
+    const self = await api.call('POST', `/api/federations/${id}/members/co/role`, {
+      user: 'co',
+      body: { roleId: 'member' }
+    });
+    assert.equal(self.status, 409);
+    assert.equal(self.body.error, 'cannot_change_own_role');
+  } finally {
+    await api.close();
+  }
+});
+
+test('the owner can promote a member to co-owner and remove them again', async () => {
+  const { store, api, id } = await setupManagedFederation();
+  try {
+    const promoted = await api.call('POST', `/api/federations/${id}/members/rookie/role`, {
+      user: 'boss',
+      body: { roleId: 'co-owner' }
+    });
+    assert.equal(promoted.status, 200);
+    assert.equal(store.state.users.get('rookie').federation.role, 'co-owner');
+
+    // Now only the owner outranks rookie.
+    const adminVsAdmin = await api.call('DELETE', `/api/federations/${id}/members/rookie`, { user: 'co' });
+    assert.equal(adminVsAdmin.status, 403);
+    assert.equal(adminVsAdmin.body.error, 'insufficient_privileges');
+
+    const removed = await api.call('DELETE', `/api/federations/${id}/members/rookie`, { user: 'boss' });
+    assert.equal(removed.status, 200);
+    assert.equal(removed.body.removed, 'rookie');
+    assert.equal(store.state.users.get('rookie').federation, null, 'their own record is cleared');
+    assert.equal(removed.body.federation.memberCount, 2);
+  } finally {
+    await api.close();
+  }
+});
+
+test('the owner cannot be removed, and a member can leave on their own', async () => {
+  const { store, api, id } = await setupManagedFederation();
+  try {
+    const ownerGone = await api.call('DELETE', `/api/federations/${id}/members/boss`, { user: 'boss' });
+    assert.equal(ownerGone.status, 409);
+    assert.equal(ownerGone.body.error, 'cannot_remove_owner');
+
+    const leaving = await api.call('DELETE', `/api/federations/${id}/members/rookie`, { user: 'rookie' });
+    assert.equal(leaving.status, 200);
+    assert.equal(leaving.body.selfRemoved, true);
+    assert.equal(store.state.users.get('rookie').federation, null);
   } finally {
     await api.close();
   }

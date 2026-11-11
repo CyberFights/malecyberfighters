@@ -18,12 +18,17 @@ const {
   LIMITS,
   BUILT_IN_ROLES,
   normalizeFederation,
+  normalizeFederationDetails,
   normalizeRoles,
   normalizeMessage,
   federationNameKey,
   roleIdFromName,
   isHttpsUrl,
   federationSummary,
+  roleList,
+  roleIndex,
+  isAdminRole,
+  canManageFederation,
   serializeFederation,
   serializeMessages,
   membershipOf
@@ -78,8 +83,8 @@ test('a complete registration passes and keeps its roles', () => {
   assert.equal(result.federation.name, 'Iron Ring Federation');
   assert.equal(result.federation.nameKey, 'iron ring federation');
   assert.deepEqual(result.federation.roles, [
-    { id: 'commissioner', name: 'Commissioner', description: 'Books the cards' },
-    { id: 'champion', name: 'Champion', description: '' }
+    { id: 'commissioner', name: 'Commissioner', description: 'Books the cards', admin: false },
+    { id: 'champion', name: 'Champion', description: '', admin: false }
   ]);
   assert.equal(result.federation.imageUrl, 'https://i.ibb.co/abc123/ring.png');
 });
@@ -135,6 +140,7 @@ test('roles: blank rows are the form’s leftovers, not an error', () => {
 
 test('roles cannot reuse the built-ins or each other', () => {
   assert.equal(normalizeFederation({ ...validBody(), roles: [{ name: 'Owner' }] }).error, 'role_duplicate');
+  assert.equal(normalizeFederation({ ...validBody(), roles: [{ name: 'Co-owner' }] }).error, 'role_duplicate');
   assert.equal(normalizeFederation({ ...validBody(), roles: [{ name: 'Member' }] }).error, 'role_duplicate');
   assert.equal(normalizeFederation({
     ...validBody(),
@@ -218,10 +224,13 @@ test('built-in roles come first and custom roles cannot shadow them', () => {
       { id: 'owner', name: 'Impostor', description: 'should be ignored' }
     ]
   }), 'owner');
-  assert.deepEqual(view.roles.map(role => role.id), ['owner', 'member', 'champion']);
+  assert.deepEqual(view.roles.map(role => role.id), ['owner', 'co-owner', 'member', 'champion']);
   assert.equal(view.roles[0].builtIn, true);
-  assert.equal(view.roles[2].builtIn, false);
-  assert.deepEqual(BUILT_IN_ROLES.map(role => role.id), ['owner', 'member']);
+  assert.equal(view.roles[1].admin, true, 'the built-in Co-owner is an admin role');
+  assert.equal(view.roles[2].admin, false, 'the built-in Member is not');
+  assert.equal(view.roles[3].builtIn, false);
+  assert.deepEqual(BUILT_IN_ROLES.map(role => role.id), ['owner', 'co-owner', 'member']);
+  assert.deepEqual(BUILT_IN_ROLES.filter(role => role.admin).map(role => role.id), ['owner', 'co-owner']);
 });
 
 test('a summary carries no roster and no bylaws', () => {
@@ -329,25 +338,35 @@ test('the client module speaks the federation API', () => {
  * then federations), signed in as `boss`. The network is stubbed so the test
  * can watch exactly what the form would send.
  */
-function startClient({ mine = { ok: true, federation: null }, create } = {}) {
+function startClient({ mine = { ok: true, federation: null }, create, auth, username = 'boss' } = {}) {
   const dom = new JSDOM(PAGE, {
     url: 'https://male-cyber-fighters.test/',
     runScripts: 'outside-only',
     pretendToBeVisual: true
   });
   const { window } = dom;
-  window.localStorage.setItem('cw_session_v1', JSON.stringify({ username: 'boss', display: 'Boss' }));
+  window.localStorage.setItem('cw_session_v1', JSON.stringify({ username, display: username.toUpperCase() }));
   window.eval(CORE);
   window.eval(CLIENT);
 
   const calls = [];
   window.MCF.getJSON = url => {
     calls.push({ method: 'GET', url });
-    return Promise.resolve(mine);
+    return Promise.resolve(typeof mine === 'function' ? mine(url, calls) : mine);
   };
   window.MCF.postJSON = (url, body) => {
     calls.push({ method: 'POST', url, body });
-    return Promise.resolve(create ? create(body) : { ok: false, error: 'server_error' });
+    return Promise.resolve(create ? create(body, url) : { ok: false, error: 'server_error' });
+  };
+  window.MCF.authFetch = (url, options) => {
+    options = options || {};
+    calls.push({
+      method: options.method || 'GET',
+      url,
+      body: options.body ? JSON.parse(options.body) : undefined
+    });
+    const answer = typeof auth === 'function' ? auth(url, options, calls) : (auth || { ok: false, error: 'server_error' });
+    return Promise.resolve({ json: () => Promise.resolve(answer) });
   };
   return { dom, window, document: window.document, calls };
 }
@@ -367,6 +386,7 @@ test('Create opens the registration popup with every field the federation needs'
     }
 
     assert.equal(body.querySelectorAll('.mcf-fed-role-row').length, 1, 'one role row to start');
+    assert.ok(body.querySelector('.mcf-fed-role-row [data-role-admin]'), 'a role can be marked as an admin role');
 
     // Roles can be added, up to the server's cap.
     body.querySelector('#mcfFedAddRole').click();
@@ -427,6 +447,7 @@ test('Create posts the name, description, rules, roles and uploaded image', asyn
     const firstRole = body.querySelectorAll('.mcf-fed-role-row')[0];
     firstRole.querySelector('[data-role-name]').value = 'Commissioner';
     firstRole.querySelector('[data-role-desc]').value = 'Books the cards';
+    firstRole.querySelector('[data-role-admin]').checked = true;
 
     body.querySelector('#mcfFedSubmit').click();
     // The form fades out before its node is removed, then the new card is up.
@@ -436,7 +457,9 @@ test('Create posts the name, description, rules, roles and uploaded image', asyn
     assert.equal(posted.name, 'Iron Ring Federation');
     assert.equal(posted.description, 'A heavyweight promotion for men who like it rough.');
     assert.equal(posted.rules, 'Titles are won by pinfall.');
-    assert.deepEqual(JSON.parse(JSON.stringify(posted.roles)), [{ name: 'Commissioner', description: 'Books the cards' }]);
+    assert.deepEqual(JSON.parse(JSON.stringify(posted.roles)), [
+      { name: 'Commissioner', description: 'Books the cards', admin: true }
+    ]);
 
     const post = client.calls.find(call => call.method === 'POST');
     assert.equal(post.url, '/api/federations');
@@ -481,6 +504,317 @@ test('pressing Create when the member already runs a federation explains it', as
 
     assert.equal(client.document.querySelector('.mcf-modal-title').textContent, 'Iron Ring Federation');
     assert.ok(!client.document.querySelector('#mcfFedName'), 'the registration form never opens');
+  } finally {
+    client.dom.window.close();
+  }
+});
+
+/* ---------------------------------------------------------------
+   Manage: roles, permissions and presence
+--------------------------------------------------------------- */
+
+test('custom roles can be marked as admin roles', () => {
+  const result = normalizeRoles([
+    { name: 'Enforcer', admin: true },
+    { name: 'Champion' },
+    { name: 'Stringy', admin: 'true' }
+  ]);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.roles.map(role => role.admin), [true, false, true]);
+});
+
+test('only the owner and admin roles can manage a federation', () => {
+  const board = doc({
+    roles: [
+      { id: 'commissioner', name: 'Commissioner', admin: false },
+      { id: 'enforcer', name: 'Enforcer', admin: true }
+    ],
+    members: [
+      { username: 'owner', display: 'The Owner', roleId: 'owner', joinedAt: null },
+      { username: 'co', display: 'Co', roleId: 'co-owner', joinedAt: null },
+      { username: 'strong', display: 'Strong', roleId: 'enforcer', joinedAt: null },
+      { username: 'rookie', display: 'Rookie', roleId: 'member', joinedAt: null },
+      { username: 'booker', display: 'Booker', roleId: 'commissioner', joinedAt: null }
+    ]
+  });
+
+  assert.equal(canManageFederation(board, 'owner'), true, 'the owner always manages');
+  assert.equal(canManageFederation(board, 'co'), true, 'the built-in Co-owner manages');
+  assert.equal(canManageFederation(board, 'strong'), true, 'a custom admin role manages');
+  assert.equal(canManageFederation(board, 'rookie'), false, 'a plain member does not');
+  assert.equal(canManageFederation(board, 'booker'), false, 'a non-admin custom role does not');
+  assert.equal(canManageFederation(board, 'nobody'), false, 'a non-member does not');
+  assert.equal(canManageFederation(null, 'owner'), false);
+
+  const index = roleIndex(board);
+  assert.equal(index['co-owner'].admin, true);
+  assert.equal(index.member.admin, false);
+  assert.equal(isAdminRole(board, 'enforcer'), true);
+  assert.equal(isAdminRole(board, 'commissioner'), false);
+  assert.deepEqual(roleList(board).map(role => role.id), ['owner', 'co-owner', 'member', 'commissioner', 'enforcer']);
+});
+
+test('the details form edits everything except the roles', () => {
+  const result = normalizeFederationDetails({
+    name: '  Iron Ring Wrestling ',
+    description: 'The same federation, with a sharper name.',
+    rules: 'Pinfall, submission or KO.',
+    imageUrl: 'https://i.ibb.co/new/ring.png',
+    roles: [{ name: 'Champion' }]
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(Object.keys(result.details).sort(), ['description', 'imageUrl', 'name', 'nameKey', 'rules']);
+  assert.equal(result.details.name, 'Iron Ring Wrestling');
+  assert.ok(!('roles' in result.details), 'roles are managed one member at a time');
+
+  assert.equal(normalizeFederationDetails({ name: 'No', description: 'Long enough description.' }).error, 'name_short');
+  assert.equal(normalizeFederationDetails({ name: 'Valid name', description: ' ' }).error, 'description_required');
+});
+
+test('the serialised federation says who can manage and who is online', () => {
+  const board = doc({
+    members: [
+      { username: 'owner', display: 'The Owner', roleId: 'owner', joinedAt: null },
+      { username: 'co', display: 'Co', roleId: 'co-owner', joinedAt: null },
+      { username: 'rookie', display: 'Rookie', roleId: 'member', joinedAt: null }
+    ]
+  });
+  const people = [
+    { username: 'co', display: 'Co', online: true, lastSeenAt: new Date('2026-01-01T00:00:00Z') },
+    { username: 'rookie', display: 'Rookie', online: false, lastSeenAt: new Date('2026-01-02T10:00:00Z') }
+  ];
+
+  const asCoOwner = serializeFederation(board, 'co', people);
+  assert.equal(asCoOwner.canManage, true);
+  assert.equal(asCoOwner.viewerRole, 'co-owner');
+  const co = asCoOwner.members.find(member => member.username === 'co');
+  assert.equal(co.online, true, 'presence comes through the roster');
+  assert.equal(co.lastSeenAt.toISOString(), '2026-01-01T00:00:00.000Z');
+
+  const asMember = serializeFederation(board, 'rookie', people);
+  assert.equal(asMember.canManage, false);
+  assert.equal(asMember.viewerRole, 'member');
+  assert.equal(asMember.members.find(member => member.username === 'rookie').online, false);
+
+  const asOutsider = serializeFederation(board, 'stranger', people);
+  assert.equal(asOutsider.canManage, false);
+  assert.equal(asOutsider.viewerRole, null);
+  assert.deepEqual(asOutsider.members, []);
+});
+
+/* ---------------------------------------------------------------
+   The Manage window itself
+--------------------------------------------------------------- */
+
+const HOUR = 60 * 60 * 1000;
+
+function federationFixture(overrides = {}) {
+  return {
+    id: 'fed1',
+    name: 'Iron Ring Federation',
+    owner: 'boss',
+    description: 'A heavyweight promotion for men who like their matches long.',
+    rules: 'Pinfall or submission.',
+    imageUrl: '',
+    roles: [
+      { id: 'owner', name: 'Owner', description: '', admin: true, builtIn: true },
+      { id: 'co-owner', name: 'Co-owner', description: '', admin: true, builtIn: true },
+      { id: 'member', name: 'Member', description: '', admin: false, builtIn: true },
+      { id: 'commissioner', name: 'Commissioner', description: 'Books the cards', admin: false, builtIn: false }
+    ],
+    members: [
+      { username: 'boss', display: 'Boss', roleId: 'owner', online: true, lastSeenAt: new Date().toISOString() },
+      {
+        username: 'rookie',
+        display: 'Rookie',
+        roleId: 'member',
+        online: false,
+        lastSeenAt: new Date(Date.now() - 2 * HOUR).toISOString()
+      }
+    ],
+    memberCount: 2,
+    isMember: true,
+    isOwner: true,
+    canManage: true,
+    viewerRole: 'owner',
+    ...overrides
+  };
+}
+
+test('Manage is refused to everyone but the owner and admins', async () => {
+  const client = startClient({
+    mine: { ok: true, federation: federationFixture({ canManage: false, isOwner: false, viewerRole: 'member' }) }
+  });
+  try {
+    client.window.MCFFederations.openManage();
+    await sleep(20);
+
+    const body = client.document.querySelector('.mcf-modal-body');
+    assert.match(body.textContent, /Only the owner and the federation’s co-owners\/admins/);
+    assert.equal(body.querySelectorAll('[data-fed-role]').length, 0, 'no role controls');
+    assert.equal(body.querySelectorAll('[data-fed-remove]').length, 0, 'no remove buttons');
+    assert.equal(body.querySelectorAll('[data-fed-tab]').length, 0, 'no manage tabs');
+  } finally {
+    client.dom.window.close();
+  }
+});
+
+test('Manage lists the roster with last-online, role change and remove', async () => {
+  const client = startClient({
+    mine: { ok: true, federation: federationFixture() },
+    create: () => ({
+      ok: true,
+      federation: federationFixture({
+        members: [
+          federationFixture().members[0],
+          { username: 'rookie', display: 'Rookie', roleId: 'commissioner', online: false, lastSeenAt: new Date().toISOString() }
+        ]
+      })
+    }),
+    auth: () => ({
+      ok: true,
+      removed: 'rookie',
+      selfRemoved: false,
+      federation: federationFixture({ members: [federationFixture().members[0]], memberCount: 1 })
+    })
+  });
+
+  try {
+    client.window.MCFFederations.openManage();
+    await sleep(20);
+
+    assert.equal(client.document.querySelector('.mcf-modal-title').textContent, 'Iron Ring Federation — manage');
+    const tabs = client.document.querySelectorAll('[data-fed-tab]');
+    assert.deepEqual(Array.from(tabs).map(tab => tab.dataset.fedTab), ['members', 'details']);
+    assert.equal(tabs[0].getAttribute('aria-selected'), 'true');
+
+    const rows = client.document.querySelectorAll('.mcf-fed-manage-row');
+    assert.equal(rows.length, 2);
+
+    // The owner row is immutable.
+    const ownerRow = rows[0];
+    assert.match(ownerRow.textContent, /Boss/);
+    assert.match(ownerRow.textContent, /Owner/);
+    assert.equal(ownerRow.querySelector('[data-fed-role]'), null);
+    assert.equal(ownerRow.querySelector('[data-fed-remove]'), null);
+
+    // The plain member row has presence and both controls.
+    const memberRow = rows[1];
+    assert.match(memberRow.textContent, /Rookie/);
+    assert.match(memberRow.textContent, /Last online 2h ago/);
+    const select = memberRow.querySelector('[data-fed-role]');
+    const remove = memberRow.querySelector('[data-fed-remove]');
+    assert.ok(select && remove);
+    assert.deepEqual(Array.from(select.options).map(option => option.value), ['co-owner', 'member', 'commissioner']);
+
+    // Changing the role posts the member and the new role.
+    select.value = 'commissioner';
+    select.dispatchEvent(new client.window.Event('change'));
+    await sleep(20);
+    const roleCall = client.calls.find(call => call.method === 'POST' && /\/members\/rookie\/role$/.test(call.url));
+    assert.ok(roleCall, 'role change posted');
+    assert.deepEqual(JSON.parse(JSON.stringify(roleCall.body)), { roleId: 'commissioner' });
+
+    // Removing takes two taps: the first arms, the second deletes.
+    const removeButton = client.document.querySelector('[data-fed-remove]');
+    removeButton.click();
+    assert.equal(removeButton.textContent, 'Confirm remove');
+    assert.ok(!client.calls.some(call => call.method === 'DELETE'), 'one tap never removes');
+    removeButton.click();
+    await sleep(20);
+
+    const deleteCall = client.calls.find(call => call.method === 'DELETE');
+    assert.equal(deleteCall.url, '/api/federations/fed1/members/rookie');
+    assert.equal(client.document.querySelectorAll('.mcf-fed-manage-row').length, 1, 'the roster refreshed');
+  } finally {
+    client.dom.window.close();
+  }
+});
+
+test('the Details tab edits the federation card', async () => {
+  const client = startClient({
+    mine: { ok: true, federation: federationFixture() },
+    auth: () => ({
+      ok: true,
+      federation: federationFixture({ name: 'Iron Ring Wrestling', description: 'Sharper now.' })
+    })
+  });
+
+  try {
+    client.window.MCFFederations.openManage();
+    await sleep(20);
+
+    client.document.querySelector('[data-fed-tab="details"]').click();
+
+    const name = client.document.querySelector('#mcfFedDetailsName');
+    const description = client.document.querySelector('#mcfFedDetailsDescription');
+    const rules = client.document.querySelector('#mcfFedDetailsRules');
+    const save = client.document.querySelector('#mcfFedDetailsSave');
+    assert.equal(name.value, 'Iron Ring Federation');
+    assert.equal(rules.value, 'Pinfall or submission.');
+    assert.ok(client.document.querySelector('#mcfFedDetailsImage'), 'an image can be replaced');
+
+    name.value = 'Iron Ring Wrestling';
+    description.value = 'Sharper now.';
+    save.click();
+    await sleep(20);
+
+    const patch = client.calls.find(call => call.method === 'PATCH');
+    assert.equal(patch.url, '/api/federations/fed1');
+    assert.equal(patch.body.name, 'Iron Ring Wrestling');
+    assert.equal(patch.body.description, 'Sharper now.');
+    assert.equal(patch.body.imageUrl, '');
+
+    // The title follows the saved name.
+    assert.equal(client.document.querySelector('.mcf-modal-title').textContent, 'Iron Ring Wrestling — manage');
+  } finally {
+    client.dom.window.close();
+  }
+});
+
+test('a co-owner can leave the federation from their own row', async () => {
+  const co = {
+    username: 'co',
+    display: 'Co',
+    roleId: 'co-owner',
+    online: true,
+    lastSeenAt: new Date().toISOString()
+  };
+  const board = federationFixture({
+    isOwner: false,
+    viewerRole: 'co-owner',
+    canManage: true,
+    members: [federationFixture().members[0], co],
+    memberCount: 2
+  });
+
+  const client = startClient({
+    username: 'co',
+    mine: { ok: true, federation: board },
+    auth: () => ({ ok: true, removed: 'co', selfRemoved: true, federation: board })
+  });
+
+  try {
+    client.window.MCFFederations.openManage();
+    await sleep(20);
+
+    const selfRow = client.document.querySelectorAll('.mcf-fed-manage-row')[1];
+    assert.match(selfRow.textContent, /Co-owner/);
+    assert.equal(selfRow.querySelector('[data-fed-role]'), null, 'no self-demotion');
+    const leave = selfRow.querySelector('[data-fed-leave]');
+    assert.ok(leave, 'leaving is offered on your own row');
+
+    leave.click();
+    assert.equal(leave.textContent, 'Confirm leave');
+    leave.click();
+    // The popup fades out before its node is removed.
+    await sleep(260);
+
+    const call = client.calls.find(entry => entry.method === 'DELETE');
+    assert.equal(call.url, '/api/federations/fed1/members/co');
+    assert.equal(client.document.querySelectorAll('.mcf-modal').length, 0, 'the window closes');
+    const cached = JSON.parse(client.window.localStorage.getItem('cw_session_v1'));
+    assert.equal(cached.federation, null, 'the cached membership is cleared');
   } finally {
     client.dom.window.close();
   }

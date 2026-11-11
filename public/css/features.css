@@ -805,10 +805,20 @@ html[data-mcf-theme="light"] .actions .nav-group-menu {
 
 .mcf-fed-role-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto auto;
   gap: 6px;
   align-items: center;
 }
+
+.mcf-fed-role-admin {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  white-space: nowrap;
+  color: var(--muted, #b8c7d9);
+}
+.mcf-fed-role-admin input { width: auto; }
 
 .mcf-fed-role-remove {
   background: transparent;
@@ -829,6 +839,77 @@ html[data-mcf-theme="light"] .actions .nav-group-menu {
   border-radius: 12px;
   object-fit: cover;
   border: 1px solid rgba(127, 216, 255, 0.3);
+}
+
+/* ---------- manage: tabs, roster, details ---------- */
+
+.mcf-fed-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid rgba(127, 216, 255, 0.2);
+  margin-bottom: 10px;
+}
+
+.mcf-fed-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  color: inherit;
+  padding: 8px 12px;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  font-size: 13.5px;
+}
+.mcf-fed-tab:hover { background: rgba(127, 216, 255, 0.08); }
+.mcf-fed-tab-on {
+  background: rgba(127, 216, 255, 0.14);
+  border-color: rgba(127, 216, 255, 0.28);
+  color: var(--accent, #7fd8ff);
+}
+
+.mcf-fed-manage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mcf-fed-manage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(127, 216, 255, 0.16);
+  background: rgba(127, 216, 255, 0.05);
+}
+
+.mcf-fed-manage-person {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.mcf-fed-presence { font-size: 12px; color: var(--muted, #b8c7d9); }
+.mcf-fed-presence-online { color: #6dffe7; }
+
+.mcf-fed-manage-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mcf-fed-role-select {
+  background: #0d1220;
+  color: inherit;
+  border: 1px solid rgba(127, 216, 255, 0.3);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 13px;
 }
 
 /* ---------- join list ---------- */
@@ -911,10 +992,13 @@ html[data-mcf-theme="light"] .mcf-fed-chat-log {
   border-color: rgba(10, 60, 110, 0.25);
 }
 html[data-mcf-theme="light"] .mcf-fed-list li,
+html[data-mcf-theme="light"] .mcf-fed-manage-row,
 html[data-mcf-theme="light"] .mcf-fed-join-row {
   background: rgba(10, 60, 110, 0.04);
   border-color: rgba(10, 60, 110, 0.2);
 }
+html[data-mcf-theme="light"] .mcf-fed-role-select { background: #ffffff; border-color: rgba(10, 60, 110, 0.25); }
+html[data-mcf-theme="light"] .mcf-fed-presence-online { color: #0b7a68; }
 html[data-mcf-theme="light"] .mcf-fed-notice {
   background: rgba(255, 213, 128, 0.25);
   border-color: rgba(150, 110, 20, 0.4);
@@ -922,7 +1006,9 @@ html[data-mcf-theme="light"] .mcf-fed-notice {
 
 /* Phones: the role rows stack instead of squeezing three controls. */
 @media (max-width: 600px) {
-  .mcf-fed-role-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .mcf-fed-role-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .mcf-fed-role-row [data-role-name] { grid-column: 1 / -1; }
   .mcf-fed-role-row [data-role-desc] { grid-column: 1 / -1; }
   .mcf-fed-chat-form { flex-wrap: wrap; }
+  .mcf-fed-manage-actions { width: 100%; }
 }
