@@ -1485,8 +1485,8 @@
       title: 'Federations — create, manage, join, chatroom',
       keywords: ['federation', 'federations', 'create federation', 'manage federation', 'join federation', 'federation chat', 'federation chatroom', 'federation rules', 'federation roles', 'promotion', 'run a federation'],
       answer: 'A federation is your own promotion: a name, rules, roles you can hand out, an image and a description.\n' +
-        'Open Federations in the action row. Create opens the registration form (you can run only one, and you cannot be in two federations at once). Join lists every federation with a Join button, and Chatroom is the members-only room.\n' +
-        'Manage belongs to the owner and the federation’s co-owners/admins. Its Members tab lists everyone with when they were last online, a role menu to assign or change a role, and Remove. The Roles tab adds a role, renames or re-describes one, and deletes one nobody holds — the built-in Owner, Co-owner and Member never change. Only the owner can tick “Can manage” on a role. The Federation details tab edits the name, description, rules and image.',
+        'Open Federations in the action row. Create opens the registration form (you can run only one, and you cannot be in two federations at once). Join lists every federation with a Join button — pressing it sends the owner a direct message asking for approval, and you are only added once they approve. Chatroom is the members-only room.\n' +
+        'Manage belongs to the owner and the federation’s co-owners/admins. Its Members tab lists join requests with Approve and Reject, then everyone with when they were last online, a role menu to assign or change a role, and Remove. The Roles tab adds a role, renames or re-describes one, and deletes one nobody holds — the built-in Owner, Co-owner and Member never change. Only the owner can tick “Can manage” on a role. The Federation details tab edits the name, description, rules and image.',
       action: {
         label: 'Open Create Federation',
         buttonId: 'btnFederationCreate',

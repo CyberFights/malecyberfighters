@@ -321,6 +321,19 @@ function canManageFederation(doc, username) {
 }
 
 /**
+ * The join requests on the federation. Membership is not granted the moment
+ * someone presses Join: the owner (or an admin) approves or rejects it first.
+ */
+function joinRequests(doc) {
+  return Array.isArray(doc && doc.requests) ? doc.requests : [];
+}
+
+/** Is this member waiting on a decision? */
+function hasJoinRequest(doc, username) {
+  return !!username && joinRequests(doc).some(request => request.username === username);
+}
+
+/**
  * The roster, with presence when the caller looked it up. `people` is the
  * matching slice of the User collection ({ username, online, lastSeenAt }).
  */
@@ -384,6 +397,7 @@ function serializeFederation(doc, viewer, people) {
   const members = memberList(doc, people);
   const me = viewer ? members.find(member => member.username === viewer) : null;
   const isMember = !!me;
+  const canManage = canManageFederation(doc, viewer);
 
   return {
     id: String(doc._id || doc.id),
@@ -398,8 +412,18 @@ function serializeFederation(doc, viewer, people) {
     isMember,
     isOwner: !!viewer && doc.owner === viewer,
     // What the Manage window keys off, and the role to cache on the member.
-    canManage: canManageFederation(doc, viewer),
+    canManage,
     viewerRole: me ? me.roleId : null,
+    // Only a manager sees who is waiting; everyone else only ever learns that
+    // their own request is pending.
+    requests: canManage
+      ? joinRequests(doc).map(request => ({
+        username: String(request.username || ''),
+        display: String(request.display || request.username || ''),
+        requestedAt: request.requestedAt || null
+      }))
+      : [],
+    requested: !isMember && hasJoinRequest(doc, viewer),
     createdAt: doc.createdAt || null,
     updatedAt: doc.updatedAt || null
   };
@@ -420,7 +444,14 @@ function serializeMessages(doc) {
    Routes
 --------------------------------------------------------------- */
 
-function createFederationRouter({ Federation, User, requireUser }) {
+function createFederationRouter({
+  Federation,
+  User,
+  requireUser,
+  DM,
+  deliverToUser,
+  forwardDMToDiscord
+}) {
   const express = require('express');
   const router = express.Router();
 
@@ -456,6 +487,53 @@ function createFederationRouter({ Federation, User, requireUser }) {
       role: role || 'member',
       joinedAt: new Date()
     };
+  }
+
+  /** Save a DM and hand it to the recipient's open window, if any. */
+  async function deliverDM(fields) {
+    if (!DM || typeof DM.create !== 'function') return null;
+    const dm = await DM.create({ ...fields, time: new Date() });
+    const payload = {
+      ...(typeof dm.toObject === 'function' ? dm.toObject() : dm),
+      id: String(dm._id)
+    };
+    if (deliverToUser) deliverToUser(fields.to, 'privateMessage', payload);
+    return payload;
+  }
+
+  /**
+   * The request lands in the owner's DMs as a real message from the applicant,
+   * so it sits in their conversation rather than a system inbox nobody opens.
+   * A DM failure must never undo the request itself.
+   */
+  async function notifyJoinRequest(doc, applicant) {
+    const text = '@' + applicant.username + ' asked to join ' + doc.name + '.';
+    try {
+      await deliverDM({
+        from: applicant.username,
+        to: doc.owner,
+        text,
+        type: 'federationJoin',
+        federationId: String(doc._id),
+        federationName: doc.name,
+        applicant: applicant.username
+      });
+      if (forwardDMToDiscord) {
+        const owner = await User.findOne({ username: doc.owner }).lean();
+        await forwardDMToDiscord(applicant.username, owner, text);
+      }
+    } catch (err) {
+      console.error('federation join notify error:', err?.message || err);
+    }
+  }
+
+  /** The decision, addressed to the applicant from the owner. */
+  async function notifyDecision(doc, username, text) {
+    try {
+      await deliverDM({ from: doc.owner, to: username, text, type: 'system' });
+    } catch (err) {
+      console.error('federation decision notify error:', err?.message || err);
+    }
   }
 
   // ---------- create ----------
@@ -555,7 +633,10 @@ function createFederationRouter({ Federation, User, requireUser }) {
       return res.json({
         ok: true,
         membership: membershipOf(user),
-        federations: federations.map(federationSummary)
+        federations: federations.map(doc => ({
+          ...federationSummary(doc),
+          requested: hasJoinRequest(doc, req.username)
+        }))
       });
     } catch (err) {
       console.error('federation list error:', err?.message || err);
@@ -880,7 +961,10 @@ function createFederationRouter({ Federation, User, requireUser }) {
     }
   });
 
-  // ---------- join ----------
+  // ---------- asking to join ----------
+  // POST /api/federations/:id/join
+  // Pressing Join is a request, not a membership: the owner (or an admin)
+  // approves or rejects it from the DM it sends or Manage → Members.
   router.post('/:id/join', requireUser, async (req, res) => {
     const username = req.username;
 
@@ -897,13 +981,116 @@ function createFederationRouter({ Federation, User, requireUser }) {
         });
       }
 
+      const doc = await Federation.findById(req.params.id).lean().catch(() => null);
+      if (!doc) return res.status(404).json({ ok: false, error: 'not_found' });
+
+      const onRoster = (doc.members || []).some(member => member.username === username);
+      if (doc.owner === username || onRoster) {
+        return res.status(409).json({ ok: false, error: 'already_member' });
+      }
+      if (hasJoinRequest(doc, username)) {
+        return res.status(409).json({ ok: false, error: 'already_requested', owner: doc.owner });
+      }
+
+      await Federation.updateOne(
+        { _id: doc._id },
+        {
+          $push: {
+            requests: {
+              username,
+              display: user.display || username,
+              requestedAt: new Date()
+            }
+          }
+        }
+      );
+
+      await notifyJoinRequest(doc, user);
+
+      return res.status(202).json({
+        ok: true,
+        requested: true,
+        owner: doc.owner,
+        name: doc.name
+      });
+    } catch (err) {
+      if (err && (err.name === 'CastError' || err.name === 'BSONError')) {
+        return res.status(404).json({ ok: false, error: 'not_found' });
+      }
+      console.error('federation join error:', err?.message || err);
+      return res.status(500).json({ ok: false, error: 'server_error' });
+    }
+  });
+
+  /** The federation after the pull of one request, as the acting manager sees it. */
+  async function afterDecision(doc, viewer) {
+    const fresh = await Federation.findById(doc._id).lean();
+    return view(fresh, viewer);
+  }
+
+  // ---------- approve a join request ----------
+  // POST /api/federations/:id/requests/:username/approve
+  router.post('/:id/requests/:username/approve', requireUser, async (req, res) => {
+    try {
+      const doc = await Federation.findById(req.params.id).lean().catch(() => null);
+      if (!doc) return res.status(404).json({ ok: false, error: 'not_found' });
+      if (!canManageFederation(doc, req.username)) {
+        return res.status(403).json({ ok: false, error: 'not_a_manager' });
+      }
+
+      const applicantName = String(req.params.username || '');
+      const waiting = hasJoinRequest(doc, applicantName);
+      const onRoster = (doc.members || []).some(member => member.username === applicantName);
+
+      // Approving twice is not an error: the first one already let them in.
+      if (onRoster) {
+        if (waiting) {
+          await Federation.updateOne(
+            { _id: doc._id },
+            { $pull: { requests: { username: applicantName } } }
+          );
+        }
+        return res.json({
+          ok: true,
+          approved: applicantName,
+          federation: await afterDecision(doc, req.username)
+        });
+      }
+
+      if (!waiting) return res.status(404).json({ ok: false, error: 'request_not_found' });
+
+      const applicant = await User.findOne({ username: applicantName })
+        .select('username display federation banned')
+        .lean();
+      if (!applicant || applicant.banned) {
+        await Federation.updateOne(
+          { _id: doc._id },
+          { $pull: { requests: { username: applicantName } } }
+        );
+        return res.status(409).json({ ok: false, error: 'applicant_unavailable' });
+      }
+
+      const membership = membershipOf(applicant);
+      if (membership) {
+        // They went and joined somewhere else while the request sat waiting.
+        await Federation.updateOne(
+          { _id: doc._id },
+          { $pull: { requests: { username: applicantName } } }
+        );
+        return res.status(409).json({
+          ok: false,
+          error: membership.id === String(doc._id) ? 'already_member' : 'already_in_federation',
+          membership
+        });
+      }
+
       const joined = await Federation.findOneAndUpdate(
-        { _id: req.params.id, 'members.username': { $ne: username } },
+        { _id: doc._id, 'members.username': { $ne: applicantName } },
         {
           $push: {
             members: {
-              username,
-              display: user.display || username,
+              username: applicantName,
+              display: applicant.display || applicantName,
               roleId: 'member',
               joinedAt: new Date()
             }
@@ -912,34 +1099,81 @@ function createFederationRouter({ Federation, User, requireUser }) {
         { new: true }
       );
 
-      if (!joined) {
-        const exists = await Federation.findById(req.params.id).select('_id').lean().catch(() => null);
-        return res.status(exists ? 409 : 404).json({
-          ok: false,
-          error: exists ? 'already_member' : 'not_found'
-        });
-      }
+      if (!joined) return res.status(409).json({ ok: false, error: 'already_member' });
 
       try {
         await User.updateOne(
-          { username },
+          { username: applicantName },
           { $set: { federation: membershipPatch(joined, 'member') } }
         );
       } catch (err) {
-        // Undo the membership rather than leaving a member off the roster.
+        // Put the roster back rather than admitting someone we cannot point at.
         await Federation.updateOne(
           { _id: joined._id },
-          { $pull: { members: { username } } }
+          { $pull: { members: { username: applicantName } } }
         ).catch(() => {});
         throw err;
       }
 
-      return res.json({ ok: true, federation: await view(joined, username) });
+      await Federation.updateOne(
+        { _id: joined._id },
+        { $pull: { requests: { username: applicantName } } }
+      );
+      await notifyDecision(
+        joined,
+        applicantName,
+        'Your request to join ' + joined.name + ' was approved. Welcome.'
+      );
+
+      return res.json({
+        ok: true,
+        approved: applicantName,
+        federation: await afterDecision(joined, req.username)
+      });
     } catch (err) {
       if (err && (err.name === 'CastError' || err.name === 'BSONError')) {
         return res.status(404).json({ ok: false, error: 'not_found' });
       }
-      console.error('federation join error:', err?.message || err);
+      console.error('federation request approve error:', err?.message || err);
+      return res.status(500).json({ ok: false, error: 'server_error' });
+    }
+  });
+
+  // ---------- reject a join request ----------
+  // POST /api/federations/:id/requests/:username/reject
+  router.post('/:id/requests/:username/reject', requireUser, async (req, res) => {
+    try {
+      const doc = await Federation.findById(req.params.id).lean().catch(() => null);
+      if (!doc) return res.status(404).json({ ok: false, error: 'not_found' });
+      if (!canManageFederation(doc, req.username)) {
+        return res.status(403).json({ ok: false, error: 'not_a_manager' });
+      }
+
+      const applicantName = String(req.params.username || '');
+      if (!hasJoinRequest(doc, applicantName)) {
+        return res.status(404).json({ ok: false, error: 'request_not_found' });
+      }
+
+      await Federation.updateOne(
+        { _id: doc._id },
+        { $pull: { requests: { username: applicantName } } }
+      );
+      await notifyDecision(
+        doc,
+        applicantName,
+        'Your request to join ' + doc.name + ' was declined.'
+      );
+
+      return res.json({
+        ok: true,
+        rejected: applicantName,
+        federation: await afterDecision(doc, req.username)
+      });
+    } catch (err) {
+      if (err && (err.name === 'CastError' || err.name === 'BSONError')) {
+        return res.status(404).json({ ok: false, error: 'not_found' });
+      }
+      console.error('federation request reject error:', err?.message || err);
       return res.status(500).json({ ok: false, error: 'server_error' });
     }
   });
@@ -1022,6 +1256,8 @@ module.exports = {
   roleIndex,
   isAdminRole,
   canManageFederation,
+  joinRequests,
+  hasJoinRequest,
   serializeFederation,
   serializeMessages,
   membershipOf,

@@ -59,6 +59,9 @@
     role_not_found: 'That role no longer exists.',
     built_in_role: 'Owner, Co-owner and Member are built in and cannot be changed.',
     role_in_use: 'Someone still holds that role — change their role first.',
+    already_requested: 'You have already asked to join — wait for the owner to answer.',
+    request_not_found: 'That request is no longer waiting.',
+    applicant_unavailable: 'That member can no longer be added.',
     not_allowed: 'That account cannot use federations.',
     server_error: 'Something went wrong — try again in a moment.'
   };
@@ -574,6 +577,7 @@
         '<p class="small muted">' + (viewerIsOwner
           ? 'You run this federation: hand out roles, or remove a member.'
           : 'You are an admin here. The owner manages other admins.') + '</p>' +
+        requestBlock(fed) +
         '<div class="mcf-fed-manage-list">' + rows + '</div>' +
         '<div class="mcf-row-actions">' +
           '<button type="button" class="ghost small-btn" id="mcfFedRefreshMembers">Refresh</button>' +
@@ -598,11 +602,85 @@
         var username = button.dataset.fedLeave;
         arm(button, 'Leave', 'Confirm leave', function () { removeMember(username); });
       });
+
+      panel.querySelectorAll('[data-fed-approve]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          decideRequest(button.dataset.fedApprove, 'approve');
+        });
+      });
+      panel.querySelectorAll('[data-fed-reject]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          decideRequest(button.dataset.fedReject, 'reject');
+        });
+      });
     }
 
     function manageStatus(message) {
       var el = box.body.querySelector('#mcfFedManageStatus');
       if (el) el.textContent = message || '';
+    }
+
+    /** People waiting to be let in — the same requests the owner's DM lists. */
+    function requestBlock(fed) {
+      var requests = fed.requests || [];
+      if (!requests.length) return '';
+
+      var rows = requests.map(function (request) {
+        var username = request.username;
+        return '<div class="mcf-fed-manage-row mcf-fed-request-row">' +
+          '<div class="mcf-fed-manage-person">' +
+            '<strong>@' + MCF.escapeHtml(username) + '</strong>' +
+            '<span class="mcf-fed-presence">asked ' +
+              MCF.escapeHtml(MCF.agoLabel(request.requestedAt)) + '</span>' +
+          '</div>' +
+          '<div class="mcf-fed-manage-actions">' +
+            '<button type="button" class="small-btn" data-fed-approve="' +
+              MCF.escapeHtml(username) + '">Approve</button>' +
+            '<button type="button" class="ghost small-btn" data-fed-reject="' +
+              MCF.escapeHtml(username) + '">Reject</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+
+      return '<div class="mcf-fed-requests">' +
+        '<h4 class="mcf-fed-requests-title">Join requests' +
+          '<span class="mcf-fed-tag">' + requests.length + '</span></h4>' +
+        rows +
+      '</div>';
+    }
+
+    /** Approve (they join) or reject (they are told, and may ask again). */
+    function decideRequest(username, decision) {
+      if (state.busy) return;
+      state.busy = true;
+      manageStatus(decision === 'approve' ? 'Approving…' : 'Rejecting…');
+
+      MCF.postJSON(
+        '/api/federations/' + encodeURIComponent(state.federation.id) +
+          '/requests/' + encodeURIComponent(username) + '/' + decision,
+        {}
+      )
+        .then(function (data) {
+          state.busy = false;
+          if (!data || !data.ok) {
+            var message = errorText(data && data.error);
+            manageStatus(message);
+            MCF.toast(message, 'error');
+            refresh();
+            return;
+          }
+          apply(data.federation);
+          MCF.toast(
+            decision === 'approve'
+              ? '@' + username + ' joined ' + state.federation.name
+              : 'Request from @' + username + ' rejected',
+            'success'
+          );
+        })
+        .catch(function () {
+          state.busy = false;
+          manageStatus('Could not answer that request.');
+        });
     }
 
     function setRole(select, username, roleId) {
@@ -1060,6 +1138,7 @@
       // underneath, with the Join button where the roster keeps its actions.
       var rows = (data.federations || []).map(function (federation) {
         var mine = membership && membership.id === federation.id;
+        var requested = !!federation.requested;
         var image = federation.imageUrl
           ? '<img class="mcf-fed-roster-thumb" src="' + MCF.escapeHtml(federation.imageUrl) + '" alt="">'
           : '<span class="mcf-fed-roster-thumb mcf-fed-hero-empty" aria-hidden="true">' +
@@ -1080,9 +1159,11 @@
           '<div class="mcf-fed-roster-actions">' +
             (mine
               ? '<span class="mcf-fed-tag">Yours</span>'
-              : '<button type="button" class="small-btn" data-join="' +
-                MCF.escapeHtml(federation.id) + '"' +
-                (membership ? ' disabled' : '') + '>Join</button>') +
+              : (requested
+                ? '<span class="mcf-fed-tag">Requested</span>'
+                : '<button type="button" class="small-btn" data-join="' +
+                  MCF.escapeHtml(federation.id) + '"' +
+                  (membership ? ' disabled' : '') + '>Join</button>')) +
           '</div>' +
         '</div>';
       }).join('');
@@ -1109,11 +1190,15 @@
     });
   }
 
+  /**
+   * Join is a request. The owner gets a DM they can approve or reject from,
+   * and Manage → Members shows the same pending list to every manager.
+   */
   function join(button, box) {
     var id = button.dataset.join;
     var status = box.body.querySelector('#mcfFedJoinStatus');
     button.disabled = true;
-    if (status) status.textContent = 'Joining…';
+    if (status) status.textContent = 'Sending your request…';
 
     MCF.postJSON('/api/federations/' + encodeURIComponent(id) + '/join', {}).then(function (data) {
       if (!data || !data.ok) {
@@ -1124,10 +1209,11 @@
         return;
       }
 
-      cacheMembership(data.federation);
       box.close();
-      MCF.toast('You joined ' + data.federation.name, 'success');
-      showFederation(data.federation);
+      MCF.toast(
+        'Request sent to @' + data.owner + ' — they will approve or reject it',
+        'success'
+      );
     });
   }
 

@@ -1592,6 +1592,14 @@ const federationMemberSchema = new mongoose.Schema({
   joinedAt: { type: Date, default: Date.now }
 }, { _id: false });
 
+// Someone asking to join. Membership is not granted until an owner or one of
+// the federation's admins approves the request; see federations.js.
+const federationRequestSchema = new mongoose.Schema({
+  username: { type: String, required: true },
+  display: { type: String, default: '' },
+  requestedAt: { type: Date, default: Date.now }
+}, { _id: false });
+
 const federationSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   nameKey: { type: String, required: true },
@@ -1601,6 +1609,7 @@ const federationSchema = new mongoose.Schema({
   owner: { type: String, required: true },
   roles: { type: [federationRoleSchema], default: [] },
   members: { type: [federationMemberSchema], default: [] },
+  requests: { type: [federationRequestSchema], default: [] },
   messages: { type: [federationMessageSchema], default: [] }
 }, { timestamps: true });
 // One federation per owner; one federation per name (case-insensitive).
@@ -1740,6 +1749,11 @@ const dmSchema = new mongoose.Schema({
   // challenge / matchApproval system notices carry the id of the thing to act on
   challengeId: { type: String },
   matchId: { type: String },
+  // a federation join request: which federation, its name for the notice, and
+  // the member asking to get in
+  federationId: { type: String },
+  federationName: { type: String },
+  applicant: { type: String },
   // system / approval / normal
   type: { type: String, default: "normal" },
   // values:
@@ -1749,6 +1763,7 @@ const dmSchema = new mongoose.Schema({
   // "storyApproval" → approval request DM
   // "challenge"     → match challenge notice (challengeId)
   // "matchApproval" → logged-match confirmation (matchId)
+  // "federationJoin" → a request to join a federation (federationId, applicant)
   // "system"        → system notifications
 
   // true once the author has edited the text (see canEditDM for the window)
@@ -4756,7 +4771,11 @@ app.use('/api/lfg', lfg.router);
 app.use('/api/federations', createFederationRouter({
   Federation,
   User,
-  requireUser: sessions.requireUser
+  requireUser: sessions.requireUser,
+  // A join request is delivered as a DM to the owner, then answered from it.
+  DM,
+  deliverToUser: (...args) => deliverToUser(...args),
+  forwardDMToDiscord
 }).router);
 
 // ---------- CHALLENGES ----------

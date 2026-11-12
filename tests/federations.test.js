@@ -234,6 +234,46 @@ test('built-in roles come first and custom roles cannot shadow them', () => {
   assert.deepEqual(BUILT_IN_ROLES.filter(role => role.admin).map(role => role.id), ['owner', 'co-owner']);
 });
 
+test('join requests belong to the managers, and the applicant sees only their own flag', () => {
+  const board = doc({
+    requests: [
+      {
+        username: 'hopeful',
+        display: 'Hopeful',
+        requestedAt: new Date('2026-01-03T00:00:00Z')
+      }
+    ]
+  });
+
+  const ownerView = serializeFederation(board, 'owner');
+  assert.equal(ownerView.requests.length, 1);
+  assert.equal(ownerView.requests[0].username, 'hopeful');
+  assert.equal(ownerView.requests[0].requestedAt.toISOString(), '2026-01-03T00:00:00.000Z');
+  assert.equal(ownerView.requested, false, 'the owner is not waiting on themselves');
+
+  const memberView = serializeFederation(board, 'rookie');
+  assert.deepEqual(memberView.requests, [], 'a plain member never sees the waiting list');
+  assert.equal(memberView.requested, false);
+
+  const applicantView = serializeFederation(board, 'hopeful');
+  assert.deepEqual(applicantView.requests, []);
+  assert.equal(applicantView.requested, true, 'but they know their request is pending');
+  assert.deepEqual(applicantView.members, [], 'and still cannot see the roster');
+
+  assert.equal(serializeFederation(board, 'stranger').requested, false);
+});
+
+test('both DM clients can answer a join request', () => {
+  const desktop = read('public', 'js', 'pm.js');
+  const mobile = read('public', 'js', 'mobile.js');
+  for (const source of [desktop, mobile]) {
+    assert.match(source, /federationJoin/, 'the DM renderer knows the type');
+    assert.match(source, /fedJoinApprove/);
+    assert.match(source, /fedJoinReject/);
+    assert.match(source, /\/requests\//, 'and posts the decision to the request route');
+  }
+});
+
 test('a summary carries no roster and no bylaws', () => {
   const summary = federationSummary(doc());
   assert.deepEqual(Object.keys(summary).sort(), [
@@ -712,6 +752,8 @@ function federationFixture(overrides = {}) {
       }
     ],
     memberCount: 2,
+    requests: [],
+    requested: false,
     isMember: true,
     isOwner: true,
     canManage: true,
@@ -1153,29 +1195,13 @@ test('Join opens a popup with every federation — image, name, description, Joi
   }
 });
 
-test('pressing Join on a row joins that federation', async () => {
+test('pressing Join sends the owner a request instead of joining outright', async () => {
   const list = joinList();
-  const joined = {
-    id: 'fed1',
-    name: 'Iron Ring Federation',
-    owner: 'boss',
-    description: 'A heavyweight promotion for men who like their matches long.',
-    rules: '',
-    imageUrl: '',
-    roles: [],
-    members: [],
-    memberCount: 13,
-    isMember: true,
-    isOwner: false,
-    canManage: false,
-    viewerRole: 'member'
-  };
-
   const client = startClient({
     mine: list,
     create: (body, url) => {
       assert.equal(url, '/api/federations/fed1/join');
-      return { ok: true, federation: joined };
+      return { ok: true, requested: true, owner: 'boss', name: 'Iron Ring Federation' };
     }
   });
 
@@ -1187,15 +1213,33 @@ test('pressing Join on a row joins that federation', async () => {
     await sleep(20);
 
     const post = client.calls.find(call => call.method === 'POST');
-    assert.ok(post, 'the join was posted');
+    assert.ok(post, 'the request was posted');
     assert.equal(post.url, '/api/federations/fed1/join');
 
-    // The join popup closes and the federation's own card opens.
+    // Nothing is joined yet: the list closes and no membership is cached.
     await sleep(250);
     const titles = Array.from(client.document.querySelectorAll('.mcf-modal-title'))
       .map(title => title.textContent);
     assert.ok(!titles.includes('Join a federation'), 'the join list closed');
-    assert.ok(titles.includes('Iron Ring Federation'), 'the joined federation opened');
+    assert.ok(!titles.includes('Iron Ring Federation'), 'no federation card — not a member yet');
+  } finally {
+    client.dom.window.close();
+  }
+});
+
+test('a federation already asked about is tagged Requested, not Join', async () => {
+  const list = joinList();
+  list.federations[0].requested = true;
+
+  const client = startClient({ mine: list });
+  try {
+    client.window.MCFFederations.openJoin();
+    await sleep(20);
+
+    const rows = client.document.querySelectorAll('.mcf-fed-join-row');
+    assert.equal(rows[0].querySelector('[data-join="fed1"]'), null, 'no button once asked');
+    assert.match(rows[0].textContent, /Requested/);
+    assert.ok(rows[1].querySelector('[data-join="fed2"]'), 'other federations still joinable');
   } finally {
     client.dom.window.close();
   }
@@ -1250,6 +1294,90 @@ test('an empty join list points the member at Create', async () => {
       .map(title => title.textContent);
     assert.ok(titles.includes('Register a federation'), 'the join list hands over to Create');
     assert.ok(!titles.includes('Join a federation'), 'and the join list closes');
+  } finally {
+    client.dom.window.close();
+  }
+});
+
+
+test('Manage lists join requests and approves one', async () => {
+  const waiting = federationFixture({
+    requests: [
+      { username: 'hopeful', display: 'Hopeful', requestedAt: new Date(Date.now() - 3600 * 1000).toISOString() }
+    ]
+  });
+  const approved = federationFixture({
+    requests: [],
+    members: federationFixture().members.concat([
+      { username: 'hopeful', display: 'Hopeful', roleId: 'member', online: false, lastSeenAt: null }
+    ]),
+    memberCount: 3
+  });
+
+  const client = startClient({
+    mine: { ok: true, federation: waiting },
+    create: (body, url) => {
+      assert.equal(url, '/api/federations/fed1/requests/hopeful/approve');
+      return { ok: true, approved: 'hopeful', federation: approved };
+    }
+  });
+
+  try {
+    client.window.MCFFederations.openManage();
+    await sleep(20);
+
+    const panel = client.document.querySelector('#mcfFedManagePanel');
+    assert.match(panel.textContent, /Join requests/);
+    const row = panel.querySelector('.mcf-fed-request-row');
+    assert.ok(row, 'the request has its own row');
+    assert.match(row.textContent, /@hopeful/);
+    assert.match(row.textContent, /asked 1h ago/);
+
+    row.querySelector('[data-fed-approve="hopeful"]').click();
+    await sleep(20);
+
+    const post = client.calls.find(call => call.method === 'POST');
+    assert.equal(post.url, '/api/federations/fed1/requests/hopeful/approve');
+
+    const after = client.document.querySelector('#mcfFedManagePanel');
+    assert.doesNotMatch(after.textContent, /Join requests/, 'the request block is gone');
+    assert.match(after.textContent, /@hopeful/, 'and they are on the roster now');
+    assert.equal(after.querySelectorAll('.mcf-fed-manage-row').length, 3);
+  } finally {
+    client.dom.window.close();
+  }
+});
+
+test('Manage can reject a join request', async () => {
+  const waiting = federationFixture({
+    requests: [
+      { username: 'hopeful', display: 'Hopeful', requestedAt: new Date().toISOString() }
+    ]
+  });
+  const rejected = federationFixture({ requests: [] });
+
+  const client = startClient({
+    mine: { ok: true, federation: waiting },
+    create: (body, url) => {
+      assert.equal(url, '/api/federations/fed1/requests/hopeful/reject');
+      return { ok: true, rejected: 'hopeful', federation: rejected };
+    }
+  });
+
+  try {
+    client.window.MCFFederations.openManage();
+    await sleep(20);
+
+    client.document.querySelector('[data-fed-reject="hopeful"]').click();
+    await sleep(20);
+
+    const post = client.calls.find(call => call.method === 'POST');
+    assert.equal(post.url, '/api/federations/fed1/requests/hopeful/reject');
+
+    const panel = client.document.querySelector('#mcfFedManagePanel');
+    assert.doesNotMatch(panel.textContent, /Join requests/);
+    assert.doesNotMatch(panel.textContent, /@hopeful/, 'they were never added');
+    assert.equal(panel.querySelectorAll('.mcf-fed-manage-row').length, 2);
   } finally {
     client.dom.window.close();
   }

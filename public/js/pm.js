@@ -561,6 +561,25 @@ function renderPMHistory(targetUsername, messages, options) {
       `;
     }
 
+    // Somebody wants into a federation: the owner answers it right here.
+    if (m.type === "federationJoin") {
+      div.className = "message system";
+      const fedId = m.federationId || "";
+      const applicant = m.applicant || m.from || "";
+      const canAnswer = m.to === s.username && m.from !== s.username && !!fedId && !!applicant;
+      div.innerHTML = `
+        <div class="system-msg">
+          ${escapeHtml(m.text || "")}
+          ${canAnswer
+            ? `<div class="fedJoinActions">
+                 <button class="small-btn fedJoinApprove" data-fed-id="${escapeHtml(fedId)}" data-fed-user="${escapeHtml(applicant)}">Approve</button>
+                 <button class="small-btn ghost fedJoinReject" data-fed-id="${escapeHtml(fedId)}" data-fed-user="${escapeHtml(applicant)}">Reject</button>
+               </div>`
+            : ""}
+        </div>
+      `;
+    }
+
     if (m.imageUrl) {
       const img = document.createElement("img");
       img.src = pmImgSrc(m.imageUrl);
@@ -685,6 +704,36 @@ document.addEventListener("click", async (e) => {
       : "Match declined — nothing was counted";
   } else {
     button.disabled = false;
+  }
+});
+
+// Answer a federation join request straight from the DM the owner received.
+document.addEventListener("click", async (e) => {
+  const button = e.target.closest && e.target.closest("button");
+  if (!button) return;
+  if (!button.classList.contains("fedJoinApprove") && !button.classList.contains("fedJoinReject")) return;
+
+  const federationId = button.dataset.fedId;
+  const applicant = button.dataset.fedUser;
+  if (!federationId || !applicant) return;
+
+  const decision = button.classList.contains("fedJoinApprove") ? "approve" : "reject";
+  button.disabled = true;
+
+  const res = await fetch(
+    `/api/federations/${encodeURIComponent(federationId)}/requests/` +
+      `${encodeURIComponent(applicant)}/${decision}`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }
+  );
+  const data = await res.json().catch(() => null);
+
+  if (data && data.ok) {
+    button.parentElement.innerHTML = decision === "approve"
+      ? `@${escapeHtml(applicant)} is in — say hello.`
+      : `Request from @${escapeHtml(applicant)} rejected.`;
+  } else {
+    button.disabled = false;
+    button.textContent = data && data.error === "already_member" ? "Already in" : "Try again";
   }
 });
 

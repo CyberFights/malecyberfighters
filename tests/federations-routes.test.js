@@ -30,7 +30,7 @@ function query(value) {
 }
 
 function createStore() {
-  const state = { federations: [], users: new Map(), nextId: 1 };
+  const state = { federations: [], users: new Map(), nextId: 1, dms: [], deliveries: [] };
 
   function memberMatches(doc, entry) {
     if (!entry || !entry.$ne) return true;
@@ -89,6 +89,16 @@ function createStore() {
 
       if (update.$push && update.$push.roles) {
         doc.roles = (doc.roles || []).concat([clone(update.$push.roles)]);
+      }
+
+      if (update.$push && update.$push.requests) {
+        doc.requests = (doc.requests || []).concat([clone(update.$push.requests)]);
+      }
+
+      if (update.$pull && update.$pull.requests) {
+        doc.requests = (doc.requests || []).filter(
+          request => request.username !== update.$pull.requests.username
+        );
       }
 
       if (update.$pull && update.$pull.members) {
@@ -175,7 +185,15 @@ function createStore() {
     }
   };
 
-  return { state, Federation, User };
+  const DM = {
+    create: async body => {
+      const dm = { _id: 'dm' + state.nextId++, ...clone(body) };
+      state.dms.push(dm);
+      return clone(dm);
+    }
+  };
+
+  return { state, Federation, User, DM };
 }
 
 /* ---------------------------------------------------------------
@@ -197,7 +215,11 @@ async function startApi(store) {
   app.use('/api/federations', createFederationRouter({
     Federation: store.Federation,
     User: store.User,
-    requireUser
+    requireUser,
+    DM: store.DM,
+    deliverToUser: (username, event, payload) => {
+      store.state.deliveries.push({ username, event, payload });
+    }
   }).router);
 
   const server = await new Promise(resolve => {
@@ -239,6 +261,25 @@ function registration(overrides = {}) {
     imageUrl: 'https://i.ibb.co/abc123/ring.png',
     ...overrides
   };
+}
+
+/* ---------------------------------------------------------------
+   Asking, then being let in — the normal route into a federation
+--------------------------------------------------------------- */
+
+async function requestToJoin(api, id, user) {
+  return api.call('POST', `/api/federations/${id}/join`, { user, body: {} });
+}
+
+async function approveJoin(api, id, user, approver = 'boss') {
+  const asked = await requestToJoin(api, id, user);
+  assert.equal(asked.status, 202, `${user} should be able to ask`);
+  const res = await api.call('POST', `/api/federations/${id}/requests/${user}/approve`, {
+    user: approver,
+    body: {}
+  });
+  assert.equal(res.status, 200, `${user} should be approved`);
+  return res;
 }
 
 /* ---------------------------------------------------------------
@@ -437,7 +478,7 @@ test('the Join list shows every federation and your own membership', async () =>
   }
 });
 
-test('joining adds the member to the roster and to their own record', async () => {
+test('Join asks the owner instead of letting anyone in', async () => {
   const store = createStore();
   addUser(store, 'boss');
   addUser(store, 'rookie');
@@ -446,11 +487,66 @@ test('joining adds the member to the roster and to their own record', async () =
     const created = await api.call('POST', '/api/federations', { user: 'boss', body: registration() });
     const id = created.body.federation.id;
 
-    const joined = await api.call('POST', `/api/federations/${id}/join`, { user: 'rookie', body: {} });
-    assert.equal(joined.status, 200);
-    assert.equal(joined.body.federation.memberCount, 2);
+    const asked = await requestToJoin(api, id, 'rookie');
+    assert.equal(asked.status, 202);
+    assert.equal(asked.body.requested, true);
+    assert.equal(asked.body.owner, 'boss');
+
+    // Nothing has changed on the roster yet…
+    const mine = await api.call('GET', '/api/federations/mine', { user: 'boss' });
+    assert.equal(mine.body.federation.memberCount, 1);
+    assert.equal(mine.body.federation.requests.length, 1);
+    assert.equal(mine.body.federation.requests[0].username, 'rookie');
+    assert.equal(store.state.users.get('rookie').federation, null, 'no membership pointer yet');
+
+    // …and the member sees their request waiting.
+    const list = await api.call('GET', '/api/federations', { user: 'rookie' });
+    assert.equal(list.body.federations[0].requested, true);
+    assert.equal(list.body.federations[0].memberCount, 1);
+
+    // Asking twice is refused rather than stacking rows.
+    const again = await requestToJoin(api, id, 'rookie');
+    assert.equal(again.status, 409);
+    assert.equal(again.body.error, 'already_requested');
+  } finally {
+    await api.close();
+  }
+});
+
+test('the request lands in the owner’s DMs, where it can be approved', async () => {
+  const store = createStore();
+  addUser(store, 'boss');
+  addUser(store, 'rookie');
+  const api = await startApi(store);
+  try {
+    const created = await api.call('POST', '/api/federations', { user: 'boss', body: registration() });
+    const id = created.body.federation.id;
+    await requestToJoin(api, id, 'rookie');
+
+    const dm = store.state.dms.find(row => row.type === 'federationJoin');
+    assert.ok(dm, 'a DM was written');
+    assert.equal(dm.from, 'rookie', 'it comes from the applicant, so it lives in their conversation');
+    assert.equal(dm.to, 'boss', 'and goes to the owner');
+    assert.equal(dm.federationId, id);
+    assert.equal(dm.federationName, 'Iron Ring Federation');
+    assert.equal(dm.applicant, 'rookie');
+    assert.match(dm.text, /@rookie asked to join Iron Ring Federation/);
+
+    const live = store.state.deliveries.find(row => row.username === 'boss');
+    assert.ok(live, 'the open DM window hears about it');
+    assert.equal(live.event, 'privateMessage');
+    assert.equal(live.payload.type, 'federationJoin');
+
+    const approved = await api.call('POST', `/api/federations/${id}/requests/rookie/approve`, {
+      user: 'boss',
+      body: {}
+    });
+    assert.equal(approved.status, 200);
+    assert.equal(approved.body.approved, 'rookie');
+    assert.equal(approved.body.federation.memberCount, 2);
+    assert.deepEqual(approved.body.federation.requests, [], 'the request is consumed');
     assert.deepEqual(
-      joined.body.federation.members.map(member => member.username).sort(),
+      approved.body.federation.members.map(member => member.username).sort(),
       ['boss', 'rookie']
     );
 
@@ -458,10 +554,124 @@ test('joining adds the member to the roster and to their own record', async () =
     assert.equal(String(rookie.federation.id), String(id));
     assert.equal(rookie.federation.role, 'member');
 
-    // A second tap is refused rather than adding a duplicate row.
-    const again = await api.call('POST', `/api/federations/${id}/join`, { user: 'rookie', body: {} });
-    assert.equal(again.status, 409);
-    assert.equal(again.body.error, 'already_member');
+    const welcome = store.state.dms.find(row => row.to === 'rookie' && /approved/.test(row.text));
+    assert.ok(welcome, 'the applicant is told they got in');
+  } finally {
+    await api.close();
+  }
+});
+
+test('a rejected applicant is not added, is told so, and may ask again', async () => {
+  const store = createStore();
+  addUser(store, 'boss');
+  addUser(store, 'rookie');
+  const api = await startApi(store);
+  try {
+    const created = await api.call('POST', '/api/federations', { user: 'boss', body: registration() });
+    const id = created.body.federation.id;
+    await requestToJoin(api, id, 'rookie');
+
+    const rejected = await api.call('POST', `/api/federations/${id}/requests/rookie/reject`, {
+      user: 'boss',
+      body: {}
+    });
+    assert.equal(rejected.status, 200);
+    assert.equal(rejected.body.rejected, 'rookie');
+    assert.equal(rejected.body.federation.memberCount, 1, 'the roster did not grow');
+    assert.deepEqual(rejected.body.federation.requests, []);
+    assert.equal(store.state.users.get('rookie').federation, null);
+
+    const notice = store.state.dms.find(row => row.to === 'rookie' && /declined/.test(row.text));
+    assert.ok(notice, 'the applicant is told they were declined');
+
+    // Rejection is not a ban: they can ask again.
+    const retry = await requestToJoin(api, id, 'rookie');
+    assert.equal(retry.status, 202);
+  } finally {
+    await api.close();
+  }
+});
+
+test('only a manager may approve or reject, and only a real request', async () => {
+  const store = createStore();
+  addUser(store, 'boss');
+  addUser(store, 'co');
+  addUser(store, 'rookie');
+  addUser(store, 'outsider');
+  const api = await startApi(store);
+  try {
+    const created = await api.call('POST', '/api/federations', { user: 'boss', body: registration() });
+    const id = created.body.federation.id;
+    await approveJoin(api, id, 'co');
+    await api.call('POST', `/api/federations/${id}/members/co/role`, {
+      user: 'boss',
+      body: { roleId: 'co-owner' }
+    });
+    await requestToJoin(api, id, 'rookie');
+
+    const byMember = await api.call('POST', `/api/federations/${id}/requests/rookie/approve`, {
+      user: 'rookie',
+      body: {}
+    });
+    assert.equal(byMember.status, 403);
+    assert.equal(byMember.body.error, 'not_a_manager');
+
+    const byOutsider = await api.call('POST', `/api/federations/${id}/requests/rookie/reject`, {
+      user: 'outsider',
+      body: {}
+    });
+    assert.equal(byOutsider.status, 403);
+
+    // A co-owner (admin) may decide too.
+    const byAdmin = await api.call('POST', `/api/federations/${id}/requests/rookie/approve`, {
+      user: 'co',
+      body: {}
+    });
+    assert.equal(byAdmin.status, 200);
+    assert.equal(byAdmin.body.federation.memberCount, 3);
+
+    const ghost = await api.call('POST', `/api/federations/${id}/requests/nobody/approve`, {
+      user: 'boss',
+      body: {}
+    });
+    assert.equal(ghost.status, 404);
+    assert.equal(ghost.body.error, 'request_not_found');
+  } finally {
+    await api.close();
+  }
+});
+
+test('an applicant who joined elsewhere while waiting is not granted twice', async () => {
+  const store = createStore();
+  addUser(store, 'boss');
+  addUser(store, 'other');
+  addUser(store, 'rookie');
+  const api = await startApi(store);
+  try {
+    const first = await api.call('POST', '/api/federations', {
+      user: 'boss',
+      body: registration()
+    });
+    const second = await api.call('POST', '/api/federations', {
+      user: 'other',
+      body: registration({ name: 'Steel Cage Club' })
+    });
+    const id = first.body.federation.id;
+    const otherId = second.body.federation.id;
+
+    await requestToJoin(api, id, 'rookie');
+    await approveJoin(api, otherId, 'rookie', 'other');
+
+    const late = await api.call('POST', `/api/federations/${id}/requests/rookie/approve`, {
+      user: 'boss',
+      body: {}
+    });
+    assert.equal(late.status, 409);
+    assert.equal(late.body.error, 'already_in_federation');
+
+    const mine = await api.call('GET', '/api/federations/mine', { user: 'boss' });
+    assert.equal(mine.body.federation.memberCount, 1);
+    assert.deepEqual(mine.body.federation.requests, [], 'the stale request is cleared');
   } finally {
     await api.close();
   }
@@ -523,7 +733,7 @@ test('the chatroom is members only, and messages come back newest-last', async (
   try {
     const created = await api.call('POST', '/api/federations', { user: 'boss', body: registration() });
     const id = created.body.federation.id;
-    await api.call('POST', `/api/federations/${id}/join`, { user: 'rookie', body: {} });
+    await approveJoin(api, id, 'rookie');
 
     const denied = await api.call('GET', `/api/federations/${id}/messages`, { user: 'outsider' });
     assert.equal(denied.status, 403);
@@ -568,8 +778,8 @@ async function setupManagedFederation() {
   const created = await api.call('POST', '/api/federations', { user: 'boss', body: registration() });
   const id = created.body.federation.id;
 
-  await api.call('POST', `/api/federations/${id}/join`, { user: 'co', body: {} });
-  await api.call('POST', `/api/federations/${id}/join`, { user: 'rookie', body: {} });
+  await approveJoin(api, id, 'co');
+  await approveJoin(api, id, 'rookie');
   await api.call('POST', `/api/federations/${id}/members/co/role`, {
     user: 'boss',
     body: { roleId: 'co-owner' }
