@@ -178,6 +178,7 @@ function makeModels() {
   const stories = new Collection('stories');
   const users = new Collection('users');
   const dms = new Collection('dms');
+  const federations = new Collection('federations');
 
   const Story = {
     create: fields => stories.create(fields),
@@ -204,7 +205,15 @@ function makeModels() {
     _all: () => dms.all()
   };
 
-  return { Story, User, DM, stories, users, dms, makeId };
+  const Federation = {
+    findById: id => federations.findById(id),
+    findOne: query => federations.findOne(query),
+    find: query => federations.find(query),
+    _all: () => federations.all(),
+    _add: fields => federations.create(fields)
+  };
+
+  return { Story, User, DM, Federation, stories, users, dms, federations, makeId };
 }
 
 module.exports = { makeModels, makeId, matches };

@@ -366,6 +366,12 @@
     return (federation.roles || []).filter(function (role) { return role.id === roleId; })[0] || null;
   }
 
+  /** "3 points" — one per published story credited to the federation. */
+  function federationPoints(federation) {
+    var points = Math.max(0, Number(federation && federation.points) || 0);
+    return points + (points === 1 ? ' point' : ' points');
+  }
+
   function roleName(federation, roleId) {
     var match = roleFor(federation, roleId);
     return match ? match.name : (roleId || 'Member');
@@ -1065,7 +1071,8 @@
         '<div>' +
           '<h4 class="mcf-fed-name">' + MCF.escapeHtml(federation.name) + '</h4>' +
           '<p class="small muted">Run by @' + MCF.escapeHtml(federation.owner) + ' · ' +
-            federation.memberCount + (federation.memberCount === 1 ? ' member' : ' members') + '</p>' +
+            federation.memberCount + (federation.memberCount === 1 ? ' member' : ' members') + ' · ' +
+            federationPoints(federation) + '</p>' +
           '<p class="small muted">' +
             (federation.isOwner
               ? 'You run this federation.'

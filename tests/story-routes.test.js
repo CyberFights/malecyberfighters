@@ -675,3 +675,116 @@ test('the loaded window is capped, and says when it was cut short', async () => 
     await api.close();
   }
 });
+
+/* ============================================================
+   FEDERATION CREDIT (1 point per published story)
+============================================================ */
+
+const addFederation = (api, { name, owner, members }) => api.models.Federation._add({ name, owner, members });
+
+test('a story can be credited to the author’s federation', async () => {
+  const api = await startApi();
+  try {
+    const fed = await addFederation(api, {
+      name: 'Iron Ring Federation',
+      owner: 'alice',
+      members: [{ username: 'alice' }, { username: 'bob' }]
+    });
+
+    const res = await api.save({ federationId: String(fed._id) });
+    assert.equal(res.status, 200);
+
+    const story = api.models.Story._all()[0];
+    assert.equal(story.federation.id, String(fed._id));
+    assert.equal(story.federation.name, 'Iron Ring Federation');
+
+    // Not choosing one is fine: the story belongs to the two members only.
+    await api.save({ title: 'Uncredited' });
+    const plain = api.models.Story._all()[1];
+    assert.equal(plain.federation, null);
+  } finally {
+    await api.close();
+  }
+});
+
+test('a story cannot be credited to a federation the author is not in', async () => {
+  const api = await startApi();
+  try {
+    const other = await addFederation(api, {
+      name: 'Steel Cage Club',
+      owner: 'bob',
+      members: [{ username: 'bob' }]
+    });
+
+    const notMember = await api.save({ federationId: String(other._id) });
+    assert.equal(notMember.status, 400);
+    assert.equal(notMember.json.error, 'not_in_federation');
+    assert.equal(api.models.Story._all().length, 0, 'nothing was written');
+
+    const badId = await api.save({ federationId: 'nonsense' });
+    assert.equal(badId.status, 400);
+    assert.equal(badId.json.error, 'bad_federation');
+
+    const missing = await api.save({ federationId: '000000000000000000000000' });
+    assert.equal(missing.status, 400);
+    assert.equal(missing.json.error, 'federation_not_found');
+  } finally {
+    await api.close();
+  }
+});
+
+test('editing a story can move or remove the federation credit', async () => {
+  const api = await startApi();
+  try {
+    const first = await addFederation(api, {
+      name: 'Iron Ring Federation',
+      owner: 'alice',
+      members: [{ username: 'alice' }]
+    });
+
+    const saved = await api.save({ federationId: String(first._id) });
+    const storyId = saved.json.storyId;
+
+    const removed = await api.call('/api/story/update', {
+      method: 'POST',
+      body: {
+        storyId,
+        username: 'alice',
+        title: 'Rooftop',
+        story: 'We met on the roof, again.',
+        federationId: null
+      }
+    });
+    assert.equal(removed.status, 200);
+    assert.equal(api.models.Story._all()[0].federation, null);
+
+    // Omitting the field leaves the credit alone rather than dropping it.
+    const restored = await api.call('/api/story/update', {
+      method: 'POST',
+      body: {
+        storyId,
+        username: 'alice',
+        title: 'Rooftop',
+        story: 'We met on the roof, twice.',
+        federationId: String(first._id)
+      }
+    });
+    assert.equal(restored.status, 200);
+
+    const untouched = await api.call('/api/story/update', {
+      method: 'POST',
+      body: {
+        storyId,
+        username: 'alice',
+        title: 'Rooftop',
+        story: 'We met on the roof, three times.'
+      }
+    });
+    assert.equal(untouched.status, 200);
+    const story = api.models.Story._all()[0];
+    assert.equal(story.federation.id, String(first._id));
+    assert.match(story.story, /three times/);
+  } finally {
+    await api.close();
+  }
+});

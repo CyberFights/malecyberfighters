@@ -30,7 +30,7 @@ function query(value) {
 }
 
 function createStore() {
-  const state = { federations: [], users: new Map(), nextId: 1, dms: [], deliveries: [] };
+  const state = { federations: [], users: new Map(), nextId: 1, dms: [], deliveries: [], storyPoints: 0 };
 
   function memberMatches(doc, entry) {
     if (!entry || !entry.$ne) return true;
@@ -219,7 +219,8 @@ async function startApi(store) {
     DM: store.DM,
     deliverToUser: (username, event, payload) => {
       store.state.deliveries.push({ username, event, payload });
-    }
+    },
+    countPublishedStories: () => store.state.storyPoints
   }).router);
 
   const server = await new Promise(resolve => {
@@ -1295,6 +1296,27 @@ test('chatroom presence lists only federation members who are online', async () 
     const outsider = await api.call('GET', `/api/federations/${id}/presence`, { user: 'stranger' });
     assert.equal(outsider.status, 403);
     assert.equal(outsider.body.error, 'not_a_member');
+  } finally {
+    await api.close();
+  }
+});
+
+test('a federation’s points are the stories credited to it', async () => {
+  const { store, api } = await setupManagedFederation();
+  try {
+    // The host counts published stories with this federation id; the stand-in
+    // just reports the number the test sets.
+    const before = await api.call('GET', '/api/federations/mine', { user: 'boss' });
+    assert.equal(before.body.federation.points, 0);
+
+    store.state.storyPoints = 3;
+    const scored = await api.call('GET', '/api/federations/mine', { user: 'boss' });
+    assert.equal(scored.body.federation.points, 3);
+
+    // The Join list is unchanged by points — it stays a summary.
+    const list = await api.call('GET', '/api/federations', { user: 'stranger' });
+    assert.equal(list.body.federations[0].name, 'Iron Ring Federation');
+    assert.equal('points' in list.body.federations[0], false);
   } finally {
     await api.close();
   }

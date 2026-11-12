@@ -392,7 +392,7 @@ function federationSummary(doc) {
  * The view of a federation. The member list is only handed to someone who is
  * in it; everyone else gets the recruiting-card fields.
  */
-function serializeFederation(doc, viewer, people) {
+function serializeFederation(doc, viewer, people, stats) {
   if (!doc) return null;
   const members = memberList(doc, people);
   const me = viewer ? members.find(member => member.username === viewer) : null;
@@ -414,6 +414,8 @@ function serializeFederation(doc, viewer, people) {
     // What the Manage window keys off, and the role to cache on the member.
     canManage,
     viewerRole: me ? me.roleId : null,
+    // One point per published story an author credited to this federation.
+    points: Math.max(0, Number(stats && stats.points) || 0),
     // Only a manager sees who is waiting; everyone else only ever learns that
     // their own request is pending.
     requests: canManage
@@ -450,7 +452,11 @@ function createFederationRouter({
   requireUser,
   DM,
   deliverToUser,
-  forwardDMToDiscord
+  forwardDMToDiscord,
+  // Host-provided: how many published stories credit this federation, and how
+  // to keep those stories' name snapshots current after a rename.
+  countPublishedStories,
+  renameFederationLink
 }) {
   const express = require('express');
   const router = express.Router();
@@ -462,6 +468,18 @@ function createFederationRouter({
       .lean();
     if (!user || user.banned) return null;
     return user;
+  }
+
+  /** How many points the federation has earned from linked stories. */
+  async function pointsFor(federationId) {
+    if (typeof countPublishedStories !== 'function') return 0;
+    try {
+      return Math.max(0, Number(await countPublishedStories(String(federationId))) || 0);
+    } catch (err) {
+      // Points are decoration: a counting failure must not hide the federation.
+      console.error('federation points error:', err?.message || err);
+      return 0;
+    }
   }
 
   /** The serialised federation with every member's presence attached. */
@@ -476,7 +494,7 @@ function createFederationRouter({
         .select('username display online lastSeenAt')
         .lean();
     }
-    return serializeFederation(doc, viewer, people);
+    return serializeFederation(doc, viewer, people, { points: await pointsFor(doc._id) });
   }
 
   /** Point the member's own record at the federation they just joined. */
@@ -723,6 +741,15 @@ function createFederationRouter({
           { 'federation.id': doc._id },
           { $set: { 'federation.name': details.name } }
         );
+
+        // Stories credit the federation by name too — keep them in step.
+        if (typeof renameFederationLink === 'function') {
+          try {
+            await renameFederationLink(doc._id, details.name);
+          } catch (err) {
+            console.error('federation story rename error:', err?.message || err);
+          }
+        }
       }
 
       const fresh = await Federation.findById(doc._id).lean();

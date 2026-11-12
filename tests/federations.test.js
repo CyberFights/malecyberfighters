@@ -234,6 +234,13 @@ test('built-in roles come first and custom roles cannot shadow them', () => {
   assert.deepEqual(BUILT_IN_ROLES.filter(role => role.admin).map(role => role.id), ['owner', 'co-owner']);
 });
 
+test('points come from the stories credited to the federation', () => {
+  assert.equal(serializeFederation(doc(), 'owner').points, 0, 'no stories, no points');
+  assert.equal(serializeFederation(doc(), 'owner', [], { points: 4 }).points, 4);
+  assert.equal(serializeFederation(doc(), 'owner', [], { points: -3 }).points, 0, 'never negative');
+  assert.equal(serializeFederation(doc(), 'owner', [], { points: '2' }).points, 2, 'a count string still counts');
+});
+
 test('join requests belong to the managers, and the applicant sees only their own flag', () => {
   const board = doc({
     requests: [
