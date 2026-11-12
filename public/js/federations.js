@@ -1055,23 +1055,35 @@
           '</strong>. Leave it before joining another federation.</p>'
         : '';
 
+      // Each federation reads like a row on the user roster: a big square
+      // image, its name over the owner/member line and its description
+      // underneath, with the Join button where the roster keeps its actions.
       var rows = (data.federations || []).map(function (federation) {
         var mine = membership && membership.id === federation.id;
-        return '<div class="mcf-fed-join-row">' +
-          (federation.imageUrl
-            ? '<img class="mcf-fed-thumb" src="' + MCF.escapeHtml(federation.imageUrl) + '" alt="">'
-            : '<span class="mcf-fed-thumb mcf-fed-hero-empty" aria-hidden="true">' +
-              MCF.escapeHtml(String(federation.name || '?').slice(0, 2).toUpperCase()) + '</span>') +
-          '<div class="mcf-fed-join-copy">' +
-            '<strong>' + MCF.escapeHtml(federation.name) + '</strong>' +
-            '<span class="small muted">@' + MCF.escapeHtml(federation.owner) + ' · ' +
-              federation.memberCount + (federation.memberCount === 1 ? ' member' : ' members') + '</span>' +
-            '<span class="small muted">' + MCF.escapeHtml(federation.description) + '</span>' +
+        var image = federation.imageUrl
+          ? '<img class="mcf-fed-roster-thumb" src="' + MCF.escapeHtml(federation.imageUrl) + '" alt="">'
+          : '<span class="mcf-fed-roster-thumb mcf-fed-hero-empty" aria-hidden="true">' +
+            MCF.escapeHtml(String(federation.name || '?').slice(0, 2).toUpperCase()) + '</span>';
+        var members = federation.memberCount === 1 ? '1 member' : federation.memberCount + ' members';
+
+        return '<div class="mcf-fed-join-row" data-fed-join-row="' +
+            MCF.escapeHtml(federation.id) + '">' +
+          image +
+          '<div class="mcf-fed-roster-copy">' +
+            '<div class="mcf-fed-roster-name">' + MCF.escapeHtml(federation.name) + '</div>' +
+            '<div class="mcf-fed-roster-meta">@' + MCF.escapeHtml(federation.owner) +
+              ' · ' + members + '</div>' +
+            (federation.description
+              ? '<div class="mcf-fed-roster-desc">' + MCF.escapeHtml(federation.description) + '</div>'
+              : '') +
           '</div>' +
-          (mine
-            ? '<span class="mcf-fed-tag">Yours</span>'
-            : '<button type="button" class="small-btn" data-join="' + MCF.escapeHtml(federation.id) + '"' +
-              (membership ? ' disabled' : '') + '>Join</button>') +
+          '<div class="mcf-fed-roster-actions">' +
+            (mine
+              ? '<span class="mcf-fed-tag">Yours</span>'
+              : '<button type="button" class="small-btn" data-join="' +
+                MCF.escapeHtml(federation.id) + '"' +
+                (membership ? ' disabled' : '') + '>Join</button>') +
+          '</div>' +
         '</div>';
       }).join('');
 

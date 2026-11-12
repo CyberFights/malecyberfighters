@@ -1091,3 +1091,166 @@ test('a co-owner cannot edit admin roles or hand out management rights', async (
     client.dom.window.close();
   }
 });
+
+/* ---------------------------------------------------------------
+   The Join popup — a roster of federations
+--------------------------------------------------------------- */
+
+function joinList() {
+  return {
+    ok: true,
+    membership: null,
+    federations: [
+      {
+        id: 'fed1',
+        name: 'Iron Ring Federation',
+        description: 'A heavyweight promotion for men who like their matches long.',
+        imageUrl: 'https://cdn.example/iron.png',
+        owner: 'boss',
+        memberCount: 12,
+        createdAt: null
+      },
+      {
+        id: 'fed2',
+        name: 'Steel Cage Club',
+        description: 'Cages, ladders and nothing soft.',
+        imageUrl: '',
+        owner: 'axe',
+        memberCount: 1,
+        createdAt: null
+      }
+    ]
+  };
+}
+
+test('Join opens a popup with every federation — image, name, description, Join', async () => {
+  const client = startClient({ mine: joinList() });
+  try {
+    client.window.MCFFederations.openJoin();
+    await sleep(20);
+
+    const body = client.document.querySelector('.mcf-modal-body');
+    assert.equal(client.document.querySelector('.mcf-modal-title').textContent, 'Join a federation');
+
+    const rows = body.querySelectorAll('.mcf-fed-join-row');
+    assert.equal(rows.length, 2, 'one row per federation');
+
+    const first = rows[0];
+    assert.ok(first.querySelector('.mcf-fed-roster-thumb'), 'the image sits in a roster-style thumb');
+    assert.equal(first.querySelector('.mcf-fed-roster-thumb').getAttribute('src'), 'https://cdn.example/iron.png');
+    assert.equal(first.querySelector('.mcf-fed-roster-name').textContent, 'Iron Ring Federation');
+    assert.match(first.querySelector('.mcf-fed-roster-meta').textContent, /@boss · 12 members/);
+    assert.match(first.querySelector('.mcf-fed-roster-desc').textContent, /heavyweight promotion/);
+    assert.equal(first.querySelector('[data-join="fed1"]').textContent, 'Join');
+
+    // No image: the initials stand in, exactly like an empty roster avatar.
+    const second = rows[1];
+    assert.equal(second.querySelector('.mcf-fed-roster-thumb').textContent, 'ST');
+    assert.match(second.querySelector('.mcf-fed-roster-meta').textContent, /1 member$/);
+    assert.ok(second.querySelector('[data-join="fed2"]'));
+  } finally {
+    client.dom.window.close();
+  }
+});
+
+test('pressing Join on a row joins that federation', async () => {
+  const list = joinList();
+  const joined = {
+    id: 'fed1',
+    name: 'Iron Ring Federation',
+    owner: 'boss',
+    description: 'A heavyweight promotion for men who like their matches long.',
+    rules: '',
+    imageUrl: '',
+    roles: [],
+    members: [],
+    memberCount: 13,
+    isMember: true,
+    isOwner: false,
+    canManage: false,
+    viewerRole: 'member'
+  };
+
+  const client = startClient({
+    mine: list,
+    create: (body, url) => {
+      assert.equal(url, '/api/federations/fed1/join');
+      return { ok: true, federation: joined };
+    }
+  });
+
+  try {
+    client.window.MCFFederations.openJoin();
+    await sleep(20);
+
+    client.document.querySelector('[data-join="fed1"]').click();
+    await sleep(20);
+
+    const post = client.calls.find(call => call.method === 'POST');
+    assert.ok(post, 'the join was posted');
+    assert.equal(post.url, '/api/federations/fed1/join');
+
+    // The join popup closes and the federation's own card opens.
+    await sleep(250);
+    const titles = Array.from(client.document.querySelectorAll('.mcf-modal-title'))
+      .map(title => title.textContent);
+    assert.ok(!titles.includes('Join a federation'), 'the join list closed');
+    assert.ok(titles.includes('Iron Ring Federation'), 'the joined federation opened');
+  } finally {
+    client.dom.window.close();
+  }
+});
+
+test('already in a federation: a notice, no second join, and Yours on your own', async () => {
+  const list = joinList();
+  list.membership = { id: 'fed1', name: 'Iron Ring Federation', role: 'owner' };
+
+  const client = startClient({
+    mine: list,
+    username: 'boss'
+  });
+
+  try {
+    client.window.MCFFederations.openJoin();
+    await sleep(20);
+
+    const body = client.document.querySelector('.mcf-modal-body');
+    const notice = body.querySelector('.mcf-fed-notice');
+    assert.ok(notice, 'the explanation is shown');
+    assert.match(notice.textContent, /already in Iron Ring Federation/);
+
+    const rows = body.querySelectorAll('.mcf-fed-join-row');
+    assert.ok(rows[0].querySelector('.mcf-fed-tag'), 'your own federation is tagged');
+    assert.equal(rows[0].querySelector('[data-join]'), null, 'no Join button on your own row');
+
+    const other = rows[1].querySelector('[data-join="fed2"]');
+    assert.ok(other, 'the other federation still has a Join button');
+    assert.equal(other.disabled, true, 'but it cannot be pressed while you are in one');
+  } finally {
+    client.dom.window.close();
+  }
+});
+
+test('an empty join list points the member at Create', async () => {
+  const client = startClient({
+    mine: { ok: true, membership: null, federations: [] }
+  });
+  try {
+    client.window.MCFFederations.openJoin();
+    await sleep(20);
+
+    const body = client.document.querySelector('.mcf-modal-body');
+    assert.match(body.textContent, /No federations have been registered yet/);
+    const create = body.querySelector('#mcfFedJoinCreate');
+    assert.ok(create, 'Create is offered');
+
+    create.click();
+    await sleep(300);
+    const titles = Array.from(client.document.querySelectorAll('.mcf-modal-title'))
+      .map(title => title.textContent);
+    assert.ok(titles.includes('Register a federation'), 'the join list hands over to Create');
+    assert.ok(!titles.includes('Join a federation'), 'and the join list closes');
+  } finally {
+    client.dom.window.close();
+  }
+});
