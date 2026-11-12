@@ -20,6 +20,7 @@ const {
   normalizeFederation,
   normalizeFederationDetails,
   normalizeRoles,
+  normalizeRoleDefinition,
   normalizeMessage,
   federationNameKey,
   roleIdFromName,
@@ -354,8 +355,8 @@ function startClient({ mine = { ok: true, federation: null }, create, auth, user
     calls.push({ method: 'GET', url });
     return Promise.resolve(typeof mine === 'function' ? mine(url, calls) : mine);
   };
-  window.MCF.postJSON = (url, body) => {
-    calls.push({ method: 'POST', url, body });
+  window.MCF.postJSON = (url, body, method) => {
+    calls.push({ method: method || 'POST', url, body });
     return Promise.resolve(create ? create(body, url) : { ok: false, error: 'server_error' });
   };
   window.MCF.authFetch = (url, options) => {
@@ -602,6 +603,84 @@ test('the serialised federation says who can manage and who is online', () => {
   assert.deepEqual(asOutsider.members, []);
 });
 
+
+/* ---------------------------------------------------------------
+   Manage → Roles: one role at a time
+--------------------------------------------------------------- */
+
+test('a new role gets an id from its name and a plain “can manage” flag', () => {
+  const board = doc();
+  const result = normalizeRoleDefinition(
+    { name: '  Ring  Announcer ', description: 'Calls the matches', admin: 'true' },
+    board
+  );
+  assert.equal(result.ok, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(result.role)), {
+    id: 'ring-announcer',
+    name: 'Ring Announcer',
+    description: 'Calls the matches',
+    admin: true
+  });
+});
+
+test('new roles must have a real name and cannot shadow a role that exists', () => {
+  const board = doc();
+
+  assert.equal(normalizeRoleDefinition({ name: '   ' }, board).error, 'role_name_required');
+  assert.equal(normalizeRoleDefinition({ name: 'A' }, board).error, 'role_name_short');
+  assert.equal(normalizeRoleDefinition({ name: 'x'.repeat(30) }, board).error, 'role_name_long');
+
+  // Built-ins and the registration's own custom role are both taken.
+  assert.equal(normalizeRoleDefinition({ name: 'Member' }, board).error, 'role_duplicate');
+  assert.equal(normalizeRoleDefinition({ name: 'commissioner' }, board).error, 'role_duplicate');
+
+  // The list is capped, like the registration form.
+  const full = doc({ roles: Array.from({ length: LIMITS.roles }, (unused, index) => ({
+    id: 'role-' + index,
+    name: 'Role ' + index,
+    description: '',
+    admin: false
+  })) });
+  assert.equal(normalizeRoleDefinition({ name: 'One Too Many' }, full).error, 'roles_too_many');
+});
+
+test('editing a role keeps its id, and only custom roles are editable', () => {
+  const board = doc();
+  const custom = roleList(board).find(role => role.id === 'commissioner');
+
+  const renamed = normalizeRoleDefinition(
+    { name: 'Head Booker', description: 'Writes the cards', admin: false },
+    board,
+    custom.id
+  );
+  assert.equal(renamed.ok, true);
+  assert.equal(renamed.role.id, 'commissioner', 'the id does not follow the name');
+  assert.equal(renamed.role.name, 'Head Booker');
+
+  // Renaming onto another role's name is refused…
+  assert.equal(
+    normalizeRoleDefinition({ name: 'Member' }, board, custom.id).error,
+    'role_duplicate'
+  );
+  // …but keeping its own name is not a duplicate of itself.
+  assert.equal(
+    normalizeRoleDefinition({ name: 'Commissioner' }, board, custom.id).ok,
+    true
+  );
+
+  // Built-ins are off limits, and a role that vanished is a 404.
+  assert.equal(normalizeRoleDefinition({ name: 'Boss' }, board, 'owner').error, 'built_in_role');
+  assert.equal(normalizeRoleDefinition({ name: 'Boss' }, board, 'ghost').error, 'role_not_found');
+});
+
+test('custom roles come back from the serializer with their admin flag', () => {
+  const view = serializeFederation(doc(), 'boss');
+  const custom = view.roles.find(role => role.id === 'commissioner');
+  assert.equal(custom.builtIn, false);
+  assert.equal(custom.admin, false);
+  assert.equal(view.roles.filter(role => role.builtIn).length, BUILT_IN_ROLES.length);
+});
+
 /* ---------------------------------------------------------------
    The Manage window itself
 --------------------------------------------------------------- */
@@ -685,7 +764,11 @@ test('Manage lists the roster with last-online, role change and remove', async (
 
     assert.equal(client.document.querySelector('.mcf-modal-title').textContent, 'Iron Ring Federation — manage');
     const tabs = client.document.querySelectorAll('[data-fed-tab]');
-    assert.deepEqual(Array.from(tabs).map(tab => tab.dataset.fedTab), ['members', 'details']);
+    assert.deepEqual(
+      Array.from(tabs).map(tab => tab.dataset.fedTab),
+      ['members', 'roles', 'details'],
+      'the roster, the roles and the details are three tabs'
+    );
     assert.equal(tabs[0].getAttribute('aria-selected'), 'true');
 
     const rows = client.document.querySelectorAll('.mcf-fed-manage-row');
@@ -815,6 +898,195 @@ test('a co-owner can leave the federation from their own row', async () => {
     assert.equal(client.document.querySelectorAll('.mcf-modal').length, 0, 'the window closes');
     const cached = JSON.parse(client.window.localStorage.getItem('cw_session_v1'));
     assert.equal(cached.federation, null, 'the cached membership is cleared');
+  } finally {
+    client.dom.window.close();
+  }
+});
+
+/* ---------------------------------------------------------------
+   Manage → the Roles tab
+--------------------------------------------------------------- */
+
+test('the Roles tab lists built-ins as read-only and custom roles as editable', async () => {
+  const client = startClient({ mine: { ok: true, federation: federationFixture() } });
+  try {
+    client.window.MCFFederations.openManage();
+    await sleep(20);
+    client.document.querySelector('[data-fed-tab="roles"]').click();
+
+    const panel = client.document.querySelector('#mcfFedManagePanel');
+    assert.equal(panel.querySelectorAll('.mcf-fed-role-builtin').length, 3, 'Owner, Co-owner, Member');
+    for (const builtIn of ['owner', 'co-owner', 'member']) {
+      assert.equal(panel.querySelector(`[data-fed-role-edit="${builtIn}"]`), null, builtIn + ' is not editable');
+      assert.equal(panel.querySelector(`[data-fed-role-delete="${builtIn}"]`), null, builtIn + ' is not deletable');
+    }
+
+    // The registration's custom role can be edited and removed.
+    assert.ok(panel.querySelector('[data-fed-role-edit="commissioner"]'));
+    assert.ok(panel.querySelector('[data-fed-role-delete="commissioner"]'));
+
+    // The owner gets the "Can manage" checkbox on the add form.
+    const editor = panel.querySelector('#mcfFedRoleEditor');
+    assert.ok(editor, 'the add form is there');
+    assert.ok(editor.querySelector('[data-fed-role-admin]'), 'the owner can hand out management rights');
+    assert.equal(editor.querySelector('[data-fed-role-cancel]'), null, 'nothing to cancel when adding');
+  } finally {
+    client.dom.window.close();
+  }
+});
+
+test('adding a role posts it and shows the saved role', async () => {
+  const saved = federationFixture({
+    roles: federationFixture().roles.concat([
+      { id: 'ring-announcer', name: 'Ring Announcer', description: 'Calls the matches', admin: true, builtIn: false }
+    ])
+  });
+
+  const client = startClient({
+    mine: { ok: true, federation: federationFixture() },
+    create: (body, url) => {
+      assert.equal(url, '/api/federations/fed1/roles');
+      return { ok: true, federation: saved };
+    }
+  });
+
+  try {
+    client.window.MCFFederations.openManage();
+    await sleep(20);
+    client.document.querySelector('[data-fed-tab="roles"]').click();
+
+    const editor = client.document.querySelector('#mcfFedRoleEditor');
+    editor.querySelector('[data-fed-role-name]').value = 'Ring Announcer';
+    editor.querySelector('[data-fed-role-desc]').value = 'Calls the matches';
+    editor.querySelector('[data-fed-role-admin]').checked = true;
+    editor.querySelector('[data-fed-role-save]').click();
+    await sleep(20);
+
+    const post = client.calls.find(call => call.method === 'POST' && call.url === '/api/federations/fed1/roles');
+    assert.ok(post, 'the role was posted');
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(post.body)),
+      { name: 'Ring Announcer', description: 'Calls the matches', admin: true }
+    );
+
+    const panel = client.document.querySelector('#mcfFedManagePanel');
+    assert.match(panel.textContent, /Ring Announcer/);
+    assert.ok(panel.querySelector('[data-fed-role-edit="ring-announcer"]'));
+    // The panel re-rendered, so read the fresh form rather than the old node.
+    const freshForm = client.document.querySelector('#mcfFedRoleEditor');
+    assert.equal(freshForm.querySelector('[data-fed-role-name]').value, '', 'the form is cleared');
+  } finally {
+    client.dom.window.close();
+  }
+});
+
+test('a role is renamed in place, keeping its id', async () => {
+  const renamed = federationFixture({
+    roles: federationFixture().roles.map(role =>
+      role.id === 'commissioner'
+        ? { ...role, name: 'Head Booker', description: 'Writes the cards' }
+        : role)
+  });
+
+  const client = startClient({
+    mine: { ok: true, federation: federationFixture() },
+    create: (body, url) => {
+      assert.equal(url, '/api/federations/fed1/roles/commissioner');
+      return { ok: true, federation: renamed };
+    }
+  });
+
+  try {
+    client.window.MCFFederations.openManage();
+    await sleep(20);
+    client.document.querySelector('[data-fed-tab="roles"]').click();
+    client.document.querySelector('[data-fed-role-edit="commissioner"]').click();
+
+    const editor = client.document.querySelector('#mcfFedRoleEditor');
+    assert.equal(editor.querySelector('[data-fed-role-name]').value, 'Commissioner', 'prefilled');
+    assert.ok(editor.querySelector('[data-fed-role-cancel]'), 'editing can be cancelled');
+
+    editor.querySelector('[data-fed-role-name]').value = 'Head Booker';
+    editor.querySelector('[data-fed-role-desc]').value = 'Writes the cards';
+    editor.querySelector('[data-fed-role-save]').click();
+    await sleep(20);
+
+    const patch = client.calls.find(call => call.method === 'PATCH');
+    assert.ok(patch, 'a PATCH was sent');
+    assert.equal(patch.url, '/api/federations/fed1/roles/commissioner');
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(patch.body)),
+      { name: 'Head Booker', description: 'Writes the cards', admin: false }
+    );
+
+    const panel = client.document.querySelector('#mcfFedManagePanel');
+    assert.match(panel.textContent, /Head Booker/);
+    assert.doesNotMatch(panel.textContent, /Commissioner/);
+  } finally {
+    client.dom.window.close();
+  }
+});
+
+test('cancelling an edit changes nothing, and an in-use role explains itself', async () => {
+  const client = startClient({
+    mine: { ok: true, federation: federationFixture() },
+    auth: () => ({ ok: false, error: 'role_in_use', holders: ['rookie'] })
+  });
+
+  try {
+    client.window.MCFFederations.openManage();
+    await sleep(20);
+    client.document.querySelector('[data-fed-tab="roles"]').click();
+
+    client.document.querySelector('[data-fed-role-edit="commissioner"]').click();
+    client.document.querySelector('[data-fed-role-cancel]').click();
+    assert.equal(client.calls.some(call => call.method === 'PATCH'), false, 'cancel posts nothing');
+    assert.match(client.document.querySelector('#mcfFedManagePanel').textContent, /Commissioner/);
+
+    // Delete takes two taps: the first only arms the button.
+    const remove = client.document.querySelector('[data-fed-role-delete="commissioner"]');
+    remove.click();
+    assert.equal(remove.textContent, 'Confirm delete');
+    assert.equal(client.calls.some(call => call.method === 'DELETE'), false);
+    remove.click();
+    await sleep(20);
+
+    const del = client.calls.find(call => call.method === 'DELETE');
+    assert.ok(del, 'the second tap deletes');
+    assert.equal(del.url, '/api/federations/fed1/roles/commissioner');
+
+    const panel = client.document.querySelector('#mcfFedManagePanel');
+    assert.match(panel.textContent, /still holds that role/i, 'the refusal is explained');
+  } finally {
+    client.dom.window.close();
+  }
+});
+
+test('a co-owner cannot edit admin roles or hand out management rights', async () => {
+  const board = federationFixture({
+    isOwner: false,
+    viewerRole: 'co-owner',
+    canManage: true,
+    roles: federationFixture().roles.concat([
+      { id: 'booker', name: 'Booker', description: 'Runs the cards', admin: true, builtIn: false },
+      { id: 'referee', name: 'Referee', description: '', admin: false, builtIn: false }
+    ])
+  });
+
+  const client = startClient({ username: 'co', mine: { ok: true, federation: board } });
+  try {
+    client.window.MCFFederations.openManage();
+    await sleep(20);
+    client.document.querySelector('[data-fed-tab="roles"]').click();
+
+    const panel = client.document.querySelector('#mcfFedManagePanel');
+    assert.equal(panel.querySelector('[data-fed-role-edit="booker"]'), null, 'an admin role is the owner’s');
+    assert.equal(panel.querySelector('[data-fed-role-delete="booker"]'), null);
+    assert.ok(panel.querySelector('[data-fed-role-edit="referee"]'), 'a plain role is fair game');
+
+    const editor = panel.querySelector('#mcfFedRoleEditor');
+    assert.equal(editor.querySelector('[data-fed-role-admin]'), null, 'no management checkbox');
+    assert.match(editor.textContent, /Only the owner can give a role management rights/);
   } finally {
     client.dom.window.close();
   }

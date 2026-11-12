@@ -55,6 +55,10 @@
     cannot_remove_owner: 'The owner cannot be removed from their own federation.',
     insufficient_privileges: 'Only the federation owner can do that.',
     invalid_role: 'Pick a role from the list.',
+    role_name_required: 'Give the role a name.',
+    role_not_found: 'That role no longer exists.',
+    built_in_role: 'Owner, Co-owner and Member are built in and cannot be changed.',
+    role_in_use: 'Someone still holds that role — change their role first.',
     not_allowed: 'That account cannot use federations.',
     server_error: 'Something went wrong — try again in a moment.'
   };
@@ -428,7 +432,13 @@
   }
 
   function showManageWindow(initial) {
-    var state = { federation: initial, tab: 'members', busy: false, imageUrl: initial.imageUrl || '' };
+    var state = {
+      federation: initial,
+      tab: 'members',
+      busy: false,
+      imageUrl: initial.imageUrl || '',
+      editingRoleId: null
+    };
 
     var box = MCF.popup({
       title: initial.name + ' — manage',
@@ -461,6 +471,7 @@
       box.body.innerHTML =
         '<div class="mcf-fed-tabs" role="tablist" aria-label="Manage federation">' +
           tabButton('members', 'Members', state.tab === 'members') +
+          tabButton('roles', 'Roles', state.tab === 'roles') +
           tabButton('details', 'Federation details', state.tab === 'details') +
         '</div>' +
         '<div id="mcfFedManagePanel" role="tabpanel"></div>';
@@ -474,7 +485,26 @@
 
       var panel = box.body.querySelector('#mcfFedManagePanel');
       if (state.tab === 'members') renderMembers(panel);
+      else if (state.tab === 'roles') renderRolesTab(panel);
       else renderDetails(panel);
+    }
+
+    /** A two-tap confirm: the first press arms the button for a few seconds. */
+    function arm(button, label, confirmLabel, action) {
+      button.addEventListener('click', function () {
+        if (button.dataset.confirm !== '1') {
+          button.dataset.confirm = '1';
+          button.textContent = confirmLabel;
+          setTimeout(function () {
+            if (button.isConnected) {
+              button.dataset.confirm = '';
+              button.textContent = label;
+            }
+          }, 4000);
+          return;
+        }
+        action();
+      });
     }
 
     /* ---------- tab 1: the roster ---------- */
@@ -560,29 +590,13 @@
         });
       });
 
-      function arm(button, label, confirmLabel, username) {
-        button.addEventListener('click', function () {
-          // Two taps: the first arms the button for a few seconds.
-          if (button.dataset.confirm !== '1') {
-            button.dataset.confirm = '1';
-            button.textContent = confirmLabel;
-            setTimeout(function () {
-              if (button.isConnected) {
-                button.dataset.confirm = '';
-                button.textContent = label;
-              }
-            }, 4000);
-            return;
-          }
-          removeMember(username);
-        });
-      }
-
       panel.querySelectorAll('[data-fed-remove]').forEach(function (button) {
-        arm(button, 'Remove', 'Confirm remove', button.dataset.fedRemove);
+        var username = button.dataset.fedRemove;
+        arm(button, 'Remove', 'Confirm remove', function () { removeMember(username); });
       });
       panel.querySelectorAll('[data-fed-leave]').forEach(function (button) {
-        arm(button, 'Leave', 'Confirm leave', button.dataset.fedLeave);
+        var username = button.dataset.fedLeave;
+        arm(button, 'Leave', 'Confirm leave', function () { removeMember(username); });
       });
     }
 
@@ -655,7 +669,212 @@
         });
     }
 
-    /* ---------- tab 2: the details ---------- */
+    /* ---------- tab 2: the roles ---------- */
+
+    function roleEditorHtml(fed, role, owner) {
+      var editing = !!role;
+      var tag = editing ? 'data-fed-role-edit-row="' + MCF.escapeHtml(role.id) + '"' : '';
+      return '<div class="mcf-fed-role-editor" id="mcfFedRoleEditor" ' + tag + '>' +
+        '<p class="mcf-fed-role-editor-title">' +
+          (editing ? 'Editing “' + MCF.escapeHtml(role.name) + '”' : 'Add a role') +
+        '</p>' +
+        '<div class="mcf-fed-role-editor-fields">' +
+          '<input class="mcf-input" type="text" data-fed-role-name maxlength="24" ' +
+            'aria-label="Role name" placeholder="Role name" value="' +
+            MCF.escapeHtml(role ? role.name : '') + '">' +
+          '<input class="mcf-input" type="text" data-fed-role-desc maxlength="120" ' +
+            'aria-label="Role description" placeholder="What it is for (optional)" value="' +
+            MCF.escapeHtml(role ? role.description : '') + '">' +
+        '</div>' +
+        (owner
+          ? '<label class="mcf-fed-role-admin"><input type="checkbox" data-fed-role-admin' +
+            (role && role.admin ? ' checked' : '') + '> Can manage the federation</label>'
+          : '<p class="small muted">Only the owner can give a role management rights.</p>') +
+        '<div class="mcf-row-actions">' +
+          '<button type="button" class="small-btn" data-fed-role-save>' +
+            (editing ? 'Save role' : 'Add role') + '</button>' +
+          (editing ? '<button type="button" class="ghost small-btn" data-fed-role-cancel>Cancel</button>' : '') +
+        '</div>' +
+      '</div>';
+    }
+
+    function renderRolesTab(panel) {
+      var fed = state.federation;
+      var owner = !!fed.isOwner;
+
+      var builtIns = (fed.roles || []).filter(function (role) { return role.builtIn; });
+      var custom = (fed.roles || []).filter(function (role) { return !role.builtIn; });
+
+      var builtRows = builtIns.map(function (role) {
+        return '<div class="mcf-fed-manage-row mcf-fed-role-builtin">' +
+          '<div class="mcf-fed-role-copy"><strong>' + MCF.escapeHtml(role.name) + '</strong>' +
+            '<span class="mcf-fed-tag">Built in</span>' +
+            (role.description
+              ? '<span class="small muted">' + MCF.escapeHtml(role.description) + '</span>'
+              : '') +
+          '</div>' +
+        '</div>';
+      }).join('');
+
+      var customRows = custom.map(function (role) {
+        if (state.editingRoleId === role.id) {
+          return '<div class="mcf-fed-manage-row mcf-fed-role-row-editing">' +
+            roleEditorHtml(fed, role, owner) + '</div>';
+        }
+        // Only the owner may touch a role that carries management rights.
+        var canTouch = owner || !role.admin;
+        return '<div class="mcf-fed-manage-row">' +
+          '<div class="mcf-fed-role-copy"><strong>' + MCF.escapeHtml(role.name) + '</strong>' +
+            (role.admin ? '<span class="mcf-fed-tag mcf-fed-role-admin-tag">Can manage</span>' : '') +
+            (role.description
+              ? '<span class="small muted">' + MCF.escapeHtml(role.description) + '</span>'
+              : '') +
+          '</div>' +
+          '<div class="mcf-fed-role-actions">' +
+            (canTouch
+              ? '<button type="button" class="ghost small-btn" data-fed-role-edit="' +
+                MCF.escapeHtml(role.id) + '">Edit</button>' +
+                '<button type="button" class="ghost small-btn" data-fed-role-delete="' +
+                MCF.escapeHtml(role.id) + '">Delete</button>'
+              : '') +
+          '</div>' +
+        '</div>';
+      }).join('');
+
+      panel.innerHTML =
+        '<p class="small muted">Owner, Co-owner and Member are built in. Add the roles your ' +
+          'members can hold — tick “Can manage” to let that role run this federation.</p>' +
+        '<div class="mcf-fed-manage-list">' + builtRows +
+          (customRows || '<p class="small muted">No custom roles yet — add the first one below.</p>') +
+        '</div>' +
+        (state.editingRoleId ? '' : roleEditorHtml(fed, null, owner)) +
+        '<div class="mcf-row-actions">' +
+          '<span class="small muted" id="mcfFedManageStatus"></span>' +
+        '</div>';
+
+      panel.querySelectorAll('[data-fed-role-edit]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          state.editingRoleId = button.dataset.fedRoleEdit;
+          render();
+        });
+      });
+      panel.querySelectorAll('[data-fed-role-delete]').forEach(function (button) {
+        var roleId = button.dataset.fedRoleDelete;
+        arm(button, 'Delete', 'Confirm delete', function () { deleteRole(roleId); });
+      });
+
+      var editor = panel.querySelector('#mcfFedRoleEditor');
+      if (!editor) return;
+
+      var save = editor.querySelector('[data-fed-role-save]');
+      if (save) {
+        save.addEventListener('click', function () {
+          if (state.editingRoleId) saveRole(editor, state.editingRoleId);
+          else addRole(editor);
+        });
+      }
+      var cancel = editor.querySelector('[data-fed-role-cancel]');
+      if (cancel) {
+        cancel.addEventListener('click', function () {
+          state.editingRoleId = null;
+          render();
+        });
+      }
+    }
+
+    /** Read one role draft out of its editor inputs. */
+    function roleDraft(editor) {
+      var name = editor.querySelector('[data-fed-role-name]');
+      var description = editor.querySelector('[data-fed-role-desc]');
+      var admin = editor.querySelector('[data-fed-role-admin]');
+      return {
+        name: name ? name.value.trim() : '',
+        description: description ? description.value.trim() : '',
+        admin: !!(admin && admin.checked)
+      };
+    }
+
+    function roleDraftError(payload) {
+      if (!payload.name) return 'Give the role a name.';
+      if (payload.name.length < 2) return 'Role names need at least two letters.';
+      return '';
+    }
+
+    function rolesUrl(suffix) {
+      return '/api/federations/' + encodeURIComponent(state.federation.id) + '/roles' + (suffix || '');
+    }
+
+    function roleRequest(request) {
+      if (state.busy) return;
+      state.busy = true;
+      manageStatus(request.busyLabel);
+
+      request.run()
+        .then(function (data) {
+          state.busy = false;
+          if (!data || !data.ok) {
+            var message = errorText(data && data.error);
+            manageStatus(message);
+            MCF.toast(message, 'error');
+            return;
+          }
+          state.editingRoleId = null;
+          apply(data.federation);
+          MCF.toast(request.doneLabel, 'success');
+        })
+        .catch(function () {
+          state.busy = false;
+          manageStatus(request.failLabel);
+        });
+    }
+
+    function addRole(editor) {
+      var payload = roleDraft(editor);
+      var problem = roleDraftError(payload);
+      if (problem) {
+        manageStatus(problem);
+        return;
+      }
+      roleRequest({
+        busyLabel: 'Adding…',
+        doneLabel: payload.name + ' added',
+        failLabel: 'Could not add that role.',
+        run: function () {
+          return MCF.postJSON(rolesUrl(), payload);
+        }
+      });
+    }
+
+    function saveRole(editor, roleId) {
+      var payload = roleDraft(editor);
+      var problem = roleDraftError(payload);
+      if (problem) {
+        manageStatus(problem);
+        return;
+      }
+      roleRequest({
+        busyLabel: 'Saving…',
+        doneLabel: payload.name + ' saved',
+        failLabel: 'Could not save that role.',
+        run: function () {
+          return MCF.postJSON(rolesUrl('/' + encodeURIComponent(roleId)), payload, 'PATCH');
+        }
+      });
+    }
+
+    function deleteRole(roleId) {
+      roleRequest({
+        busyLabel: 'Deleting…',
+        doneLabel: 'Role deleted',
+        failLabel: 'Could not delete that role.',
+        run: function () {
+          return MCF.authFetch(rolesUrl('/' + encodeURIComponent(roleId)), { method: 'DELETE' })
+            .then(function (res) { return res.json(); });
+        }
+      });
+    }
+
+    /* ---------- tab 3: the details ---------- */
 
     function renderDetails(panel) {
       var fed = state.federation;

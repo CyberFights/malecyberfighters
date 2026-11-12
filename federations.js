@@ -149,6 +149,53 @@ function normalizeRoles(input) {
 }
 
 /**
+ * Validate a Manage → Roles draft.
+ *
+ * `editingId` keeps an existing role's id when its name changes, so renaming
+ * "Commissioner" does not orphan every member already holding it. A built-in
+ * role (Owner / Co-owner / Member) is never editable.
+ *
+ * @returns {{ ok: boolean, role?: object, error?: string }}
+ */
+function normalizeRoleDefinition(payload, doc, editingId) {
+  const body = payload && typeof payload === 'object' ? payload : {};
+  const roles = roleList(doc || {});
+
+  const current = editingId ? roles.find(role => role.id === editingId) : null;
+  if (editingId && !current) return { ok: false, error: 'role_not_found' };
+  if (current && current.builtIn) return { ok: false, error: 'built_in_role' };
+
+  const name = cleanInline(body.name, Infinity);
+  if (!name) return { ok: false, error: 'role_name_required' };
+  if (name.length < LIMITS.roleNameMin) return { ok: false, error: 'role_name_short' };
+  if (name.length > LIMITS.roleName) return { ok: false, error: 'role_name_long' };
+
+  const nameTaken = roles.some(role =>
+    role.id !== editingId &&
+    cleanInline(role.name, LIMITS.roleName).toLowerCase() === name.toLowerCase());
+  if (nameTaken) return { ok: false, error: 'role_duplicate' };
+
+  const id = editingId || roleIdFromName(name);
+  if (!editingId) {
+    if (RESERVED_ROLE_IDS.has(id)) return { ok: false, error: 'role_duplicate' };
+    if (roles.some(role => role.id === id)) return { ok: false, error: 'role_duplicate' };
+    if ((Array.isArray(doc && doc.roles) ? doc.roles : []).length >= LIMITS.roles) {
+      return { ok: false, error: 'roles_too_many' };
+    }
+  }
+
+  return {
+    ok: true,
+    role: {
+      id,
+      name,
+      description: cleanInline(body.description, LIMITS.roleDescription),
+      admin: body.admin === true || body.admin === 'true'
+    }
+  };
+}
+
+/**
  * Validate the federation registration form.
  *
  * @returns {{ ok: boolean, federation?: object, error?: string }}
@@ -715,6 +762,124 @@ function createFederationRouter({ Federation, User, requireUser }) {
     }
   });
 
+  // ---------- manage: create / edit / delete a role ----------
+  // POST /api/federations/:id/roles  { name, description, admin }
+  router.post('/:id/roles', requireUser, async (req, res) => {
+    try {
+      const doc = await Federation.findById(req.params.id).lean().catch(() => null);
+      if (!doc) return res.status(404).json({ ok: false, error: 'not_found' });
+      if (!canManageFederation(doc, req.username)) {
+        return res.status(403).json({ ok: false, error: 'not_a_manager' });
+      }
+
+      const validated = normalizeRoleDefinition(req.body, doc, null);
+      if (!validated.ok) return res.status(400).json({ ok: false, error: validated.error });
+
+      // An admin may invent a plain role; only the owner mints an admin one.
+      if (validated.role.admin && req.username !== doc.owner) {
+        return res.status(403).json({ ok: false, error: 'insufficient_privileges' });
+      }
+
+      await Federation.updateOne(
+        { _id: doc._id },
+        { $push: { roles: validated.role } }
+      );
+
+      const fresh = await Federation.findById(doc._id).lean();
+      return res.status(201).json({ ok: true, federation: await view(fresh, req.username) });
+    } catch (err) {
+      if (err && (err.name === 'CastError' || err.name === 'BSONError')) {
+        return res.status(404).json({ ok: false, error: 'not_found' });
+      }
+      console.error('federation role create error:', err?.message || err);
+      return res.status(500).json({ ok: false, error: 'server_error' });
+    }
+  });
+
+  // PATCH /api/federations/:id/roles/:roleId — the id never changes.
+  router.patch('/:id/roles/:roleId', requireUser, async (req, res) => {
+    try {
+      const doc = await Federation.findById(req.params.id).lean().catch(() => null);
+      if (!doc) return res.status(404).json({ ok: false, error: 'not_found' });
+      if (!canManageFederation(doc, req.username)) {
+        return res.status(403).json({ ok: false, error: 'not_a_manager' });
+      }
+
+      const roleId = String(req.params.roleId || '');
+      const current = roleIndex(doc)[roleId];
+      if (!current) return res.status(404).json({ ok: false, error: 'role_not_found' });
+      if (current.builtIn) return res.status(400).json({ ok: false, error: 'built_in_role' });
+
+      const validated = normalizeRoleDefinition(req.body, doc, roleId);
+      if (!validated.ok) return res.status(400).json({ ok: false, error: validated.error });
+
+      // Only the owner may edit an admin role or change who is an admin.
+      if ((current.admin || validated.role.admin) && req.username !== doc.owner) {
+        return res.status(403).json({ ok: false, error: 'insufficient_privileges' });
+      }
+
+      await Federation.updateOne(
+        { _id: doc._id, 'roles.id': roleId },
+        {
+          $set: {
+            'roles.$.name': validated.role.name,
+            'roles.$.description': validated.role.description,
+            'roles.$.admin': validated.role.admin
+          }
+        }
+      );
+
+      const fresh = await Federation.findById(doc._id).lean();
+      return res.json({ ok: true, federation: await view(fresh, req.username) });
+    } catch (err) {
+      if (err && (err.name === 'CastError' || err.name === 'BSONError')) {
+        return res.status(404).json({ ok: false, error: 'not_found' });
+      }
+      console.error('federation role edit error:', err?.message || err);
+      return res.status(500).json({ ok: false, error: 'server_error' });
+    }
+  });
+
+  // DELETE /api/federations/:id/roles/:roleId — only when nobody holds it.
+  router.delete('/:id/roles/:roleId', requireUser, async (req, res) => {
+    try {
+      const doc = await Federation.findById(req.params.id).lean().catch(() => null);
+      if (!doc) return res.status(404).json({ ok: false, error: 'not_found' });
+      if (!canManageFederation(doc, req.username)) {
+        return res.status(403).json({ ok: false, error: 'not_a_manager' });
+      }
+
+      const roleId = String(req.params.roleId || '');
+      const current = roleIndex(doc)[roleId];
+      if (!current) return res.status(404).json({ ok: false, error: 'role_not_found' });
+      if (current.builtIn) return res.status(400).json({ ok: false, error: 'built_in_role' });
+      if (current.admin && req.username !== doc.owner) {
+        return res.status(403).json({ ok: false, error: 'insufficient_privileges' });
+      }
+
+      const holders = (doc.members || [])
+        .filter(member => member.roleId === roleId)
+        .map(member => member.username);
+      if (holders.length) {
+        return res.status(409).json({ ok: false, error: 'role_in_use', holders });
+      }
+
+      await Federation.updateOne(
+        { _id: doc._id },
+        { $pull: { roles: { id: roleId } } }
+      );
+
+      const fresh = await Federation.findById(doc._id).lean();
+      return res.json({ ok: true, federation: await view(fresh, req.username) });
+    } catch (err) {
+      if (err && (err.name === 'CastError' || err.name === 'BSONError')) {
+        return res.status(404).json({ ok: false, error: 'not_found' });
+      }
+      console.error('federation role delete error:', err?.message || err);
+      return res.status(500).json({ ok: false, error: 'server_error' });
+    }
+  });
+
   // ---------- join ----------
   router.post('/:id/join', requireUser, async (req, res) => {
     const username = req.username;
@@ -847,6 +1012,7 @@ module.exports = {
   normalizeFederation,
   normalizeFederationDetails,
   normalizeRoles,
+  normalizeRoleDefinition,
   normalizeMessage,
   federationNameKey,
   roleIdFromName,

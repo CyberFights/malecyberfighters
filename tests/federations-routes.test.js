@@ -87,10 +87,18 @@ function createStore() {
       const doc = state.federations.find(candidate => String(candidate._id) === String(filter._id));
       if (!doc) return { matchedCount: 0 };
 
+      if (update.$push && update.$push.roles) {
+        doc.roles = (doc.roles || []).concat([clone(update.$push.roles)]);
+      }
+
       if (update.$pull && update.$pull.members) {
         doc.members = (doc.members || []).filter(
           member => member.username !== update.$pull.members.username
         );
+      }
+
+      if (update.$pull && update.$pull.roles) {
+        doc.roles = (doc.roles || []).filter(role => role.id !== update.$pull.roles.id);
       }
 
       if (update.$set) {
@@ -100,6 +108,12 @@ function createStore() {
             const member = (doc.members || [])
               .find(entry => entry.username === filter['members.username']);
             if (member) member[field] = clone(value);
+            return;
+          }
+          if (key.indexOf('roles.$.') === 0) {
+            const field = key.slice('roles.$.'.length);
+            const role = (doc.roles || []).find(entry => entry.id === filter['roles.id']);
+            if (role) role[field] = clone(value);
             return;
           }
           doc[key] = clone(value);
@@ -795,6 +809,252 @@ test('the owner cannot be removed, and a member can leave on their own', async (
     assert.equal(leaving.status, 200);
     assert.equal(leaving.body.selfRemoved, true);
     assert.equal(store.state.users.get('rookie').federation, null);
+  } finally {
+    await api.close();
+  }
+});
+
+/* ---------------------------------------------------------------
+   Manage → Roles: create, rename, delete
+--------------------------------------------------------------- */
+
+async function roleByName(api, id, user, name) {
+  const mine = await api.call('GET', '/api/federations/mine', { user });
+  return mine.body.federation.roles.find(role => role.name === name);
+}
+
+test('the owner can invent a role and hand it to a member', async () => {
+  const { api, id } = await setupManagedFederation();
+  try {
+    const created = await api.call('POST', `/api/federations/${id}/roles`, {
+      user: 'boss',
+      body: { name: 'Ring Announcer', description: 'Calls the matches', admin: false }
+    });
+    assert.equal(created.status, 201);
+    const role = created.body.federation.roles.find(entry => entry.name === 'Ring Announcer');
+    assert.ok(role, 'the new role is in the payload');
+    assert.equal(role.id, 'ring-announcer');
+    assert.equal(role.admin, false);
+    assert.equal(role.builtIn, false);
+    assert.equal(created.body.federation.canManage, true);
+
+    // A role that is merely created changes nothing for the roster…
+    assert.equal(created.body.federation.memberCount, 3);
+
+    const assigned = await api.call('POST', `/api/federations/${id}/members/rookie/role`, {
+      user: 'boss',
+      body: { roleId: 'ring-announcer' }
+    });
+    assert.equal(assigned.status, 200);
+    const rookie = assigned.body.federation.members.find(member => member.username === 'rookie');
+    assert.equal(rookie.roleId, 'ring-announcer');
+    assert.equal(
+      assigned.body.federation.roles.find(entry => entry.id === rookie.roleId).name,
+      'Ring Announcer'
+    );
+  } finally {
+    await api.close();
+  }
+});
+
+test('a role in use cannot be deleted until its holder is moved', async () => {
+  const { api, id } = await setupManagedFederation();
+  try {
+    await api.call('POST', `/api/federations/${id}/roles`, {
+      user: 'boss',
+      body: { name: 'Referee', description: '' }
+    });
+    await api.call('POST', `/api/federations/${id}/members/rookie/role`, {
+      user: 'boss',
+      body: { roleId: 'referee' }
+    });
+
+    const blocked = await api.call('DELETE', `/api/federations/${id}/roles/referee`, { user: 'boss' });
+    assert.equal(blocked.status, 409);
+    assert.equal(blocked.body.error, 'role_in_use');
+    assert.deepEqual(blocked.body.holders, ['rookie']);
+
+    await api.call('POST', `/api/federations/${id}/members/rookie/role`, {
+      user: 'boss',
+      body: { roleId: 'member' }
+    });
+
+    const removed = await api.call('DELETE', `/api/federations/${id}/roles/referee`, { user: 'boss' });
+    assert.equal(removed.status, 200);
+    assert.equal(removed.body.ok, true);
+    assert.equal(removed.body.federation.roles.some(role => role.id === 'referee'), false);
+  } finally {
+    await api.close();
+  }
+});
+
+test('renaming a role keeps its id, so members keep it', async () => {
+  const { api, id } = await setupManagedFederation();
+  try {
+    const original = await roleByName(api, id, 'boss', 'Commissioner');
+    await api.call('POST', `/api/federations/${id}/members/rookie/role`, {
+      user: 'boss',
+      body: { roleId: original.id }
+    });
+
+    const renamed = await api.call('PATCH', `/api/federations/${id}/roles/${original.id}`, {
+      user: 'boss',
+      body: { name: 'Head Booker', description: 'Writes the cards', admin: false }
+    });
+    assert.equal(renamed.status, 200);
+
+    const after = renamed.body.federation.roles.find(role => role.id === original.id);
+    assert.equal(after.name, 'Head Booker');
+    assert.equal(after.description, 'Writes the cards');
+    assert.equal(after.id, original.id, 'the id survives the rename');
+
+    const rookie = renamed.body.federation.members.find(member => member.username === 'rookie');
+    assert.equal(rookie.roleId, original.id, 'the member still points at the same role');
+    assert.equal(
+      renamed.body.federation.roles.find(role => role.id === rookie.roleId).name,
+      'Head Booker'
+    );
+
+    // Renaming onto an existing name (built in or custom) is a duplicate.
+    const clash = await api.call('PATCH', `/api/federations/${id}/roles/${original.id}`, {
+      user: 'boss',
+      body: { name: 'Member' }
+    });
+    assert.equal(clash.status, 400);
+    assert.equal(clash.body.error, 'role_duplicate');
+  } finally {
+    await api.close();
+  }
+});
+
+test('built-in roles are read-only, and unknown role ids are 404s', async () => {
+  const { api, id } = await setupManagedFederation();
+  try {
+    const editOwner = await api.call('PATCH', `/api/federations/${id}/roles/owner`, {
+      user: 'boss',
+      body: { name: 'Big Boss' }
+    });
+    assert.equal(editOwner.status, 400);
+    assert.equal(editOwner.body.error, 'built_in_role');
+
+    const deleteMember = await api.call('DELETE', `/api/federations/${id}/roles/member`, { user: 'boss' });
+    assert.equal(deleteMember.status, 400);
+    assert.equal(deleteMember.body.error, 'built_in_role');
+
+    const ghost = await api.call('PATCH', `/api/federations/${id}/roles/ghost`, {
+      user: 'boss',
+      body: { name: 'Casper' }
+    });
+    assert.equal(ghost.status, 404);
+    assert.equal(ghost.body.error, 'role_not_found');
+
+    const noDescription = await api.call('POST', `/api/federations/${id}/roles`, {
+      user: 'boss',
+      body: { name: '  ' }
+    });
+    assert.equal(noDescription.status, 400);
+    assert.equal(noDescription.body.error, 'role_name_required');
+  } finally {
+    await api.close();
+  }
+});
+
+test('an admin may add a plain role but cannot mint or edit an admin one', async () => {
+  const { api, id } = await setupManagedFederation();
+  try {
+    const plain = await api.call('POST', `/api/federations/${id}/roles`, {
+      user: 'co',
+      body: { name: 'Timekeeper', description: '' }
+    });
+    assert.equal(plain.status, 201);
+
+    const powerGrab = await api.call('POST', `/api/federations/${id}/roles`, {
+      user: 'co',
+      body: { name: 'Shadow Boss', admin: true }
+    });
+    assert.equal(powerGrab.status, 403);
+    assert.equal(powerGrab.body.error, 'insufficient_privileges');
+
+    // Promoting their own role to admin is also refused.
+    const promote = await api.call('PATCH', `/api/federations/${id}/roles/timekeeper`, {
+      user: 'co',
+      body: { name: 'Timekeeper', admin: true }
+    });
+    assert.equal(promote.status, 403);
+    assert.equal(promote.body.error, 'insufficient_privileges');
+
+    // An existing admin role is the owner's to touch.
+    const coOwnerRole = (await api.call('GET', '/api/federations/mine', { user: 'boss' }))
+      .body.federation.roles.find(role => role.id === 'co-owner');
+    assert.equal(coOwnerRole.admin, true);
+    const editAdmin = await api.call('PATCH', `/api/federations/${id}/roles/co-owner`, {
+      user: 'co',
+      body: { name: 'Second Boss' }
+    });
+    assert.equal(editAdmin.status, 400);
+    assert.equal(editAdmin.body.error, 'built_in_role');
+
+    // The owner may make a custom role an admin one…
+    const promoted = await api.call('PATCH', `/api/federations/${id}/roles/timekeeper`, {
+      user: 'boss',
+      body: { name: 'Timekeeper', admin: true }
+    });
+    assert.equal(promoted.status, 200);
+    const timekeeper = promoted.body.federation.roles.find(role => role.id === 'timekeeper');
+    assert.equal(timekeeper.admin, true);
+
+    // …and only the owner may remove it again.
+    const coDelete = await api.call('DELETE', `/api/federations/${id}/roles/timekeeper`, { user: 'co' });
+    assert.equal(coDelete.status, 403);
+    assert.equal(coDelete.body.error, 'insufficient_privileges');
+  } finally {
+    await api.close();
+  }
+});
+
+test('a plain member or an outsider cannot create roles at all', async () => {
+  const { api, id } = await setupManagedFederation();
+  try {
+    const member = await api.call('POST', `/api/federations/${id}/roles`, {
+      user: 'rookie',
+      body: { name: 'Sneaky Role' }
+    });
+    assert.equal(member.status, 403);
+    assert.equal(member.body.error, 'not_a_manager');
+
+    const outsider = await api.call('POST', `/api/federations/${id}/roles`, {
+      user: 'stranger',
+      body: { name: 'Outside Role' }
+    });
+    assert.equal(outsider.status, 403);
+
+    const anonymous = await api.call('POST', `/api/federations/${id}/roles`, {
+      body: { name: 'Anon Role' }
+    });
+    assert.equal(anonymous.status, 401);
+  } finally {
+    await api.close();
+  }
+});
+
+test('the role list is capped', async () => {
+  const { api, id } = await setupManagedFederation();
+  try {
+    const names = ['Scout', 'Trainer', 'Medic', 'Agent', 'Cameraman'];
+    for (const name of names) {
+      const res = await api.call('POST', `/api/federations/${id}/roles`, {
+        user: 'boss',
+        body: { name, description: '' }
+      });
+      assert.equal(res.status, 201, `${name} should fit`);
+    }
+
+    const overflow = await api.call('POST', `/api/federations/${id}/roles`, {
+      user: 'boss',
+      body: { name: 'Extra' }
+    });
+    assert.equal(overflow.status, 400);
+    assert.equal(overflow.body.error, 'roles_too_many');
   } finally {
     await api.close();
   }

@@ -912,6 +912,56 @@ html[data-mcf-theme="light"] .actions .nav-group-menu {
   font-size: 13px;
 }
 
+/* ---------- manage: the roles tab ---------- */
+
+.mcf-fed-role-copy {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+/* The description always gets a line of its own under the name. */
+.mcf-fed-role-copy .small { flex-basis: 100%; }
+
+.mcf-fed-role-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mcf-fed-role-admin-tag {
+  color: #6dffe7;
+  border-color: rgba(109, 255, 231, 0.4);
+}
+
+.mcf-fed-role-builtin { opacity: 0.92; }
+
+.mcf-fed-role-row-editing > .mcf-fed-role-editor { flex: 1 1 100%; }
+
+.mcf-fed-role-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px dashed rgba(127, 216, 255, 0.3);
+}
+
+.mcf-fed-role-editor-title {
+  margin: 0;
+  font-size: 13px;
+  color: var(--accent, #7fd8ff);
+}
+
+.mcf-fed-role-editor-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 6px;
+}
+
 /* ---------- join list ---------- */
 
 .mcf-fed-notice {
@@ -998,6 +1048,8 @@ html[data-mcf-theme="light"] .mcf-fed-join-row {
   border-color: rgba(10, 60, 110, 0.2);
 }
 html[data-mcf-theme="light"] .mcf-fed-role-select { background: #ffffff; border-color: rgba(10, 60, 110, 0.25); }
+html[data-mcf-theme="light"] .mcf-fed-role-editor { border-color: rgba(10, 60, 110, 0.35); }
+html[data-mcf-theme="light"] .mcf-fed-role-admin-tag { color: #0b7a68; border-color: rgba(11, 122, 104, 0.45); }
 html[data-mcf-theme="light"] .mcf-fed-presence-online { color: #0b7a68; }
 html[data-mcf-theme="light"] .mcf-fed-notice {
   background: rgba(255, 213, 128, 0.25);
@@ -1011,4 +1063,5 @@ html[data-mcf-theme="light"] .mcf-fed-notice {
   .mcf-fed-role-row [data-role-desc] { grid-column: 1 / -1; }
   .mcf-fed-chat-form { flex-wrap: wrap; }
   .mcf-fed-manage-actions { width: 100%; }
+  .mcf-fed-role-editor-fields { grid-template-columns: minmax(0, 1fr); }
 }
