@@ -1269,3 +1269,33 @@ test('the role list is capped', async () => {
     await api.close();
   }
 });
+
+test('chatroom presence lists only federation members who are online', async () => {
+  const { store, api, id } = await setupManagedFederation();
+  try {
+    // The owner and co-owner are online; the outsider is online too but has
+    // nothing to do with this federation.
+    store.state.users.get('boss').online = true;
+    store.state.users.get('stranger').online = true;
+
+    const presence = await api.call('GET', `/api/federations/${id}/presence`, { user: 'boss' });
+    assert.equal(presence.status, 200);
+    assert.equal(presence.body.ok, true);
+    assert.equal(presence.body.total, 3, 'the roster size, not the site');
+    assert.deepEqual(
+      presence.body.online.map(person => person.username),
+      ['boss', 'co'],
+      'only online federation members, sorted by display name'
+    );
+    assert.equal(presence.body.online[0].display, 'BOSS');
+
+    // Rookie is a member but offline.
+    assert.ok(!presence.body.online.some(person => person.username === 'rookie'));
+
+    const outsider = await api.call('GET', `/api/federations/${id}/presence`, { user: 'stranger' });
+    assert.equal(outsider.status, 403);
+    assert.equal(outsider.body.error, 'not_a_member');
+  } finally {
+    await api.close();
+  }
+});

@@ -1187,6 +1187,45 @@ function createFederationRouter({
     return { doc };
   }
 
+  /**
+   * Who is in the chatroom right now: the federation's own members filtered to
+   * the ones the arena sees as online. Outsiders never appear, even when they
+   * are online — this list is the federation, not the site.
+   */
+  router.get('/:id/presence', requireUser, async (req, res) => {
+    try {
+      const room = await loadRoom(req.params.id, req.username);
+      if (room.error) return res.status(room.status).json({ ok: false, error: room.error });
+
+      const names = (room.doc.members || [])
+        .map(member => member.username)
+        .filter(Boolean);
+      const people = names.length
+        ? await User.find({ username: { $in: names } })
+          .select('username display online lastSeenAt')
+          .lean()
+        : [];
+
+      const byName = {};
+      people.forEach(person => {
+        if (person && person.username) byName[person.username] = person;
+      });
+
+      const online = names
+        .filter(name => byName[name] && byName[name].online === true)
+        .map(name => ({
+          username: name,
+          display: String(byName[name].display || name)
+        }))
+        .sort((a, b) => a.display.localeCompare(b.display));
+
+      return res.json({ ok: true, online, total: names.length });
+    } catch (err) {
+      console.error('federation presence error:', err?.message || err);
+      return res.status(500).json({ ok: false, error: 'server_error' });
+    }
+  });
+
   router.get('/:id/messages', requireUser, async (req, res) => {
     try {
       const room = await loadRoom(req.params.id, req.username);

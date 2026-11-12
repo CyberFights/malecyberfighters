@@ -1382,3 +1382,143 @@ test('Manage can reject a join request', async () => {
     client.dom.window.close();
   }
 });
+
+/* ---------------------------------------------------------------
+   The federation chatroom — a movable window with online members
+--------------------------------------------------------------- */
+
+function chatroomClient(extraMine) {
+  const messages = [
+    { from: 'boss', display: 'Boss', text: 'Locker room talk.', at: '2026-01-01T10:00:00Z' },
+    { from: 'rookie', display: 'Rookie', text: 'On my way.', at: '2026-01-01T10:01:00Z' }
+  ];
+  return startClient({
+    mine: url => {
+      if (url.indexOf('/presence') !== -1) {
+        return {
+          ok: true,
+          total: 4,
+          online: [
+            { username: 'boss', display: 'Boss' },
+            { username: 'rookie', display: 'Rookie' },
+            { username: 'outsider', display: 'Outsider' }
+          ].filter(person => person.username !== 'outsider')
+        };
+      }
+      if (url.indexOf('/messages') !== -1) {
+        return { ok: true, messages };
+      }
+      return Object.assign({ ok: true, federation: federationFixture() }, extraMine || {});
+    }
+  });
+}
+
+test('the Chatroom button opens a movable floating window, not a modal', async () => {
+  const client = chatroomClient();
+  try {
+    client.window.MCFFederations.openChatroom();
+    await sleep(30);
+
+    const win = client.document.querySelector('.mcf-fed-chat-window');
+    assert.ok(win, 'the floating chatroom opened');
+    assert.equal(client.document.querySelectorAll('.mcf-modal').length, 0, 'it is not a modal');
+    assert.match(win.textContent, /Iron Ring Federation/);
+    assert.match(win.textContent, /Locker room talk\./);
+    assert.match(win.textContent, /On my way\./);
+
+    // Only the federation's online members are listed, never the outsider.
+    const people = win.querySelectorAll('.mcf-fed-chat-member');
+    assert.deepEqual(
+      Array.from(people).map(row => row.querySelector('.mcf-fed-chat-member-name').textContent.trim()),
+      ['Boss you', 'Rookie'],
+      'the signed-in member is marked as themselves'
+    );
+    assert.equal(win.querySelector('#mcfFedChatOnlineCount').textContent, '2');
+
+    // Asking again brings the same window forward instead of stacking one.
+    client.window.MCFFederations.openChatroom();
+    await sleep(30);
+    assert.equal(client.document.querySelectorAll('.mcf-fed-chat-window').length, 1);
+
+    // The close button takes it away.
+    win.querySelector('[data-fed-chat-close]').click();
+    assert.equal(client.document.querySelectorAll('.mcf-fed-chat-window').length, 0);
+  } finally {
+    client.dom.window.close();
+  }
+});
+
+test('the chatroom window can be dragged by its header', async () => {
+  const client = chatroomClient();
+  try {
+    client.window.MCFFederations.openChatroom();
+    await sleep(30);
+
+    const win = client.document.querySelector('.mcf-fed-chat-window');
+    const head = win.querySelector('[data-fed-chat-drag]');
+    const mouse = (type, x, y) => new client.window.MouseEvent(type, {
+      bubbles: true,
+      clientX: x,
+      clientY: y
+    });
+
+    head.dispatchEvent(mouse('mousedown', 100, 100));
+    client.document.dispatchEvent(mouse('mousemove', 160, 140));
+    client.document.dispatchEvent(mouse('mouseup', 160, 140));
+
+    assert.equal(win.style.left, '60px');
+    assert.equal(win.style.top, '40px');
+
+    // It stays where it was put.
+    client.document.dispatchEvent(mouse('mousemove', 300, 300));
+    assert.equal(win.style.left, '60px');
+
+    win.querySelector('[data-fed-chat-close]').click();
+  } finally {
+    client.dom.window.close();
+  }
+});
+
+test('a message typed into the floating chatroom is posted', async () => {
+  const posted = [
+    { from: 'boss', display: 'Boss', text: 'Locker room talk.', at: '2026-01-01T10:00:00Z' },
+    { from: 'boss', display: 'Boss', text: 'Doors at eight.', at: '2026-01-01T10:02:00Z' }
+  ];
+
+  const client = startClient({
+    mine: url => {
+      if (url.indexOf('/presence') !== -1) {
+        return { ok: true, total: 1, online: [{ username: 'boss', display: 'Boss' }] };
+      }
+      if (url.indexOf('/messages') !== -1) {
+        return { ok: true, messages: posted.slice(0, 1) };
+      }
+      return { ok: true, federation: federationFixture() };
+    },
+    create: (body, url) => {
+      assert.equal(url, '/api/federations/fed1/messages');
+      assert.equal(body.text, 'Doors at eight.');
+      return { ok: true, messages: posted };
+    }
+  });
+
+  try {
+    client.window.MCFFederations.openChatroom();
+    await sleep(30);
+
+    const win = client.document.querySelector('.mcf-fed-chat-window');
+    const input = win.querySelector('#mcfFedChatInput');
+    input.value = 'Doors at eight.';
+    input.dispatchEvent(new client.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await sleep(30);
+
+    const post = client.calls.find(call => call.method === 'POST');
+    assert.ok(post, 'the message was posted');
+    assert.match(win.textContent, /Doors at eight\./);
+    assert.equal(input.value, '');
+
+    win.querySelector('[data-fed-chat-close]').click();
+  } finally {
+    client.dom.window.close();
+  }
+});

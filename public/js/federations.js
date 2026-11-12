@@ -27,6 +27,9 @@
 
   var ROLE_LIMIT = 6;
   var CHAT_POLL_MS = 5000;
+  // Stacking order for the floating chatroom, and the one window that is open.
+  var chatZ = 12100;
+  var openChat = null;
 
   var ERROR_TEXT = {
     name_required: 'Give your federation a name.',
@@ -1240,33 +1243,62 @@
     });
   }
 
+  /**
+   * A floating, movable chatroom, like the arena chat, with the federation's
+   * online members down the side. One window at a time: asking again brings
+   * the open one to the front instead of stacking copies.
+   */
   function showChatroom(federation) {
     if (!federation.isMember) {
       MCF.toast('Only members can open this chatroom', 'error');
       return;
     }
+    if (openChat && openChat.el.isConnected) {
+      openChat.focus();
+      return;
+    }
 
     var timer = null;
-    var box = MCF.popup({
-      title: federation.name + ' — chatroom',
-      label: federation.name + ' chatroom',
-      wide: true,
-      onClose: function () { if (timer) clearInterval(timer); }
-    });
-
-    box.body.innerHTML =
-      '<p class="small muted">Members only. Everything here stays inside the federation.</p>' +
-      '<div class="mcf-fed-chat-log" id="mcfFedChatLog" aria-live="polite"><p class="small muted">Loading…</p></div>' +
-      '<div class="mcf-fed-chat-form">' +
-        '<input class="mcf-input" type="text" id="mcfFedChatInput" maxlength="500" placeholder="Say something to your federation">' +
+    var me = session();
+    var el = document.createElement('div');
+    el.className = 'mcf-fed-chat-window';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-label', federation.name + ' chatroom');
+    el.innerHTML =
+      '<div class="mcf-fed-chat-head" data-fed-chat-drag>' +
+        '<div class="mcf-fed-chat-title">' +
+          '<strong>' + MCF.escapeHtml(federation.name) + '</strong>' +
+          '<span class="small muted">Federation chatroom</span>' +
+        '</div>' +
+        '<button type="button" class="ghost small-btn" data-fed-chat-close ' +
+          'aria-label="Close chatroom">✕</button>' +
+      '</div>' +
+      '<div class="mcf-fed-chat-main">' +
+        '<div class="mcf-fed-chat-log mcf-fed-chat-feed" id="mcfFedChatLog" aria-live="polite">' +
+          '<p class="small muted">Loading…</p>' +
+        '</div>' +
+        '<aside class="mcf-fed-chat-people" aria-label="Federation members online">' +
+          '<div class="mcf-fed-chat-people-title">Online <span id="mcfFedChatOnlineCount">0</span></div>' +
+          '<div id="mcfFedChatOnline" class="mcf-fed-chat-online"></div>' +
+        '</aside>' +
+      '</div>' +
+      '<div class="mcf-fed-chat-compose">' +
+        '<input class="mcf-input" type="text" id="mcfFedChatInput" maxlength="500" ' +
+          'placeholder="Message your federation" aria-label="Write a federation message" ' +
+          'enterkeyhint="send">' +
         '<button type="button" class="small-btn" id="mcfFedChatSend">Send</button>' +
       '</div>' +
-      '<span class="small muted" id="mcfFedChatStatus"></span>';
+      '<span class="small muted mcf-fed-chat-status" id="mcfFedChatStatus"></span>';
 
-    var log = box.body.querySelector('#mcfFedChatLog');
-    var input = box.body.querySelector('#mcfFedChatInput');
-    var status = box.body.querySelector('#mcfFedChatStatus');
-    var url = '/api/federations/' + encodeURIComponent(federation.id) + '/messages';
+    document.body.appendChild(el);
+
+    var log = el.querySelector('#mcfFedChatLog');
+    var input = el.querySelector('#mcfFedChatInput');
+    var status = el.querySelector('#mcfFedChatStatus');
+    var onlineHost = el.querySelector('#mcfFedChatOnline');
+    var onlineCount = el.querySelector('#mcfFedChatOnlineCount');
+    var messagesUrl = '/api/federations/' + encodeURIComponent(federation.id) + '/messages';
+    var presenceUrl = '/api/federations/' + encodeURIComponent(federation.id) + '/presence';
 
     function render(messages) {
       if (!Array.isArray(messages)) return;
@@ -1285,8 +1317,35 @@
       if (atBottom) log.scrollTop = log.scrollHeight;
     }
 
+    /** Only federation members the arena sees as online — nobody else. */
+    function renderOnline(people) {
+      var online = Array.isArray(people) ? people : [];
+      onlineCount.textContent = String(online.length);
+      if (!online.length) {
+        onlineHost.innerHTML = '<p class="small muted">Nobody is online right now.</p>';
+        return;
+      }
+      onlineHost.innerHTML = online.map(function (person) {
+        var self = !!me && person.username === me.username;
+        return '<div class="mcf-fed-chat-member">' +
+          '<span class="mcf-fed-chat-dot" aria-hidden="true"></span>' +
+          '<span class="mcf-fed-chat-member-name">' +
+            MCF.escapeHtml(person.display || person.username) +
+            (self ? ' <span class="mcf-fed-chat-you">you</span>' : '') +
+          '</span>' +
+        '</div>';
+      }).join('');
+    }
+
+    function loadPresence() {
+      return MCF.getJSON(presenceUrl).then(function (data) {
+        if (data && data.ok) renderOnline(data.online);
+      });
+    }
+
     function load() {
-      return MCF.getJSON(url).then(function (data) {
+      loadPresence();
+      return MCF.getJSON(messagesUrl).then(function (data) {
         if (data && data.ok) {
           render(data.messages);
           if (status) status.textContent = '';
@@ -1302,7 +1361,7 @@
       if (status) status.textContent = '';
       input.value = '';
 
-      MCF.postJSON(url, { text: text }).then(function (data) {
+      MCF.postJSON(messagesUrl, { text: text }).then(function (data) {
         if (!data || !data.ok) {
           if (status) status.textContent = errorText(data && data.error);
           input.value = text;
@@ -1313,16 +1372,93 @@
       });
     }
 
-    box.body.querySelector('#mcfFedChatSend').addEventListener('click', send);
+    function close() {
+      if (timer) clearInterval(timer);
+      timer = null;
+      document.removeEventListener('keydown', onKey);
+      el.remove();
+      if (openChat && openChat.el === el) openChat = null;
+    }
+
+    function onKey(event) {
+      if (event.key === 'Escape') close();
+    }
+
+    function focus() {
+      el.style.zIndex = String(++chatZ);
+    }
+
+    el.addEventListener('mousedown', focus);
+    el.querySelector('[data-fed-chat-close]').addEventListener('click', close);
+    el.querySelector('#mcfFedChatSend').addEventListener('click', send);
     input.addEventListener('keydown', function (event) {
       if (event.key === 'Enter') {
         event.preventDefault();
         send();
       }
     });
+    document.addEventListener('keydown', onKey);
+    makeChatMovable(el);
+
+    openChat = { el: el, focus: focus };
+    focus();
 
     load();
     timer = setInterval(load, CHAT_POLL_MS);
+  }
+
+  /**
+   * Drag the window by its header. On phones it is a full-screen sheet, so
+   * there is nothing to drag — the same CSS that sizes it turns this off.
+   */
+  function makeChatMovable(el) {
+    var head = el.querySelector('[data-fed-chat-drag]');
+    if (!head) return;
+
+    var dragging = false;
+    var startX = 0;
+    var startY = 0;
+    var startLeft = 0;
+    var startTop = 0;
+
+    function move(event) {
+      if (!dragging) return;
+      var left = startLeft + (event.clientX - startX);
+      var top = startTop + (event.clientY - startY);
+      left = Math.max(0, Math.min(left, window.innerWidth - 120));
+      top = Math.max(0, Math.min(top, window.innerHeight - 60));
+      el.style.left = left + 'px';
+      el.style.top = top + 'px';
+    }
+
+    function stop() {
+      if (!dragging) return;
+      dragging = false;
+      el.classList.remove('mcf-fed-chat-dragging');
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', stop);
+    }
+
+    head.addEventListener('mousedown', function (event) {
+      if (event.target.closest && event.target.closest('button')) return;
+      if (window.innerWidth <= 768) return;
+
+      var rect = el.getBoundingClientRect();
+      el.style.left = rect.left + 'px';
+      el.style.top = rect.top + 'px';
+      el.style.right = 'auto';
+      el.style.bottom = 'auto';
+
+      dragging = true;
+      startX = event.clientX;
+      startY = event.clientY;
+      startLeft = rect.left;
+      startTop = rect.top;
+      el.classList.add('mcf-fed-chat-dragging');
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', stop);
+      event.preventDefault();
+    });
   }
 
   /* ---------------------------------------------------------
