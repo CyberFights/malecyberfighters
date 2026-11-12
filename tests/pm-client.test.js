@@ -81,6 +81,7 @@ async function startClient(username, { openWindowFor = null, dmHistory = null } 
   // which utils.js provides on a real page; the harness stubs it exactly as it
   // stubs the other utils.js globals pm.js expects.
   const dmRequests = [];
+  const apiCalls = [];
   const pages = dmHistory ? [...dmHistory] : [];
   win.fetch = async (url, options) => {
     if (String(url).includes('/api/dm/history')) {
@@ -89,6 +90,11 @@ async function startClient(username, { openWindowFor = null, dmHistory = null } 
       const page = pages.length ? pages.shift() : { ok: true, messages: [] };
       return { ok: true, json: async () => page };
     }
+    apiCalls.push({
+      url: String(url),
+      method: (options && options.method) || 'GET',
+      body: options && options.body ? JSON.parse(options.body) : undefined
+    });
     return { ok: true, json: async () => ({ ok: true, messages: [] }) };
   };
   win.authFetch = (url, options) => win.fetch(url, options);
@@ -121,6 +127,7 @@ async function startClient(username, { openWindowFor = null, dmHistory = null } 
     win,
     dmReads,
     dmRequests,
+    apiCalls,
     historyBar: partner => win.document.getElementById('pmHistoryBar_' + partner),
     historyStatus: partner => win.document.getElementById('pmHistoryStatus_' + partner),
     olderButton: partner => win.document.getElementById('pmOlder_' + partner),
@@ -362,6 +369,68 @@ test('a retired window stops asking for history', async () => {
     await tick(60);
 
     assert.equal(client.dmRequests.length, 1);
+  } finally {
+    await client.close();
+  }
+});
+
+
+/* ---------------------------------------------------------------
+   Federation join requests in the owner's DMs
+--------------------------------------------------------------- */
+
+const joinRequest = {
+  id: 'dm-fed',
+  from: 'alice',
+  to: 'bob',
+  text: '@alice asked to join Iron Ring Federation.',
+  type: 'federationJoin',
+  federationId: 'fed1',
+  federationName: 'Iron Ring Federation',
+  applicant: 'alice',
+  time: new Date('2026-09-10T00:00:00.000Z')
+};
+
+test('the owner answers a join request from the DM it arrived in', async () => {
+  const client = await startClient('bob', {
+    dmHistory: [{ ok: true, messages: [joinRequest] }]
+  });
+  try {
+    client.win.openPrivateWindow('alice');
+    const body = () => client.win.document.getElementById('pmBody_alice');
+    assert.ok(await waitFor(() => body().querySelectorAll('.message').length === 1));
+
+    const approve = body().querySelector('.fedJoinApprove');
+    const reject = body().querySelector('.fedJoinReject');
+    assert.ok(approve, 'the owner gets an Approve button');
+    assert.ok(reject, 'and a Reject button');
+    assert.match(body().textContent, /@alice asked to join Iron Ring Federation/);
+
+    approve.click();
+    assert.ok(await waitFor(() => client.apiCalls.length === 1), 'the decision is posted');
+
+    const call = client.apiCalls[0];
+    assert.equal(call.method, 'POST');
+    assert.equal(call.url, '/api/federations/fed1/requests/alice/approve');
+    assert.ok(await waitFor(() => /is in/.test(body().textContent)), 'the buttons become the outcome');
+    assert.equal(body().querySelector('.fedJoinApprove'), null);
+  } finally {
+    await client.close();
+  }
+});
+
+test('the applicant sees their request without the owner’s buttons', async () => {
+  const client = await startClient('alice', {
+    dmHistory: [{ ok: true, messages: [joinRequest] }]
+  });
+  try {
+    client.win.openPrivateWindow('bob');
+    const body = () => client.win.document.getElementById('pmBody_bob');
+    assert.ok(await waitFor(() => body().querySelectorAll('.message').length === 1));
+
+    assert.match(body().textContent, /asked to join Iron Ring Federation/);
+    assert.equal(body().querySelector('.fedJoinApprove'), null, 'not their call to make');
+    assert.equal(body().querySelector('.fedJoinReject'), null);
   } finally {
     await client.close();
   }

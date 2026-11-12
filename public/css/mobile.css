@@ -314,6 +314,17 @@ textarea:focus-visible,
 }
 .actions button { margin-top: 0; }
 
+/* Section label inside the flat mobile action row (e.g. Federations). The
+   desktop action row groups buttons with .nav-group instead. */
+.actions-section-title {
+  margin: 6px 0 -2px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent, #7fd8ff);
+}
+
 #legalLinks {
   display: flex;
   flex-wrap: wrap;

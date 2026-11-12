@@ -2732,7 +2732,7 @@ h3{
 /* ============================================================
    ACTION BUTTON CATEGORIES
    The action column is grouped into categories (Account, Chatrooms,
-   Community, Matches, Help). Each .nav-group is a toggle plus a
+   Community, Federations, Matches, Games, Help). Each .nav-group is a toggle plus a
    .nav-group-menu holding the original buttons. On desktop the menu
    flies out to the right of its toggle, so the fixed, vertically
    centred column never grows or shifts when a category opens.

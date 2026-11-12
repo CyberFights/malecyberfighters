@@ -718,3 +718,611 @@ html[data-mcf-theme="light"] .actions .nav-group-menu {
 @media (prefers-reduced-motion: reduce) {
   .image-library-nav-link { transition: none; }
 }
+
+/* ============================================================
+   Federations — registration form, federation card, Join list
+   and the members-only chatroom (public/js/federations.js)
+============================================================ */
+
+.mcf-fed-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 0 10px;
+}
+
+.mcf-fed-hero-image,
+.mcf-fed-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1px solid rgba(127, 216, 255, 0.3);
+  background: rgba(127, 216, 255, 0.08);
+  flex: 0 0 auto;
+}
+
+.mcf-fed-thumb { width: 46px; height: 46px; border-radius: 10px; }
+
+.mcf-fed-hero-empty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--accent, #7fd8ff);
+}
+
+.mcf-fed-name { margin: 0 0 2px; font-size: 18px; }
+.mcf-fed-hero p { margin: 0; }
+
+.mcf-fed-block { margin-top: 10px; }
+.mcf-fed-block h4 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent, #7fd8ff);
+}
+
+.mcf-fed-copy {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.mcf-fed-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.mcf-fed-list li {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(127, 216, 255, 0.06);
+  border: 1px solid rgba(127, 216, 255, 0.14);
+}
+
+.mcf-fed-tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(127, 216, 255, 0.35);
+  font-size: 11px;
+  color: var(--accent, #7fd8ff);
+  white-space: nowrap;
+}
+
+/* ---------- registration form ---------- */
+
+.mcf-fed-roles { display: flex; flex-direction: column; gap: 6px; }
+
+.mcf-fed-role-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.mcf-fed-role-admin {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  white-space: nowrap;
+  color: var(--muted, #b8c7d9);
+}
+.mcf-fed-role-admin input { width: auto; }
+
+.mcf-fed-role-remove {
+  background: transparent;
+  border: 1px solid rgba(127, 216, 255, 0.3);
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  padding: 6px 9px;
+  line-height: 1;
+}
+.mcf-fed-role-remove:hover { background: rgba(255, 122, 156, 0.16); }
+
+.mcf-fed-image-row { display: flex; align-items: center; gap: 12px; }
+
+.mcf-fed-image-preview {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1px solid rgba(127, 216, 255, 0.3);
+}
+
+/* ---------- manage: tabs, roster, details ---------- */
+
+.mcf-fed-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid rgba(127, 216, 255, 0.2);
+  margin-bottom: 10px;
+}
+
+.mcf-fed-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  color: inherit;
+  padding: 8px 12px;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  font-size: 13.5px;
+}
+.mcf-fed-tab:hover { background: rgba(127, 216, 255, 0.08); }
+.mcf-fed-tab-on {
+  background: rgba(127, 216, 255, 0.14);
+  border-color: rgba(127, 216, 255, 0.28);
+  color: var(--accent, #7fd8ff);
+}
+
+.mcf-fed-manage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mcf-fed-manage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(127, 216, 255, 0.16);
+  background: rgba(127, 216, 255, 0.05);
+}
+
+.mcf-fed-manage-person {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.mcf-fed-presence { font-size: 12px; color: var(--muted, #b8c7d9); }
+
+/* People waiting to be let in, above the roster. */
+.mcf-fed-requests {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 213, 128, 0.45);
+  background: rgba(255, 213, 128, 0.08);
+}
+
+.mcf-fed-requests-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.mcf-fed-request-row { background: rgba(127, 216, 255, 0.06); }
+
+/* The Approve / Reject pair in a join-request DM. */
+.fedJoinActions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+
+html[data-mcf-theme="light"] .mcf-fed-requests {
+  border-color: rgba(150, 110, 20, 0.5);
+  background: rgba(255, 213, 128, 0.22);
+}
+.mcf-fed-presence-online { color: #6dffe7; }
+
+.mcf-fed-manage-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mcf-fed-role-select {
+  background: #0d1220;
+  color: inherit;
+  border: 1px solid rgba(127, 216, 255, 0.3);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+/* ---------- manage: the roles tab ---------- */
+
+.mcf-fed-role-copy {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+/* The description always gets a line of its own under the name. */
+.mcf-fed-role-copy .small { flex-basis: 100%; }
+
+.mcf-fed-role-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mcf-fed-role-admin-tag {
+  color: #6dffe7;
+  border-color: rgba(109, 255, 231, 0.4);
+}
+
+.mcf-fed-role-builtin { opacity: 0.92; }
+
+.mcf-fed-role-row-editing > .mcf-fed-role-editor { flex: 1 1 100%; }
+
+.mcf-fed-role-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px dashed rgba(127, 216, 255, 0.3);
+}
+
+.mcf-fed-role-editor-title {
+  margin: 0;
+  font-size: 13px;
+  color: var(--accent, #7fd8ff);
+}
+
+.mcf-fed-role-editor-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 6px;
+}
+
+/* ---------- join list ---------- */
+
+.mcf-fed-notice {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 213, 128, 0.4);
+  background: rgba(255, 213, 128, 0.1);
+  font-size: 13px;
+}
+
+/* The Join list is dressed like the user roster: a dark, textured sheet of
+   rows with a square avatar on the left and the row's actions on the right. */
+.mcf-fed-join-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 52vh;
+  overflow-y: auto;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(160, 200, 255, 0.2);
+  background-color: rgba(0, 0, 0, 0.45);
+  background-image: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url('/images/mcf1.png');
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+}
+
+.mcf-fed-join-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(127, 216, 255, 0.18);
+  background: rgba(15, 23, 42, 0.78);
+  cursor: default;
+}
+.mcf-fed-join-row:hover { background: rgba(160, 200, 255, 0.14); }
+
+.mcf-fed-roster-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid rgba(127, 216, 255, 0.35);
+  background: rgba(127, 216, 255, 0.1);
+  flex: 0 0 auto;
+}
+
+.mcf-fed-roster-thumb.mcf-fed-hero-empty { font-size: 13px; }
+
+.mcf-fed-roster-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 160px;
+}
+
+.mcf-fed-roster-name {
+  font-weight: 700;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcf-fed-roster-meta {
+  font-size: 12px;
+  color: var(--muted, #b8c7d9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcf-fed-roster-desc {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--muted, #b8c7d9);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.mcf-fed-roster-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+/* ---------- chatroom: a floating window, like the arena chat ---------- */
+
+.mcf-fed-chat-window {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 640px;
+  max-width: calc(100vw - 32px);
+  height: 540px;
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  /* Above the modal layer (12000) so the room is never dimmed behind the card
+     that opened it, below the toasts (13000). */
+  z-index: 12100;
+  border-radius: 12px;
+  border: 1px solid rgba(127, 216, 255, 0.22);
+  background: linear-gradient(180deg, #050a16, #0a1324);
+  box-shadow: 0 20px 60px rgba(120, 180, 255, 0.25);
+  overflow: hidden;
+}
+.mcf-fed-chat-dragging { user-select: none; }
+
+.mcf-fed-chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(127, 216, 255, 0.18);
+  cursor: grab;
+  user-select: none;
+}
+.mcf-fed-chat-head:active { cursor: grabbing; }
+
+.mcf-fed-chat-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.mcf-fed-chat-title strong {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcf-fed-chat-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* The feed reuses the message styling but fills the window instead of sitting
+   in a bordered box of its own. */
+.mcf-fed-chat-window .mcf-fed-chat-feed {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  max-height: none;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.mcf-fed-chat-people {
+  width: 172px;
+  flex: 0 0 auto;
+  padding: 10px;
+  overflow-y: auto;
+  border-left: 1px solid rgba(127, 216, 255, 0.18);
+}
+
+.mcf-fed-chat-people-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted, #b8c7d9);
+}
+.mcf-fed-chat-people-title span {
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(127, 216, 255, 0.3);
+  color: var(--accent, #7fd8ff);
+  font-size: 11px;
+}
+
+.mcf-fed-chat-member {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+  min-width: 0;
+}
+.mcf-fed-chat-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6dffe7;
+  box-shadow: 0 0 8px rgba(109, 255, 231, 0.7);
+  flex: 0 0 auto;
+}
+.mcf-fed-chat-member-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mcf-fed-chat-you {
+  font-size: 11px;
+  color: var(--muted, #b8c7d9);
+}
+
+.mcf-fed-chat-compose {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid rgba(127, 216, 255, 0.18);
+}
+.mcf-fed-chat-compose .mcf-input { flex: 1; min-width: 0; }
+
+.mcf-fed-chat-status {
+  display: block;
+  padding: 0 10px 8px;
+}
+
+.mcf-fed-chat-log {
+  min-height: 140px;
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(127, 216, 255, 0.18);
+  background: rgba(2, 10, 24, 0.45);
+}
+
+.mcf-fed-chat-msg { font-size: 14px; }
+
+.mcf-fed-chat-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+}
+.mcf-fed-chat-meta time { color: var(--muted, #b8c7d9); }
+
+.mcf-fed-chat-text {
+  white-space: pre-wrap;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.mcf-fed-chat-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+.mcf-fed-chat-form .mcf-input { flex: 1; min-width: 0; }
+
+/* ---------- light theme ---------- */
+
+html[data-mcf-theme="light"] .mcf-fed-chat-log {
+  background: rgba(10, 60, 110, 0.05);
+  border-color: rgba(10, 60, 110, 0.25);
+}
+html[data-mcf-theme="light"] .mcf-fed-chat-window {
+  background: #ffffff;
+  border-color: rgba(10, 60, 110, 0.25);
+  box-shadow: 0 18px 50px rgba(15, 40, 80, 0.25);
+}
+html[data-mcf-theme="light"] .mcf-fed-chat-head,
+html[data-mcf-theme="light"] .mcf-fed-chat-people,
+html[data-mcf-theme="light"] .mcf-fed-chat-compose { border-color: rgba(10, 60, 110, 0.2); }
+html[data-mcf-theme="light"] .mcf-fed-chat-feed { background: transparent; }
+html[data-mcf-theme="light"] .mcf-fed-chat-dot {
+  background: #0b7a68;
+  box-shadow: 0 0 6px rgba(11, 122, 104, 0.5);
+}
+html[data-mcf-theme="light"] .mcf-fed-list li,
+html[data-mcf-theme="light"] .mcf-fed-manage-row,
+html[data-mcf-theme="light"] .mcf-fed-join-row {
+  background: rgba(10, 60, 110, 0.04);
+  border-color: rgba(10, 60, 110, 0.2);
+}
+html[data-mcf-theme="light"] .mcf-fed-join-list {
+  background-color: rgba(10, 60, 110, 0.05);
+  background-image: none;
+  border-color: rgba(10, 60, 110, 0.2);
+}
+html[data-mcf-theme="light"] .mcf-fed-roster-meta,
+html[data-mcf-theme="light"] .mcf-fed-roster-desc { color: #4a5f79; }
+html[data-mcf-theme="light"] .mcf-fed-roster-thumb {
+  border-color: rgba(10, 60, 110, 0.25);
+  background: rgba(10, 60, 110, 0.06);
+}
+html[data-mcf-theme="light"] .mcf-fed-role-select { background: #ffffff; border-color: rgba(10, 60, 110, 0.25); }
+html[data-mcf-theme="light"] .mcf-fed-role-editor { border-color: rgba(10, 60, 110, 0.35); }
+html[data-mcf-theme="light"] .mcf-fed-role-admin-tag { color: #0b7a68; border-color: rgba(11, 122, 104, 0.45); }
+html[data-mcf-theme="light"] .mcf-fed-presence-online { color: #0b7a68; }
+html[data-mcf-theme="light"] .mcf-fed-notice {
+  background: rgba(255, 213, 128, 0.25);
+  border-color: rgba(150, 110, 20, 0.4);
+}
+
+/* Phones: the role rows stack instead of squeezing three controls. */
+@media (max-width: 600px) {
+  .mcf-fed-role-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .mcf-fed-role-row [data-role-name] { grid-column: 1 / -1; }
+  .mcf-fed-role-row [data-role-desc] { grid-column: 1 / -1; }
+  .mcf-fed-chat-form { flex-wrap: wrap; }
+  .mcf-fed-chat-window {
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: auto;
+    height: auto;
+    max-width: none;
+    max-height: none;
+    border-radius: 0;
+    border: none;
+  }
+  .mcf-fed-chat-head { cursor: default; }
+  .mcf-fed-chat-people { width: 132px; padding: 8px; }
+  .mcf-fed-chat-compose { padding: 8px; }
+  .mcf-fed-manage-actions { width: 100%; }
+  .mcf-fed-role-editor-fields { grid-template-columns: minmax(0, 1fr); }
+}

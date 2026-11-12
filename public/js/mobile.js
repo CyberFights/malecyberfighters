@@ -2033,7 +2033,7 @@ function mobileImgSrc(value) {
       const author = directoryUser(msg.from) || { username: msg.from, display: msg.display || msg.from };
 
       const row = document.createElement("div");
-      row.className = "message-row" + (isMe ? " me" : "") + ((msg.type === "storyApproval" || msg.type === "relationshipApproval" || msg.type === "matchApproval") ? " system" : "");
+      row.className = "message-row" + (isMe ? " me" : "") + ((msg.type === "storyApproval" || msg.type === "relationshipApproval" || msg.type === "matchApproval" || msg.type === "federationJoin") ? " system" : "");
       if (msg._id || msg.id) row.dataset.dmId = String(msg._id || msg.id);
       if (msg.generatedMedia) row.dataset.generatedMedia = "1";
       if (msg.time) row.dataset.dmTime = String(new Date(msg.time).getTime());
@@ -2064,6 +2064,20 @@ function mobileImgSrc(value) {
           <div>${escapeHtml(msg.text || "")}</div>
             <button type="button" class="small-btn approveMatchBtn" data-id="${mid}">Approve</button>
             <button type="button" class="small-btn ghost declineMatchBtn" data-id="${mid}">Decline</button>
+        </div>
+      `;
+      } else if (msg.type === "federationJoin") {
+        const fedId = escapeHtml(msg.federationId || "");
+        const applicant = escapeHtml(msg.applicant || msg.from || "");
+        const canAnswer = msg.to === s.username && msg.from !== s.username &&
+          !!(msg.federationId && (msg.applicant || msg.from));
+        content = `
+        <div class="system-msg">
+          <div>${escapeHtml(msg.text || "")}</div>
+          ${canAnswer ? `<div class="fedJoinActions">
+            <button type="button" class="small-btn fedJoinApprove" data-fed-id="${fedId}" data-fed-user="${applicant}">Approve</button>
+            <button type="button" class="small-btn ghost fedJoinReject" data-fed-id="${fedId}" data-fed-user="${applicant}">Reject</button>
+          </div>` : ""}
         </div>
       `;
       } else if (msg.imageUrl) {
@@ -3726,6 +3740,36 @@ document.addEventListener("click", async (e) => {
     const story = await window.StoryUI.fetchStory(storyId, username);
     if (story) window.StoryUI.openViewer(story);
     else window.StoryUI.toast("Could not open that story", "error");
+  }
+});
+
+// Approve / reject a federation join request from the owner's DMs.
+document.addEventListener("click", async (e) => {
+  const button = e.target.closest && e.target.closest("button");
+  if (!button) return;
+  if (!button.classList.contains("fedJoinApprove") && !button.classList.contains("fedJoinReject")) return;
+
+  const federationId = button.dataset.fedId;
+  const applicant = button.dataset.fedUser;
+  if (!federationId || !applicant) return;
+
+  const decision = button.classList.contains("fedJoinApprove") ? "approve" : "reject";
+  button.disabled = true;
+
+  const res = await fetch(
+    `/api/federations/${encodeURIComponent(federationId)}/requests/` +
+      `${encodeURIComponent(applicant)}/${decision}`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }
+  );
+  const data = await res.json().catch(() => null);
+
+  if (data && data.ok) {
+    button.parentElement.innerHTML = decision === "approve"
+      ? `<div class="tiny muted">@${escapeHtml(applicant)} is in — say hello.</div>`
+      : `<div class="tiny muted">Request from @${escapeHtml(applicant)} rejected.</div>`;
+  } else {
+    button.disabled = false;
+    button.textContent = data && data.error === "already_member" ? "Already in" : "Try again";
   }
 });
 

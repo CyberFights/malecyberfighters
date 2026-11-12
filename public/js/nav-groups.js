@@ -3,7 +3,8 @@
    ------------------------------------------------------------
    The action row used to be one long column of buttons. index.html
    now groups them by category: each `.nav-group` is a toggle button
-   (Account, Chatrooms, Community, Matches, Help) plus a
+   (Account, Chatrooms, Community, Federations, Matches, Games,
+   Help) plus a
    `.nav-group-menu` holding the original buttons — same ids, same
    handlers. auth.js, dm-toggle.js, forums.js and the rest bind to
    those buttons exactly as before; this module never touches them.

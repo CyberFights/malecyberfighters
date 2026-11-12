@@ -1033,8 +1033,9 @@
     {
       id: 'rules',
       title: 'Site rules',
-      keywords: ['rules', 'site rules', 'server rules', 'chat rules', 'conduct rules', 'banned', 'ban', 'zero tolerance', 'allowed', 'respect'],
+      keywords: ['rules', 'site rules', 'server rules', 'chat rules', 'conduct rules', 'banned', 'ban', 'zero tolerance', 'allowed', 'respect', 'male only', 'men only', 'male profiles', 'female', 'gender', 'woman', 'women'],
       answer: 'The Site Rules window has the full rules; the short version is this.\n' +
+        'Male profiles only: Male Cyber Fighters is a men’s community, so every profile must belong to a male member — no female or non-male personas.\n' +
         'Be respectful: banter is playful and mutual, and it stops when someone asks it to. No harassment, hate speech, threats, doxxing, spamming, impersonating staff, or pushing past a limit someone has set. Zero tolerance applies to hate speech, threats of violence, sexual harassment, targeted harassment and dodging blocks or bans.\n' +
         'If something goes wrong: stop engaging, block the person, and report it. Moderators can warn, mute, remove messages and ban, and their decisions are final.',
       action: {
@@ -1477,6 +1478,19 @@
         label: 'Open Challenges',
         buttonId: 'btnChallenges',
         done: 'Opening Challenges for you.'
+      }
+    },
+    {
+      id: 'federations',
+      title: 'Federations — create, manage, join, chatroom',
+      keywords: ['federation', 'federations', 'create federation', 'manage federation', 'join federation', 'federation chat', 'federation chatroom', 'federation rules', 'federation roles', 'promotion', 'run a federation'],
+      answer: 'A federation is your own promotion: a name, rules, roles you can hand out, an image and a description.\n' +
+        'Open Federations in the action row. Create opens the registration form (you can run only one, and you cannot be in two federations at once). Join lists every federation with a Join button — pressing it sends the owner a direct message asking for approval, and you are only added once they approve. Chatroom opens a floating, movable members-only room with the federation’s online members down the side.\n' +
+        'Manage belongs to the owner and the federation’s co-owners/admins. Its Members tab lists join requests with Approve and Reject, then everyone with when they were last online, a role menu to assign or change a role, and Remove. The Roles tab adds a role, renames or re-describes one, and deletes one nobody holds — the built-in Owner, Co-owner and Member never change. Only the owner can tick “Can manage” on a role. The Federation details tab edits the name, description, rules and image.',
+      action: {
+        label: 'Open Create Federation',
+        buttonId: 'btnFederationCreate',
+        done: 'Opening the federation registration form for you.'
       }
     },
     {

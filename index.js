@@ -47,6 +47,7 @@ const {
 // moderation reports, achievements, and per-kind notification preferences.
 const { createLfgRouter } = require('./lfg');
 const { createChallengeRouter } = require('./challenges');
+const { createFederationRouter } = require('./federations');
 const { createMatchHistoryRouter } = require('./matchHistory');
 const reactions = require('./reactions');
 const { resolveMentions } = require('./mentions');
@@ -1423,6 +1424,21 @@ const userSchema = new mongoose.Schema({
     }, { _id: false }),
     default: () => ({})
   },
+  // ---------- FEDERATION ----------
+  // The federation this member belongs to ({ id, name, role, joinedAt }), written
+  // by POST /api/federations and POST /api/federations/:id/join. Kept on the
+  // member as well as on the Federation's member list: "which federation am I
+  // in?" is then one field read, and the roster stays the source of truth for
+  // who is in it. null means the member is not in one.
+  federation: {
+    type: new mongoose.Schema({
+      id: { type: mongoose.Schema.Types.ObjectId, ref: 'Federation' },
+      name: { type: String, default: '' },
+      role: { type: String, default: 'member' },
+      joinedAt: { type: Date, default: Date.now }
+    }, { _id: false }),
+    default: null
+  },
   // ---------- ACHIEVEMENTS ----------
   // Unlocked catalogue ids with their timestamps; anything the catalogue no
   // longer lists simply stops being displayed.
@@ -1547,6 +1563,58 @@ const challengeSchema = new mongoose.Schema({
   respondedAt: { type: Date }
 }, { timestamps: true });
 challengeSchema.index({ from: 1, to: 1, status: 1 });
+
+// ---------- FEDERATIONS ----------
+// A member-run promotion: one owner, member-written rules, custom roles and a
+// members-only chatroom. See federations.js for the flow and validation.
+// `nameKey` is the lower-cased name the unique index guards, so "Iron Ring"
+// and "iron ring" cannot both be registered.
+const federationMessageSchema = new mongoose.Schema({
+  from: { type: String, required: true },
+  display: { type: String, default: '' },
+  text: { type: String, required: true },
+  at: { type: Date, default: Date.now }
+}, { _id: false });
+
+const federationRoleSchema = new mongoose.Schema({
+  id: { type: String, required: true },
+  name: { type: String, required: true },
+  description: { type: String, default: '' },
+  // Owner-written roles marked admin can manage the federation (see
+  // federations.js); the built-in Owner and Co-owner roles are always admin.
+  admin: { type: Boolean, default: false }
+}, { _id: false });
+
+const federationMemberSchema = new mongoose.Schema({
+  username: { type: String, required: true },
+  display: { type: String, default: '' },
+  roleId: { type: String, default: 'member' },
+  joinedAt: { type: Date, default: Date.now }
+}, { _id: false });
+
+// Someone asking to join. Membership is not granted until an owner or one of
+// the federation's admins approves the request; see federations.js.
+const federationRequestSchema = new mongoose.Schema({
+  username: { type: String, required: true },
+  display: { type: String, default: '' },
+  requestedAt: { type: Date, default: Date.now }
+}, { _id: false });
+
+const federationSchema = new mongoose.Schema({
+  name: { type: String, required: true, trim: true },
+  nameKey: { type: String, required: true },
+  description: { type: String, default: '' },
+  rules: { type: String, default: '' },
+  imageUrl: { type: String, default: '' },
+  owner: { type: String, required: true },
+  roles: { type: [federationRoleSchema], default: [] },
+  members: { type: [federationMemberSchema], default: [] },
+  requests: { type: [federationRequestSchema], default: [] },
+  messages: { type: [federationMessageSchema], default: [] }
+}, { timestamps: true });
+// One federation per owner; one federation per name (case-insensitive).
+federationSchema.index({ owner: 1 }, { unique: true });
+federationSchema.index({ nameKey: 1 }, { unique: true });
 
 // One recorded match. `status` is only meaningful for member-logged matches
 // ('pending' until the named opponent confirms); engine matches are born
@@ -1681,6 +1749,11 @@ const dmSchema = new mongoose.Schema({
   // challenge / matchApproval system notices carry the id of the thing to act on
   challengeId: { type: String },
   matchId: { type: String },
+  // a federation join request: which federation, its name for the notice, and
+  // the member asking to get in
+  federationId: { type: String },
+  federationName: { type: String },
+  applicant: { type: String },
   // system / approval / normal
   type: { type: String, default: "normal" },
   // values:
@@ -1690,6 +1763,7 @@ const dmSchema = new mongoose.Schema({
   // "storyApproval" → approval request DM
   // "challenge"     → match challenge notice (challengeId)
   // "matchApproval" → logged-match confirmation (matchId)
+  // "federationJoin" → a request to join a federation (federationId, applicant)
   // "system"        → system notifications
 
   // true once the author has edited the text (see canEditDM for the window)
@@ -1765,6 +1839,7 @@ const Room = mongoose.model('Room', RoomSchema);
 const Forum = mongoose.model('Forum', forumSchema);
 const ForumReply = mongoose.model('ForumReply', forumReplySchema);
 const Challenge = mongoose.model('Challenge', challengeSchema);
+const Federation = mongoose.model('Federation', federationSchema);
 const MatchRecord = mongoose.model('MatchRecord', matchRecordSchema);
 const Reaction = mongoose.model('Reaction', reactionSchema);
 const Bookmark = mongoose.model('Bookmark', bookmarkSchema);
@@ -3877,6 +3952,9 @@ function sessionUserPayload(user) {
     atk: user.atk ?? null,
     def: user.def ?? null,
     discordId: user.discordId ?? null,
+    // Which federation this member is in, so the action row can say so before
+    // the first request ({ id, name, role, joinedAt } or null).
+    federation: user.federation || null,
     tags: userTags(user)
   };
 }
@@ -4688,6 +4766,17 @@ const lfg = createLfgRouter({
   broadcast: entries => io.emit('lfgBoard', entries)
 });
 app.use('/api/lfg', lfg.router);
+
+// ---------- FEDERATIONS ----------
+app.use('/api/federations', createFederationRouter({
+  Federation,
+  User,
+  requireUser: sessions.requireUser,
+  // A join request is delivered as a DM to the owner, then answered from it.
+  DM,
+  deliverToUser: (...args) => deliverToUser(...args),
+  forwardDMToDiscord
+}).router);
 
 // ---------- CHALLENGES ----------
 app.use('/api/challenge', createChallengeRouter({
