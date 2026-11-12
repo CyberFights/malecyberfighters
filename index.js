@@ -4796,6 +4796,17 @@ app.use('/api/federations', createFederationRouter({
     approved: true,
     declined: { $ne: true }
   }),
+  // The main-page leaderboard asks for every score at once.
+  pointsByFederation: async () => {
+    const rows = await Story.aggregate([
+      { $match: { approved: true, declined: { $ne: true }, 'federation.id': { $ne: null } } },
+      { $group: { _id: '$federation.id', points: { $sum: 1 } } }
+    ]);
+    return rows.reduce((map, row) => {
+      if (row && row._id) map[String(row._id)] = Number(row.points) || 0;
+      return map;
+    }, {});
+  },
   // Renaming a federation must not leave old stories crediting the old name.
   renameFederationLink: (federationId, name) => Story.updateMany(
     { 'federation.id': String(federationId) },

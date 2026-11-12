@@ -456,7 +456,9 @@ function createFederationRouter({
   // Host-provided: how many published stories credit this federation, and how
   // to keep those stories' name snapshots current after a rename.
   countPublishedStories,
-  renameFederationLink
+  renameFederationLink,
+  // Every federation's score in one query, for the main-page leaderboard.
+  pointsByFederation
 }) {
   const express = require('express');
   const router = express.Router();
@@ -659,6 +661,46 @@ function createFederationRouter({
     } catch (err) {
       console.error('federation list error:', err?.message || err);
       return res.status(500).json({ ok: false, error: 'server_error' });
+    }
+  });
+
+  // ---------- leaderboard ----------
+  // GET /api/federations/leaderboard — every federation and its points, highest
+  // first. Public: it is the same name/owner/score the Join list shows.
+  router.get('/leaderboard', async (req, res) => {
+    try {
+      const docs = await Federation.find({})
+        .select('name owner imageUrl members')
+        .limit(500)
+        .lean();
+
+      let scores = {};
+      if (typeof pointsByFederation === 'function') {
+        try {
+          scores = (await pointsByFederation()) || {};
+        } catch (err) {
+          // A scoreboard without scores is better than no scoreboard.
+          console.error('federation leaderboard points error:', err?.message || err);
+          scores = {};
+        }
+      }
+
+      const rows = (Array.isArray(docs) ? docs : []).map(doc => ({
+        id: String(doc._id || doc.id),
+        name: doc.name || '',
+        owner: doc.owner || '',
+        imageUrl: doc.imageUrl || '',
+        memberCount: Array.isArray(doc.members) ? doc.members.length : 0,
+        points: Math.max(0, Number(scores[String(doc._id || doc.id)]) || 0)
+      }));
+
+      // Highest score first; ties go alphabetically so the board is stable.
+      rows.sort((a, b) => (b.points - a.points) || a.name.localeCompare(b.name));
+
+      return res.json({ ok: true, federations: rows });
+    } catch (err) {
+      console.error('federation leaderboard error:', err?.message || err);
+      return res.status(500).json({ ok: false, error: 'server_error', federations: [] });
     }
   });
 

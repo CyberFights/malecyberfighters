@@ -1529,3 +1529,110 @@ test('a message typed into the floating chatroom is posted', async () => {
     client.dom.window.close();
   }
 });
+
+/* ---------------------------------------------------------------
+   The main-page federation leaderboard
+--------------------------------------------------------------- */
+
+function leaderboardRows() {
+  return [
+    { id: 'f1', name: 'Apex Club', owner: 'third', memberCount: 5, points: 9, imageUrl: '' },
+    {
+      id: 'f2',
+      name: 'Iron Ring Federation',
+      owner: 'boss',
+      memberCount: 2,
+      points: 1,
+      imageUrl: 'https://cdn.example/iron.png'
+    }
+  ];
+}
+
+test('the main page leaderboard lists federations by points, highest first', async () => {
+  const client = startClient({
+    mine: url => (url.indexOf('/leaderboard') !== -1
+      ? { ok: true, federations: leaderboardRows() }
+      : { ok: true, federation: null })
+  });
+
+  try {
+    await client.window.MCFFederations.refreshLeaderboard();
+    await sleep(20);
+
+    const host = client.document.querySelector('[data-fed-leaderboard]');
+    assert.ok(host, 'the main page carries a leaderboard');
+    assert.match(host.closest('.card').textContent, /Federation Leaderboard/);
+
+    const rows = host.querySelectorAll('.mcf-fed-board-row');
+    assert.equal(rows.length, 2);
+
+    const [first, second] = rows;
+    assert.equal(first.querySelector('.mcf-fed-board-rank').textContent, '1');
+    assert.ok(first.classList.contains('mcf-fed-board-first'), 'the leader is marked');
+    assert.equal(first.querySelector('.mcf-fed-board-name').textContent, 'Apex Club');
+    assert.equal(first.querySelector('.mcf-fed-board-points').textContent, '9 pts');
+    assert.match(first.textContent, /@third · 5 members/);
+    assert.equal(first.querySelector('.mcf-fed-board-thumb').textContent, 'AP', 'no image, initials stand in');
+
+    assert.equal(second.querySelector('.mcf-fed-board-rank').textContent, '2');
+    assert.equal(second.querySelector('.mcf-fed-board-name').textContent, 'Iron Ring Federation');
+    assert.equal(second.querySelector('.mcf-fed-board-points').textContent, '1 pt', 'singular point');
+    assert.equal(
+      second.querySelector('.mcf-fed-board-thumb').getAttribute('src'),
+      'https://cdn.example/iron.png'
+    );
+  } finally {
+    client.dom.window.close();
+  }
+});
+
+test('an empty leaderboard says so, and a hostile federation name is escaped', async () => {
+  const empty = startClient({
+    mine: url => (url.indexOf('/leaderboard') !== -1
+      ? { ok: true, federations: [] }
+      : { ok: true, federation: null })
+  });
+  try {
+    await empty.window.MCFFederations.refreshLeaderboard();
+    await sleep(20);
+    assert.match(
+      empty.document.querySelector('[data-fed-leaderboard]').textContent,
+      /No federations have been registered yet/
+    );
+  } finally {
+    empty.dom.window.close();
+  }
+
+  const hostile = startClient({
+    mine: url => (url.indexOf('/leaderboard') !== -1
+      ? {
+        ok: true,
+        federations: [{
+          id: 'f9',
+          name: '<img src=x onerror="alert(1)">',
+          owner: 'boss',
+          memberCount: 1,
+          points: 3,
+          imageUrl: ''
+        }]
+      }
+      : { ok: true, federation: null })
+  });
+  try {
+    await hostile.window.MCFFederations.refreshLeaderboard();
+    await sleep(20);
+    const host = hostile.document.querySelector('[data-fed-leaderboard]');
+    assert.equal(host.querySelector('img[src="x"]'), null, 'markup cannot be injected');
+    assert.match(host.textContent, /<img src=x onerror=/);
+    assert.match(host.textContent, /3 pts/);
+  } finally {
+    hostile.dom.window.close();
+  }
+});
+
+test('both main pages ship the leaderboard container', () => {
+  assert.match(PAGE, /data-fed-leaderboard/);
+  assert.match(PAGE, /Federation Leaderboard/);
+  assert.match(MOBILE, /data-fed-leaderboard/);
+  assert.match(MOBILE, /Federation Leaderboard/);
+});
