@@ -468,3 +468,36 @@ test('mobile login succeeds when localStorage throws (e.g. private mode or quota
     await page.close();
   }
 });
+
+/* ---------------------------------------------------------------
+   THE PROFILE SHOWS THE FEDERATION
+   The phone's profile modal reads the member record /api/allUsers hands it;
+   members in a federation get a Federation row, everyone else gets none.
+--------------------------------------------------------------- */
+
+test('the phone profile names the federation the member is in, and hides it otherwise', async () => {
+  const page = await startMobilePage('bob');
+  try {
+    page.win.__cw.state.allUsers = [
+      {
+        username: 'bob',
+        display: 'Bob',
+        wins: 2,
+        losses: 1,
+        federation: { id: 'fed1', name: 'Iron Ring Federation', role: 'member' }
+      },
+      { username: 'jobber', display: 'Jobber Kid', wins: 0, losses: 4, federation: null }
+    ];
+
+    await page.win.__cw.openProfile('bob');
+    const row = page.win.document.getElementById('vpFederationRow');
+    assert.equal(page.win.document.getElementById('vpFederation').textContent, 'Iron Ring Federation');
+    assert.notEqual(row.style.display, 'none', 'the row is shown for a member in a federation');
+
+    await page.win.__cw.openProfile('jobber');
+    assert.equal(page.win.document.getElementById('vpFederation').textContent, '', 'no stale name left behind');
+    assert.equal(row.style.display, 'none', 'a member in no federation gets no row');
+  } finally {
+    await page.close();
+  }
+});

@@ -1336,6 +1336,18 @@ function mobileImgSrc(value) {
       seenEl.textContent = seenLabel;
     }
 
+    // The federation they wrestle for, when they are in one. A member in none
+    // keeps the row hidden instead of showing an empty field.
+    const federationRow = $("vpFederationRow");
+    if (federationRow) {
+      const federationName = (window.MCF && typeof window.MCF.federationName === "function")
+        ? window.MCF.federationName(user)
+        : ((user.federation && user.federation.name) || "");
+      const federationSlot = $("vpFederation");
+      if (federationSlot) federationSlot.textContent = federationName;
+      federationRow.style.display = federationName ? "" : "none";
+    }
+
     const vpAvatar = $("vpAvatar");
     if (vpAvatar) vpAvatar.innerHTML = avatarHtml(user, 96);
     renderProfilePhotoGallery($("vpExtraPhotos"), user.extraPhotos);

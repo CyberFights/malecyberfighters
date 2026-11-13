@@ -16,6 +16,7 @@
        status: 'Online',
        avatarUrl: '/path/to/avatar.jpg',
        contact: "6'1\" • 185 lbs",   // height / weight line
+       federation: 'Iron Ring Federation',  // shown under the handle, if any
        showUserInfo: true,
        enableTilt: true,
        enableMobileTilt: true,
@@ -195,6 +196,8 @@
       status = 'Online',
       contact = '',
       contactText = 'Message',
+      // The federation the member wrestles for, when they are in one.
+      federation = '',
       showUserInfo = true,
       autoActive = false,
       onContactClick
@@ -257,6 +260,7 @@
 
       const text = el('div', 'pc-user-text');
       text.appendChild(el('div', 'pc-handle', `@${handle}`));
+      if (federation) text.appendChild(el('div', 'pc-federation', federation));
       statusNode = el('div', 'pc-status', status);
       text.appendChild(statusNode);
 
@@ -484,6 +488,19 @@
     return badges ? record + '  ' + badges : record;
   }
 
+  /**
+   * The federation line — the member's federation name, or '' when they are in
+   * none. features-core.js owns the rule; the inline copy keeps the card
+   * working on a page that does not load it.
+   */
+  function federationFor(user) {
+    if (window.MCF && typeof window.MCF.federationName === 'function') {
+      return window.MCF.federationName(user);
+    }
+    const federation = user && user.federation;
+    return federation && federation.name ? String(federation.name).trim() : '';
+  }
+
   /* Height / weight line — the `contact` prop of the component. */
   function contactFor(user) {
     if (window.Physique && typeof window.Physique.physiqueSummary === 'function') {
@@ -535,6 +552,7 @@
         miniAvatarUrl: avatar,
         contact: stats || 'No height / weight set',
         contactText: 'Message',
+        federation: federationFor(user),
         showUserInfo: true,
         enableTilt: true,
         enableMobileTilt: true,
@@ -721,6 +739,7 @@
     isOpen,
     syncPresence,
     contactFor,
+    federationFor,
     titleFor,
     avatarSrc
   };
