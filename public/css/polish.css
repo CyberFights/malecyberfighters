@@ -215,20 +215,36 @@ a:hover { text-decoration: underline; }
    that left the page lopsided on wide screens.
    ============================================================ */
 
-.container {
-  box-sizing: border-box;
-  width: auto;
-  max-width: 1180px;
-  /* 236px clears the fixed rail on tablet widths; the query below
-     tracks the rail exactly once it becomes the glass panel. */
-  margin: 26px 32px 64px 236px;
-  /* The page is a framed panel with the content inset from its edge, so
-     the columns and rows keep the proportions they were built around. */
-  padding: 28px;
-  background: rgba(8, 13, 22, 0.6);
-  border: 1px solid var(--p-line);
-  border-radius: var(--p-r-lg);
-  box-shadow: var(--p-shadow-2);
+/* The framed panel and its two columns only exist where there is room
+   for a rail beside them. Below 769px the page belongs to mobile.css,
+   which has no .container rule of its own — so nothing here may apply
+   there, or the desktop page served to a phone is squeezed into a strip. */
+@media (min-width: 769px) {
+  .container {
+    box-sizing: border-box;
+    width: auto;
+    max-width: 1180px;
+    /* 236px clears the fixed rail on tablet widths; the query below
+       tracks the rail exactly once it becomes the glass panel. */
+    margin: 26px 32px 64px 236px;
+    /* The page is a framed panel with the content inset from its edge,
+       so the columns and rows keep the proportions they were built
+       around. */
+    padding: 28px;
+    background: rgba(8, 13, 22, 0.6);
+    border: 1px solid var(--p-line);
+    border-radius: var(--p-r-lg);
+    box-shadow: var(--p-shadow-2);
+  }
+
+  .container-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+    gap: var(--p-s5);
+    align-items: start;
+  }
+
+  .gridContent { gap: var(--p-s5); }
 }
 
 @media (min-width: 1000px) {
@@ -242,14 +258,27 @@ a:hover { text-decoration: underline; }
   }
 }
 
-.container-main {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
-  gap: var(--p-s5);
-  align-items: start;
-}
+/* ---- phones: a plain full-width column ----
+   A phone that is served the desktop page (mobile.css, desktop markup)
+   gets the whole width and a normal padding, with the columns stacked —
+   never the desktop inset or the rail's margin. */
+@media (max-width: 768px) {
+  .container {
+    box-sizing: border-box;
+    width: auto;
+    max-width: none;
+    margin: 0;
+    padding: 16px;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
 
-.gridContent { gap: var(--p-s5); }
+  .container-main { display: block; }
+  .container-main > * + * { margin-top: var(--p-s4); }
+  .gridContent { display: block; }
+}
 
 header {
   gap: var(--p-s4);
@@ -601,8 +630,11 @@ header {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 10px;
     width: 100%;
     margin-top: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
     padding: 12px 14px !important;
     background: rgba(148, 190, 230, 0.06) !important;
     border: 1px solid var(--p-line) !important;
