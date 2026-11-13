@@ -339,6 +339,19 @@
   line-height: 1;
 }
 
+/* The federation the member wrestles for (only drawn when they are in one). */
+.pc-federation {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #7fd8ff;
+  line-height: 1.1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .pc-contact-btn {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;

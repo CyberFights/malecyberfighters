@@ -100,7 +100,7 @@
     <button id="btnBookmarks" class="ghost" type="button">Bookmarks</button>
     <button id="btnPreferences" class="ghost" type="button">Preferences</button>
     <button id="openSupport" type="button">Support</button>
-    <a class="image-library-nav-link" href="/image-library.html">Image Library</a>
+    <a id="btnImageLibrary" class="image-library-nav-link" href="/image-library.html">Image Library</a>
   </div>
 
   <section class="mcf-fed-board-card" aria-labelledby="federationLeaderboardHeading">
@@ -546,6 +546,12 @@
         <button id="vpBlockButton" class="small-btn" type="button"
                 style="margin-top:8px;width:100%;background:#ef4444">Block User</button>
       </div>
+    </div>
+
+    <!-- Their federation, when they are in one (hidden otherwise). -->
+    <div class="profile-block" id="vpFederationRow" style="display:none">
+      <div class="muted small">Federation</div>
+      <div id="vpFederation"></div>
     </div>
 
     <div class="profile-block">

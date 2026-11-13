@@ -224,7 +224,7 @@
         <button id="btnRoster" class="ghost" type="button">User Roster</button>
         <button id="btnForums" class="ghost" type="button">Forums</button>
         <button id="btnArchives" class="ghost" type="button">Archives(Stories)</button>
-        <a class="image-library-nav-link" href="/image-library.html">Image Library</a>
+        <a id="btnImageLibrary" class="image-library-nav-link" href="/image-library.html">Image Library</a>
       </div>
     </div>
 
@@ -379,7 +379,7 @@
         <button id="btnRoster" class="ghost" type="button">User Roster</button>
         <button id="btnForums" class="ghost" type="button">Forums</button>
         <button id="btnArchives" class="ghost" type="button">Archives</button>
-        <a class="image-library-nav-link" href="/image-library.html">Image Library</a>
+        <a id="btnImageLibrary" class="image-library-nav-link" href="/image-library.html">Image Library</a>
       </div>
     </div>
 
@@ -962,6 +962,12 @@
         <div style="margin-top:12px">
           <div class="muted">Last online</div>
           <div id="vpLastSeen"></div>
+        </div>
+
+        <!-- Their federation, when they are in one (hidden otherwise). -->
+        <div id="vpFederationRow" style="margin-top:12px;display:none">
+          <div class="muted">Federation</div>
+          <div id="vpFederation"></div>
         </div>
 
         <div style="margin-top:12px">

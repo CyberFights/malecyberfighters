@@ -2883,7 +2883,7 @@ function requireAdmin(req, res, next) {
 
 async function broadcastPresence() {
   const onlineUsers = await User.find({ online: true })
-    .select("username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt lfg achievements role createdAt -_id")
+    .select("username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt lfg achievements role federation createdAt -_id")
     .lean();
 
   io.emit("presence", onlineUsers);
@@ -4523,7 +4523,7 @@ app.get("/api/allUsers", noRevalidate, sessions.requireUser, async (req, res) =>
     const filter = clauses.length === 1 ? clauses[0] : (clauses.length ? { $and: clauses } : {});
 
     const users = await User.find(filter)
-      .select("username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt atk def stats tags createdAt")
+      .select("username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt atk def stats tags federation createdAt")
       .lean();
 
     res.json({ success: true, users: users.map(user => ({ ...user, tags: userTags(user) })) });
@@ -5622,7 +5622,7 @@ io.on("connection", async (socket) => {
     );
 
     const onlineUsers = await User.find({ online: true })
-      .select("username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt lfg achievements role createdAt -_id")
+      .select("username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt lfg achievements role federation createdAt -_id")
       .lean();
 
     io.emit("presence", onlineUsers);
@@ -5648,7 +5648,7 @@ io.on("connection", async (socket) => {
     );
 
     const onlineUsers = await User.find({ online: true })
-      .select("username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt lfg achievements role createdAt -_id")
+      .select("username display imageUrl extraPhotos info wins losses color language age height weight lastSeenAt lfg achievements role federation createdAt -_id")
       .lean();
 
     io.emit("presence", onlineUsers);

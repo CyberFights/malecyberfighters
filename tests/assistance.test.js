@@ -301,6 +301,88 @@ test('the story question is answered however it is worded', async () => {
   }
 });
 
+test('every area of the site has an answer, including the newest features', async () => {
+  const page = await startPage();
+  try {
+    const topics = page.win.Assistance.topics;
+    const byId = id => topics.find(topic => topic.id === id);
+
+    // The areas the assistant promises in its own greeting, plus the features
+    // added since: the single-player game with its gym and career, the image
+    // library, federation tournaments and the federation leaderboard.
+    const expected = [
+      'arena', 'dms', 'rooms', 'forums', 'roster', 'archives', 'view-profile',
+      'create-story', 'story-editor', 'dice-matches', 'challenges', 'match-record',
+      'achievements', 'preferences', 'notification-prefs', 'push-notifications',
+      'audio-calls', 'block', 'rules', 'how-to-wrestle',
+      'wrestling-game', 'gym-training', 'career-mode', 'image-library',
+      'federations', 'federation-tournaments', 'federation-points', 'assistant-help'
+    ];
+
+    expected.forEach(id => {
+      const topic = byId(id);
+      assert.ok(topic, `there is an answer for ${id}`);
+      assert.ok(topic.keywords.length >= 3, `${id} can be reached by more than one wording`);
+    });
+
+    // And the game's three windows are reachable from the same page button.
+    ['wrestling-game', 'gym-training', 'career-mode'].forEach(id => {
+      assert.equal(byId(id).action.buttonId, 'btnWrestlingGame', `${id} opens the game`);
+    });
+    assert.equal(byId('image-library').action.buttonId, 'btnImageLibrary');
+    assert.equal(byId('federation-tournaments').action.buttonId, 'btnFederationTournaments');
+  } finally {
+    await page.close();
+  }
+});
+
+test('the newer features are explained when they are asked about', async () => {
+  const page = await startPage();
+  try {
+    page.assistanceButton().click();
+
+    const cases = [
+      ['how do federation tournaments work?', /up to 16|16 of their own members/, 'the tournaments explain the lineups'],
+      ['what is a bracket', /round one always puts one federation against the other|seed one versus seed one/, 'the bracket draw'],
+      ['where can I see the federation leaderboard', /highest points first/, 'the leaderboard'],
+      ['how do federations earn points?', /one point for every published story/, 'story points'],
+      ['how does the wrestling game work?', /single-player match against the computer/, 'the game'],
+      ['how does gym training work?', /every five minutes/, 'the gym energy'],
+      ['what is career mode?', /debut, rivalries, training camps, title shots/, 'career mode'],
+      ['where is the image library?', /Fighter Photos/, 'the image library categories'],
+      ['what can you do?', /I am Jax/, 'the overview of everything']
+    ];
+
+    for (const [question, pattern, what] of cases) {
+      page.byId('assistanceMessages').textContent = '';
+      await page.ask(question);
+
+      const reply = page.lastMessage();
+      assert.doesNotMatch(reply.textContent, /I do not have an answer/, `"${question}" is answered`);
+      assert.match(reply.textContent, pattern, `"${question}" explains ${what}`);
+    }
+  } finally {
+    await page.close();
+  }
+});
+
+test('the age question is not stolen by the fighter tags answer', async () => {
+  const page = await startPage();
+  try {
+    page.assistanceButton().click();
+
+    for (const question of ['what is the age limit', 'what is the minimum age', 'how old do I have to be']) {
+      page.byId('assistanceMessages').textContent = '';
+      await page.ask(question);
+
+      assert.match(page.lastMessage().textContent, /18/, `"${question}" answers with the age rule`);
+      assert.doesNotMatch(page.lastMessage().textContent, /Fighter Tags/, `"${question}" is not the tags answer`);
+    }
+  } finally {
+    await page.close();
+  }
+});
+
 test('answers are written for members, not for developers', async () => {
   const page = await startPage();
   try {

@@ -188,6 +188,18 @@
     }
   }
 
+  /**
+   * The federation a member belongs to, as its display name — or '' when they
+   * are in none. Every record the server hands out carries `federation` as
+   * { id, name, role, joinedAt } (see sessionUserPayload / /api/allUsers), and
+   * the profile windows use this so they all read it the same way.
+   */
+  function federationName(user) {
+    var federation = user && user.federation;
+    if (!federation || !federation.name) return '';
+    return String(federation.name).trim();
+  }
+
   /** "2h ago" style relative label, used by presence + boards. */
   function agoLabel(value) {
     try {
@@ -216,6 +228,7 @@
     popup: popup,
     toast: toast,
     escapeHtml: escapeHtml,
+    federationName: federationName,
     timeLabel: timeLabel,
     dateLabel: dateLabel,
     agoLabel: agoLabel
