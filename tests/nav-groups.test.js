@@ -28,7 +28,7 @@ const EXPECTED_GROUPS = {
   account: ['btnLogin', 'btnRegister', 'btnBookmarks', 'btnPreferences'],
   chatrooms: ['btnOpenChat', 'btnRooms', 'btnDMs'],
   community: ['btnRoster', 'btnForums', 'btnArchives'],
-  federations: ['btnFederationCreate', 'btnFederationManage', 'btnFederationJoin', 'btnFederationChat'],
+  federations: ['btnFederationCreate', 'btnFederationManage', 'btnFederationJoin', 'btnFederationChat', 'btnFederationTournaments'],
   matches: ['btnLfg', 'btnChallenges', 'btnRecord', 'btnAchievements'],
   games: ['btnWrestlingGame'],
   help: ['openSupport', 'btnAssistance', 'btnGuide']

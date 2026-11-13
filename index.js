@@ -48,6 +48,7 @@ const {
 const { createLfgRouter } = require('./lfg');
 const { createChallengeRouter } = require('./challenges');
 const { createFederationRouter } = require('./federations');
+const { createTournamentRouter } = require('./federationTournaments');
 const { createMatchHistoryRouter } = require('./matchHistory');
 const reactions = require('./reactions');
 const { resolveMentions } = require('./mentions');
@@ -1616,6 +1617,59 @@ const federationSchema = new mongoose.Schema({
 federationSchema.index({ owner: 1 }, { unique: true });
 federationSchema.index({ nameKey: 1 }, { unique: true });
 
+// A federation vs federation tournament: two lineups of up to sixteen members
+// (federationTournaments.js), drawn into a single-elimination bracket the
+// moment both sides lock theirs in. Each side is a snapshot — the federation's
+// name and owner are copied, so renaming a federation never rewrites a bracket
+// that already happened — while the wrestlers are stored by username and
+// resolved when the bracket is read.
+const tournamentSideSchema = new mongoose.Schema({
+  federationId: { type: String, required: true },
+  name: { type: String, default: '' },
+  owner: { type: String, default: '' },
+  imageUrl: { type: String, default: '' },
+  // Seed order: index 0 meets the other side's index 0 in round one.
+  entrants: { type: [{ username: { type: String, required: true } }], default: [] },
+  ready: { type: Boolean, default: false }
+}, { _id: false });
+
+const tournamentEntrantSchema = new mongoose.Schema({
+  username: { type: String, required: true },
+  side: { type: String, default: 'home' } // home|away — which federation
+}, { _id: false });
+
+const tournamentMatchSchema = new mongoose.Schema({
+  id: { type: String, required: true }, // r1m3 — round 1, match 3
+  home: { type: tournamentEntrantSchema, default: null },
+  away: { type: tournamentEntrantSchema, default: null },
+  winner: { type: String, default: null }, // home|away|null
+  bye: { type: Boolean, default: false },
+  decidedAt: { type: Date, default: null }
+}, { _id: false });
+
+const tournamentRoundSchema = new mongoose.Schema({
+  index: { type: Number, required: true },
+  label: { type: String, default: '' },
+  matches: { type: [tournamentMatchSchema], default: [] }
+}, { _id: false });
+
+const federationTournamentSchema = new mongoose.Schema({
+  title: { type: String, default: '' },
+  // pending|draft|active|complete|declined|cancelled
+  status: { type: String, default: 'pending', index: true },
+  home: { type: tournamentSideSchema, required: true },
+  away: { type: tournamentSideSchema, required: true },
+  rounds: { type: [tournamentRoundSchema], default: [] },
+  champion: { type: tournamentEntrantSchema, default: null },
+  createdBy: { type: String, default: '' },
+  declinedBy: { type: String, default: null },
+  startedAt: { type: Date, default: null },
+  finishedAt: { type: Date, default: null }
+}, { timestamps: true });
+federationTournamentSchema.index({ 'home.federationId': 1, status: 1 });
+federationTournamentSchema.index({ 'away.federationId': 1, status: 1 });
+federationTournamentSchema.index({ status: 1, createdAt: -1 });
+
 // One recorded match. `status` is only meaningful for member-logged matches
 // ('pending' until the named opponent confirms); engine matches are born
 // 'confirmed'. See matchHistory.js.
@@ -1853,6 +1907,7 @@ const Forum = mongoose.model('Forum', forumSchema);
 const ForumReply = mongoose.model('ForumReply', forumReplySchema);
 const Challenge = mongoose.model('Challenge', challengeSchema);
 const Federation = mongoose.model('Federation', federationSchema);
+const FederationTournament = mongoose.model('FederationTournament', federationTournamentSchema);
 const MatchRecord = mongoose.model('MatchRecord', matchRecordSchema);
 const Reaction = mongoose.model('Reaction', reactionSchema);
 const Bookmark = mongoose.model('Bookmark', bookmarkSchema);
@@ -4780,6 +4835,19 @@ const lfg = createLfgRouter({
   broadcast: entries => io.emit('lfgBoard', entries)
 });
 app.use('/api/lfg', lfg.router);
+
+// ---------- FEDERATION TOURNAMENTS ----------
+// Mounted before the federation router so /api/federations/tournaments is its
+// own little world rather than a federation with a numeric id.
+app.use('/api/federations/tournaments', createTournamentRouter({
+  Tournament: FederationTournament,
+  Federation,
+  User,
+  requireUser: sessions.requireUser,
+  // An invitation, and who won, land in the owner's DMs like join requests.
+  DM,
+  deliverToUser: (...args) => deliverToUser(...args)
+}).router);
 
 // ---------- FEDERATIONS ----------
 app.use('/api/federations', createFederationRouter({

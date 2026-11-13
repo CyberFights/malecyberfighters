@@ -322,7 +322,8 @@ const FEDERATION_BUTTONS = [
   'btnFederationCreate',
   'btnFederationManage',
   'btnFederationJoin',
-  'btnFederationChat'
+  'btnFederationChat',
+  'btnFederationTournaments'
 ];
 
 test('both action rows on the desktop page carry the Federations section', () => {
@@ -341,7 +342,7 @@ test('both action rows on the desktop page carry the Federations section', () =>
     const buttons = Array.from(group.querySelectorAll('.nav-group-menu > button')).map(button => button.id);
     assert.deepEqual(buttons, FEDERATION_BUTTONS);
     const labels = Array.from(group.querySelectorAll('.nav-group-menu > button')).map(button => button.textContent.trim());
-    assert.deepEqual(labels, ['Create', 'Manage', 'Join', 'Chatroom']);
+    assert.deepEqual(labels, ['Create', 'Manage', 'Join', 'Chatroom', 'Tournaments']);
   });
 
   // Bound by id from federations.js, so every copy must exist.
