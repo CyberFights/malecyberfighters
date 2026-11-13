@@ -1,0 +1,1202 @@
+/* ============================================================
+   POLISH — the site-wide design layer
+   ------------------------------------------------------------
+   Loaded last on every page that shares the site chrome
+   (public/index.html and public/mobile.html), so it can refine
+   what the older sheets established without rewriting them.
+
+   The brief: keep the identity — the same images, the same icy
+   blue palette, every feature and button — and give it the polish
+   of a product rather than a poster. That means:
+
+     • one spacing rhythm and one set of corner radii, instead of
+       every component inventing its own padding
+     • a flat, legible control language: dark ink on the cyan
+       primary, quiet ghost buttons, a single focus ring
+     • surfaces (cards, panels, windows) built from two or three
+       shared tokens instead of a dozen one-off gradients
+     • type that is crisp: no stroked headings, no blurred copy,
+       a real scale and sensible line lengths
+     • restrained depth — soft shadow and hairline borders in
+       place of neon bevels and six-pixel drop shadows
+
+   Everything here is an override, never a deletion: if a rule is
+   dropped the site keeps working, just less refined.
+   ============================================================ */
+
+:root {
+  /* --- surfaces --- */
+  --p-page: #05080f;
+  --p-surface-1: rgba(13, 21, 35, 0.78);
+  --p-surface-2: rgba(18, 28, 45, 0.86);
+  --p-surface-3: rgba(24, 36, 56, 0.92);
+  --p-card: linear-gradient(180deg, rgba(18, 28, 45, 0.86), rgba(10, 16, 27, 0.94));
+  --p-panel: linear-gradient(180deg, rgba(16, 25, 40, 0.98), rgba(8, 13, 22, 0.99));
+
+  /* --- lines --- */
+  --p-line: rgba(148, 190, 230, 0.14);
+  --p-line-strong: rgba(148, 190, 230, 0.26);
+  --p-line-accent: rgba(127, 216, 255, 0.42);
+
+  /* --- ink --- */
+  --p-text: #e9f3fd;
+  --p-text-dim: #a9bccf;
+  --p-text-faint: #7c8fa4;
+  --p-ink-on-accent: #00171f;
+
+  /* --- brand (unchanged colours, calmer use) --- */
+  --p-accent: #7fd8ff;
+  --p-accent-soft: rgba(127, 216, 255, 0.12);
+  --p-accent-line: rgba(127, 216, 255, 0.32);
+  --p-cyan-1: #34e6ff;
+  --p-cyan-2: #00bfe0;
+
+  /* --- geometry --- */
+  --p-r-xs: 8px;
+  --p-r-sm: 10px;
+  --p-r-md: 14px;
+  --p-r-lg: 18px;
+  --p-r-pill: 999px;
+
+  /* --- elevation --- */
+  --p-shadow-1: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 10px 24px -20px rgba(0, 0, 0, 0.9);
+  --p-shadow-2: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 22px 44px -28px rgba(0, 0, 0, 0.95);
+  --p-shadow-3: 0 40px 90px -40px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(127, 216, 255, 0.06);
+  --p-ring: 0 0 0 2px rgba(4, 10, 20, 0.9), 0 0 0 4px rgba(127, 216, 255, 0.65);
+
+  /* --- spacing rhythm --- */
+  --p-s1: 4px;
+  --p-s2: 8px;
+  --p-s3: 12px;
+  --p-s4: 16px;
+  --p-s5: 24px;
+  --p-s6: 32px;
+
+  /* --- the action rail --- */
+  --p-rail: clamp(196px, 16vw, 264px);
+
+  /* --- type --- */
+  --p-font: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ============================================================
+   1. PAGE CANVAS
+   The background artwork stays; it just stops competing with the
+   content. The drifting holo dots are dimmed and slowed so text
+   sits on a calm field.
+   ============================================================ */
+
+html,
+body {
+  background-color: var(--p-page);
+  font-family: var(--p-font);
+  color: var(--p-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body::after {
+  opacity: 0.16 !important;
+  filter: blur(2px);
+  animation-duration: 48s !important;
+}
+
+/* A quiet vignette pulls the eye to the middle of the page. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(1200px 620px at 50% -10%, rgba(0, 183, 226, 0.10), transparent 65%),
+    radial-gradient(900px 520px at 50% 110%, rgba(2, 6, 23, 0.65), transparent 70%);
+}
+
+::selection {
+  background: rgba(127, 216, 255, 0.28);
+  color: #f4fcff;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(127, 216, 255, 0.26) transparent;
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(127, 216, 255, 0.22);
+  border: 3px solid transparent;
+  border-radius: var(--p-r-pill);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(127, 216, 255, 0.4); background-clip: content-box; }
+
+/* ============================================================
+   2. TYPE
+   One scale, no text-stroke, no simulated depth. The old sheet
+   stroked every h1 and blurred .lead by fractions of a pixel,
+   which reads as a rendering fault rather than a style.
+   ============================================================ */
+
+h1, h2, h3, h4, h5 {
+  color: var(--p-text);
+  font-family: var(--p-font);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.22;
+  -webkit-text-stroke: 0 !important;
+  text-shadow: none;
+}
+
+h1 {
+  font-size: clamp(24px, 2.1vw, 30px);
+  font-weight: 750;
+  letter-spacing: -0.025em;
+  line-height: 1.12;
+}
+
+h2 { font-size: clamp(19px, 1.6vw, 23px); }
+h3 { font-size: 17px; margin: 0 0 var(--p-s3); }
+/* h4 is used for section labels throughout the app, so it becomes one
+   small-caps label style — including inside dialogs, where the older
+   sheets inflate it to 15px body text. */
+h5,
+h4 { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--p-text-faint); font-weight: 700; }
+
+.modal-box h4,
+.modal-content h4,
+.modal h4,
+.mcf-modal-panel h4,
+.list-popup-panel h4,
+.forum-panel h4,
+.card h4 { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--p-text-faint); }
+
+p { line-height: 1.62; }
+
+.lead {
+  filter: none !important;
+  text-shadow: none !important;
+  color: var(--p-text-dim);
+  font-size: 14.5px;
+  line-height: 1.5;
+  max-width: 62ch;
+}
+
+.muted { color: var(--p-text-dim); }
+.small { font-size: 12.5px; line-height: 1.55; color: var(--p-text-dim); }
+
+/* The two update feeds were glowing boxes of monospace-ish text. */
+#updates,
+#completedupdates {
+  background: rgba(6, 12, 22, 0.6) !important;
+  border: 1px solid var(--p-line);
+  border-radius: var(--p-r-sm);
+  padding: 12px 14px !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--p-text-dim) !important;
+}
+
+a {
+  color: var(--p-accent);
+  text-decoration: none;
+  text-underline-offset: 3px;
+}
+a:hover { text-decoration: underline; }
+
+/* ============================================================
+   3. PAGE LAYOUT
+   The container keeps clearing the fixed action rail, but stops
+   painting its own glow and stops pinning itself to a percentage
+   that left the page lopsided on wide screens.
+   ============================================================ */
+
+.container {
+  box-sizing: border-box;
+  width: auto;
+  max-width: 1180px;
+  /* 236px clears the fixed rail on tablet widths; the query below
+     tracks the rail exactly once it becomes the glass panel. */
+  margin: 26px 32px 64px 236px;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+@media (min-width: 1000px) {
+  .container { margin-left: calc(var(--p-rail) + 68px); }
+}
+
+@media (min-width: 1500px) {
+  .container {
+    margin-left: max(calc(var(--p-rail) + 68px), calc(50% - 600px));
+    margin-right: auto;
+  }
+}
+
+.container-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 260px);
+  gap: var(--p-s5);
+  align-items: start;
+}
+
+.gridContent { gap: var(--p-s5); }
+
+header {
+  gap: var(--p-s4);
+  padding-bottom: var(--p-s4);
+  margin-bottom: var(--p-s5);
+  border-bottom: 1px solid var(--p-line);
+}
+
+.brand { gap: 14px; align-items: center; }
+
+.logo {
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border-radius: var(--p-r-md);
+  overflow: hidden;
+  background: var(--p-surface-2);
+  border: 1px solid var(--p-line-strong);
+  box-shadow: 0 10px 24px -18px rgba(0, 0, 0, 0.9);
+}
+.logo img,
+.logo .holo-avatar {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: inherit !important;
+  object-fit: cover;
+  display: block;
+}
+
+/* ============================================================
+   4. CARDS
+   One surface, one border, one shadow. Nested cards step back a
+   level instead of stacking glow on glow.
+   ============================================================ */
+
+.card {
+  position: relative;
+  background: var(--p-card);
+  border: 1px solid var(--p-line);
+  border-radius: var(--p-r-lg);
+  padding: 22px 24px;
+  box-shadow: var(--p-shadow-2);
+  backdrop-filter: blur(6px);
+}
+
+.card h3 { font-size: 16px; letter-spacing: -0.005em; }
+.card h4 { margin: 0 0 10px; }
+
+/* The welcome panel is the page's headline card: a hairline of
+   accent along the top edge instead of a full neon outline. */
+.card.hero {
+  min-height: 0;
+  justify-content: flex-start;
+  padding-top: 24px;
+  overflow: hidden;
+}
+.card.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--p-accent), transparent);
+  opacity: 0.7;
+}
+
+/* Cards sitting inside a card read as grouped items. */
+.card .card {
+  background: rgba(8, 14, 24, 0.62);
+  border-color: var(--p-line);
+  border-radius: var(--p-r-md);
+  padding: 16px 18px;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+/* ---- the welcome card ---- */
+
+.card.hero h3:first-child { margin: 0 0 10px; }
+.card.hero > .muted { font-size: 14px; line-height: 1.6; }
+
+.eyebrow {
+  margin: 22px 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--p-text-faint);
+}
+.card.hero > .eyebrow:first-of-type { margin-top: 18px; }
+
+.feature-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.feature-list li { position: relative; padding-left: 18px; }
+.feature-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.58em;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--p-accent);
+  opacity: 0.75;
+}
+
+.hero-cta { margin: 18px 0 0; }
+.text-link { font-weight: 600; color: var(--p-accent); }
+.text-link::after { content: " →"; }
+
+.updates-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--p-s4);
+  margin: 20px 0 0;
+}
+/* The two feeds share a row on wide cards and stack when there is no
+   room — plain grid behaviour rather than a flex guess. */
+.update-block { min-width: 0; }
+.update-block > .eyebrow { margin: 0 0 8px; }
+
+.highlight-scroll {
+  max-height: 264px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* The three highlight cards under the welcome copy. */
+.home-highlights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--p-s4);
+  margin-top: var(--p-s5);
+}
+.home-highlight { padding: 16px 18px; }
+.home-highlight h4 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  letter-spacing: 0.09em;
+  color: var(--p-accent);
+}
+/* The signed-in / signed-out card in the margin column. Its styles live
+   on the id, so the overrides have to match that specificity. */
+#userProfileCard {
+  width: 100%;
+  margin: 0;
+  padding: 18px 20px;
+  gap: 12px;
+  background: var(--p-card);
+  border: 1px solid var(--p-line);
+  border-radius: var(--p-r-lg);
+  box-shadow: var(--p-shadow-2);
+  text-align: left;
+  align-items: stretch;
+}
+
+@media (min-width: 769px) {
+  #userProfileCard.logged-in {
+    width: 100%;
+    margin: 0;
+    padding: 22px 24px;
+    background: var(--p-card);
+    border: 1px solid var(--p-line);
+    border-radius: var(--p-r-lg);
+    box-shadow: var(--p-shadow-2);
+    text-align: left;
+    align-items: stretch;
+  }
+}
+
+.user-profile-card {
+  width: 100%;
+  max-width: 260px;
+  padding: 18px;
+  gap: 10px;
+  background: var(--p-card);
+  border: 1px solid var(--p-line);
+  border-radius: var(--p-r-lg);
+  box-shadow: var(--p-shadow-2);
+  text-align: left;
+  align-items: stretch;
+}
+.user-profile-card.logged-in { align-items: stretch; }
+
+/* ============================================================
+   5. THE ACTION RAIL
+   Desktop: a fixed glass column whose categories are flat rows and
+   whose menus fly out as ordinary elevated panels. Phones: the same
+   rows, as a quiet hairline-bordered list.
+   ============================================================ */
+
+/* The bevel retires at every size — these are rows, not raised keys. */
+.actions > button,
+.actions .nav-group-toggle,
+.actions .nav-group-menu > button,
+.actions .nav-group-menu > a {
+  transform: none !important;
+  text-shadow: none !important;
+  filter: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  letter-spacing: 0.01em;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.actions .nav-group { gap: 2px; }
+
+.actions .nav-group-badge,
+.badge,
+.dm-unread-badge {
+  background: #ff5c7a;
+  border: 0;
+  box-shadow: none;
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  line-height: 18px;
+}
+.actions .nav-group-toggle .nav-group-badge { margin-left: auto; }
+
+/* ---- desktop rail ---- */
+
+@media (min-width: 769px) {
+  .container .actions {
+    left: 24px;
+    width: var(--p-rail);
+    gap: 2px;
+    padding: 12px;
+    background: linear-gradient(180deg, rgba(12, 20, 33, 0.9), rgba(6, 11, 20, 0.94));
+    border: 1px solid var(--p-line);
+    border-radius: var(--p-r-lg);
+    box-shadow: 0 30px 70px -50px #000, 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+    backdrop-filter: blur(14px);
+  }
+  /* Deliberately no overflow on the rail: a scrolling ancestor would
+     clip the flyout menus, which open out to the right of it. */
+
+  .actions .nav-group-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 12px !important;
+    padding-right: 26px !important;
+    border: 1px solid transparent !important;
+    border-radius: var(--p-r-sm) !important;
+    background: transparent !important;
+    color: var(--p-text-dim) !important;
+    font-size: 13px;
+    font-weight: 650;
+    text-align: left;
+  }
+
+  .actions .nav-group-toggle:hover:not(:disabled) {
+    background: rgba(127, 216, 255, 0.07) !important;
+    color: var(--p-text) !important;
+  }
+
+  .actions .nav-group-open > .nav-group-toggle {
+    background: linear-gradient(180deg, rgba(52, 230, 255, 0.16), rgba(0, 191, 224, 0.08)) !important;
+    border-color: var(--p-accent-line) !important;
+    color: #ecfaff !important;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset !important;
+  }
+
+  .actions .nav-caret {
+    right: 12px;
+    width: 7px;
+    height: 7px;
+    margin-top: -4px;
+    border-width: 0 1.5px 1.5px 0;
+    opacity: 0.5;
+  }
+  .actions .nav-group-open > .nav-group-toggle .nav-caret {
+    transform: translateY(-2px) rotate(45deg);
+    opacity: 1;
+  }
+
+  /* Flyout menus: a standard elevated panel, not a light box. */
+  .container .actions .nav-group-menu {
+    left: calc(100% + 12px);
+    top: -8px;
+    gap: 2px;
+    min-width: 188px;
+    max-width: 300px;
+    padding: 8px;
+    background: rgba(9, 15, 26, 0.97);
+    border: 1px solid var(--p-line-strong);
+    border-radius: var(--p-r-md);
+    box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(14px);
+  }
+  .container .actions .nav-group-menu::before { display: none !important; }
+
+  .actions .nav-group-menu > button,
+  .actions .nav-group-menu > a {
+    display: block;
+    width: 100%;
+    padding: 9px 12px !important;
+    border: 0 !important;
+    border-radius: var(--p-r-xs) !important;
+    background: transparent !important;
+    color: var(--p-text-dim) !important;
+    font-size: 12.5px;
+    font-weight: 600;
+    text-align: left;
+  }
+
+  .actions .nav-group-menu > button:hover:not(:disabled),
+  .actions .nav-group-menu > a:hover {
+    background: rgba(127, 216, 255, 0.1) !important;
+    color: var(--p-text) !important;
+  }
+
+  #legalLinks {
+    margin-top: 12px !important;
+    padding-top: 12px;
+    border-top: 1px solid var(--p-line);
+  }
+}
+
+/* Terms / privacy / Discord live at the foot of the rail. */
+#legalLinks {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+#legalLinks .small-btn {
+  flex: 0 1 auto;
+  font-size: 11.5px;
+  padding: 5px 9px;
+}
+
+/* ---- phone action list ---- */
+
+@media (max-width: 768px) {
+  .actions .nav-group-toggle,
+  .actions > button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    margin-top: 0;
+    padding: 12px 14px !important;
+    background: rgba(148, 190, 230, 0.06) !important;
+    border: 1px solid var(--p-line) !important;
+    border-radius: var(--p-r-md) !important;
+    color: var(--p-text) !important;
+    font-size: 14px;
+    font-weight: 650;
+    text-align: left;
+  }
+
+  .actions .nav-group-open > .nav-group-toggle {
+    background: rgba(52, 230, 255, 0.12) !important;
+    border-color: var(--p-accent-line) !important;
+    color: #ecfaff !important;
+  }
+
+  .actions .nav-group-menu { gap: 6px; }
+
+  .actions .nav-group-menu > button,
+  .actions .nav-group-menu > a {
+    display: block;
+    width: 100%;
+    padding: 11px 14px !important;
+    background: rgba(148, 190, 230, 0.04) !important;
+    border: 1px solid var(--p-line) !important;
+    border-radius: var(--p-r-md) !important;
+    color: var(--p-text-dim) !important;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: left;
+  }
+
+  .actions .nav-caret {
+    position: static;
+    margin: 0;
+    opacity: 0.5;
+  }
+  .actions .nav-group-open > .nav-group-toggle .nav-caret {
+    transform: rotate(225deg);
+    opacity: 1;
+  }
+}
+
+/* ============================================================
+   6. CONTROLS
+   ============================================================ */
+
+button {
+  font-family: var(--p-font);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.2;
+  padding: 9px 15px;
+  border-radius: var(--p-r-sm);
+  border: 1px solid rgba(190, 245, 255, 0.5);
+  background-color: var(--p-cyan-2);
+  background-image: linear-gradient(180deg, var(--p-cyan-1), var(--p-cyan-2));
+  color: var(--p-ink-on-accent);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35) inset, 0 10px 22px -16px rgba(0, 213, 255, 0.9);
+  cursor: pointer;
+  text-decoration: none;
+  transition: filter 140ms ease, transform 120ms ease, background-color 140ms ease,
+    border-color 140ms ease, box-shadow 140ms ease, color 140ms ease;
+}
+
+button:hover:not(:disabled) { filter: brightness(1.07); text-decoration: none; }
+button:active:not(:disabled) { transform: translateY(1px); filter: brightness(0.96); }
+button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+button.ghost {
+  background: rgba(127, 216, 255, 0.06);
+  background-image: none;
+  border: 1px solid var(--p-line-strong);
+  color: var(--p-text);
+  box-shadow: none;
+  font-weight: 600;
+}
+button.ghost:hover:not(:disabled) {
+  background: rgba(127, 216, 255, 0.12);
+  border-color: var(--p-accent-line);
+  filter: none;
+}
+
+button.small-btn {
+  padding: 6px 11px;
+  font-size: 12px;
+  border-radius: var(--p-r-xs);
+  font-weight: 600;
+}
+button.small-btn.secondary {
+  background: rgba(148, 190, 230, 0.12);
+  background-image: none;
+  border: 1px solid var(--p-line-strong);
+  color: var(--p-text);
+}
+
+/* Keyboard users get one consistent ring everywhere. */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: none !important;
+  box-shadow: var(--p-ring) !important;
+}
+
+input,
+select,
+textarea {
+  font-family: var(--p-font);
+  font-size: 14px;
+  color: var(--p-text);
+  background: rgba(6, 12, 22, 0.72);
+  border: 1px solid var(--p-line-strong);
+  border-radius: var(--p-r-sm);
+  padding: 9px 12px;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+}
+input:hover,
+select:hover,
+textarea:hover { border-color: rgba(148, 190, 230, 0.4); }
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--p-accent-line);
+  background: rgba(6, 12, 22, 0.9);
+  box-shadow: 0 0 0 3px rgba(127, 216, 255, 0.14);
+}
+input::placeholder,
+textarea::placeholder { color: var(--p-text-faint); }
+label { color: var(--p-text-dim); font-size: 12.5px; font-weight: 600; }
+
+/* Selects keep a visible chevron now that the field is dark. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 34px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--p-text-dim) 50%),
+    linear-gradient(135deg, var(--p-text-dim) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 52%, calc(100% - 13px) 52%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+/* ============================================================
+   7. WINDOWS: chat, PMs, sidebars, dialogs
+   They all share one surface language now: dark panel, hairline
+   border, soft shadow, generous radius.
+   ============================================================ */
+
+.chat-popup,
+.pm-window {
+  background: var(--p-panel) !important;
+  border: 1px solid var(--p-line-strong) !important;
+  border-radius: var(--p-r-lg) !important;
+  box-shadow: var(--p-shadow-3) !important;
+}
+
+/* Lists and forums keep whatever scrolling their own layout needs. */
+.list-popup-panel,
+.forum-panel {
+  background: var(--p-panel) !important;
+  border: 1px solid var(--p-line-strong) !important;
+  border-radius: var(--p-r-lg) !important;
+  box-shadow: var(--p-shadow-3) !important;
+}
+
+.chat-header,
+.pm-header,
+.side-panel-header,
+.forum-panel-header,
+.modal-header {
+  background: rgba(10, 17, 28, 0.9);
+  border-bottom: 1px solid var(--p-line) !important;
+  box-shadow: none !important;
+  padding: 12px 16px;
+}
+
+.chat-header h3,
+.pm-header h3,
+.side-panel-header h3 { margin: 0; font-size: 14px; letter-spacing: 0.01em; }
+
+.public-feed,
+.pm-body { background: rgba(4, 9, 17, 0.5); }
+
+.message {
+  border-radius: var(--p-r-sm);
+  padding: 8px 11px;
+  background: rgba(148, 190, 230, 0.07);
+  line-height: 1.55;
+}
+.message-row.me .message {
+  background: rgba(127, 216, 255, 0.13);
+  border: 1px solid rgba(127, 216, 255, 0.22);
+}
+.message.system,
+.room-system-msg { background: rgba(148, 190, 230, 0.05); }
+
+.online-list,
+.pm-sidebar {
+  background: rgba(6, 11, 20, 0.55);
+  border-left: 1px solid var(--p-line);
+}
+
+.chat-input,
+.pm-input,
+.chat-input input,
+.pm-input input[type="text"] { border-radius: var(--p-r-sm); }
+
+/* ---- dialogs ---- */
+
+.modal-overlay,
+.forum-overlay,
+#dmSidebar,
+#roomsSidebar,
+#modalLogin,
+#modalRegister,
+#modalAdmin,
+#modalAdminPassword,
+#modalEditProfile,
+#modalRoster,
+#modalArchives,
+#modalViewProfile,
+#modalAccountSettings,
+#storyPopup,
+#ageGate,
+.modal,
+.popup {
+  background-color: rgba(2, 6, 14, 0.74) !important;
+  background-image: none !important;
+  backdrop-filter: blur(8px) saturate(1.05);
+  -webkit-backdrop-filter: blur(8px) saturate(1.05);
+}
+
+.list-popup-panel,
+.forum-panel,
+.modal-box,
+.modal-content,
+.support-mobile,
+#ageBox,
+#modalLogin > div,
+#modalRegister > div,
+#modalAdmin > div,
+#modalAdminPassword > div,
+#modalEditProfile > div,
+#modalRoster > div,
+#modalArchives > div,
+#modalViewProfile > div,
+#modalForgot > div,
+#modalAccountSettings > div,
+#supportPopup > div,
+#storyPopup .modal-content {
+  background: var(--p-panel) !important;
+  border: 1px solid var(--p-line-strong) !important;
+  border-radius: var(--p-r-lg) !important;
+  box-shadow: var(--p-shadow-3) !important;
+  color: var(--p-text);
+}
+
+/* Dialogs that carried no sizing of their own get a bounded height and
+   one scroll area, so a long roster never runs off the screen. The
+   sidebar lists and the assistant keep the scrolling they already had. */
+.modal-box,
+.modal-content,
+#modalLogin > div,
+#modalRegister > div,
+#modalAdmin > div,
+#modalAdminPassword > div,
+#modalEditProfile > div,
+#modalRoster > div,
+#modalArchives > div,
+#modalViewProfile > div,
+#modalForgot > div,
+#modalAccountSettings > div {
+  max-height: min(88vh, 940px);
+  overflow: auto;
+}
+
+/* The neon bevel highlight along the top of every panel. */
+.list-popup-panel::before,
+.forum-panel::before,
+.modal-box::before,
+.modal-content::before,
+.support-mobile::before,
+#ageBox::before,
+#modalLogin > div::before,
+#modalRegister > div::before,
+#modalAdmin > div::before,
+#modalAdminPassword > div::before,
+#modalEditProfile > div::before,
+#modalRoster > div::before,
+#modalArchives > div::before,
+#modalViewProfile > div::before,
+#modalAccountSettings > div::before,
+#storyPopup .modal-content::before {
+  content: none !important;
+}
+
+#storyPopup .modal-content { padding: 26px 28px !important; }
+#storyPopup h2 {
+  margin: 0 0 18px;
+  font-size: 20px;
+  text-align: left;
+  color: var(--p-text);
+  text-shadow: none;
+}
+
+.modal-box,
+.modal-content,
+#modalLogin > div,
+#modalRegister > div,
+#modalEditProfile > div { padding: 24px 26px !important; }
+
+.popup h2,
+.popup h3,
+.modal-box h2,
+.modal-box h3,
+.modal-content h3 { text-align: left; color: var(--p-text); }
+
+/* Close affordances read as controls, not warning lights. */
+.popup .close-btn {
+  background: rgba(148, 190, 230, 0.12);
+  border: 1px solid var(--p-line-strong);
+  color: var(--p-text);
+  border-radius: var(--p-r-xs);
+  padding: 6px 10px;
+  font-weight: 600;
+}
+.popup .close-btn:hover { background: rgba(148, 190, 230, 0.2); }
+
+/* ---- the age gate ---- */
+
+#ageGate {
+  background: rgba(2, 5, 12, 0.9) !important;
+  backdrop-filter: blur(14px);
+}
+#ageBox {
+  width: min(560px, 92vw);
+  padding: 40px 36px !important;
+  text-align: center;
+  border-radius: var(--p-r-lg) !important;
+}
+#ageBox h2 {
+  font-size: clamp(17px, 1.7vw, 20px);
+  font-weight: 600;
+  line-height: 1.55;
+  letter-spacing: -0.005em;
+  color: var(--p-text);
+  margin: 0;
+}
+#confirmBtn {
+  margin-top: 26px;
+  padding: 12px 28px;
+  border-radius: var(--p-r-sm);
+  font-size: 14px;
+  font-weight: 650;
+  background-color: var(--p-cyan-2) !important;
+  background-image: linear-gradient(180deg, var(--p-cyan-1), var(--p-cyan-2)) !important;
+  border: 1px solid rgba(190, 245, 255, 0.5) !important;
+  color: var(--p-ink-on-accent) !important;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35) inset, 0 10px 22px -16px rgba(0, 213, 255, 0.9) !important;
+}
+#confirmBtn:hover { filter: brightness(1.07); }
+
+/* ============================================================
+   8. FEATURE SURFACES (light touch over features.css)
+   The feature modules define their own cards; this only aligns
+   their corners, borders and headings with the rest of the page.
+   ============================================================ */
+
+.mcf-modal-panel {
+  background: var(--p-panel) !important;
+  border: 1px solid var(--p-line-strong);
+  border-radius: var(--p-r-lg) !important;
+  box-shadow: var(--p-shadow-3) !important;
+}
+.mcf-modal-header { border-bottom: 1px solid var(--p-line); padding-bottom: 12px; }
+.mcf-modal-title { font-size: 16px; }
+.mcf-modal-body { color: var(--p-text-dim); line-height: 1.6; }
+
+.mcf-row-actions { display: flex; flex-wrap: wrap; gap: var(--p-s2); }
+
+.mcf-toast {
+  border-radius: var(--p-r-sm);
+  box-shadow: var(--p-shadow-2);
+  font-size: 13px;
+}
+
+.mcf-fed-board-card,
+.app-download-card {
+  background: var(--p-card);
+  border: 1px solid var(--p-line);
+  border-radius: var(--p-r-lg);
+  box-shadow: var(--p-shadow-1);
+}
+
+/* ---- lists: rosters, stories, archives ----
+   The mcf1.png backdrop and the translucent rows stay exactly as they
+   are; they only pick up the shared corners, hairlines and hover. */
+.roster-list,
+#rosterPage,
+#quickRoster,
+#rosterList,
+#archivesList,
+#profileStories,
+#profileRelationships,
+#profileTimeline,
+#profilePendingStories {
+  border-radius: var(--p-r-md);
+  border: 1px solid var(--p-line);
+}
+
+.roster-list .roster-user,
+.roster-list .user-row,
+#rosterPage .roster-user,
+#quickRoster .user-row,
+#archivesList .story-item,
+#profileStories .story-item,
+#profileTimeline .timeline-item,
+#profileRelationships .relationship-item {
+  border-radius: var(--p-r-sm) !important;
+  border: 1px solid var(--p-line) !important;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.roster-list .roster-user:hover,
+.roster-list .user-row:hover,
+#rosterPage .roster-user:hover,
+#quickRoster .user-row:hover,
+#archivesList .story-item:hover,
+#profileStories .story-item:hover {
+  border-color: var(--p-accent-line) !important;
+}
+
+/* ---- tables ---- */
+
+#adminTable { border-collapse: collapse; width: 100%; }
+#adminTable th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--p-text-faint);
+  border-bottom: 1px solid var(--p-line-strong) !important;
+}
+#adminTable td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--p-line) !important;
+  color: var(--p-text-dim);
+}
+#adminTable tr:hover td { background: rgba(127, 216, 255, 0.04); }
+
+/* ---- the new-DM toast ---- */
+
+#dmNotification {
+  background: var(--p-surface-3) !important;
+  background-image: var(--p-panel) !important;
+  border: 1px solid var(--p-line-strong) !important;
+  border-radius: var(--p-r-md) !important;
+  box-shadow: var(--p-shadow-2) !important;
+  color: var(--p-text);
+}
+#dmNotification:hover {
+  border-color: var(--p-accent-line) !important;
+  box-shadow: var(--p-shadow-2) !important;
+}
+
+/* ============================================================
+   9. FOOTER
+   ============================================================ */
+
+footer {
+  margin-top: var(--p-s6);
+  padding-top: var(--p-s5);
+  border-top: 1px solid var(--p-line);
+  color: var(--p-text-faint);
+  font-size: 12.5px;
+}
+
+.download-apps { gap: var(--p-s3); }
+.download-app {
+  background: rgba(10, 17, 28, 0.6);
+  border: 1px solid var(--p-line);
+  border-radius: var(--p-r-md);
+  padding: 12px 14px;
+}
+.download-app-label { color: var(--p-text-dim); font-size: 12px; }
+
+button.download-btn,
+.download-btn {
+  border-radius: var(--p-r-sm);
+  font-size: 12.5px;
+  padding: 8px 14px;
+  box-shadow: none;
+}
+
+/* ============================================================
+   10. PHONES
+   mobile.css keeps the structure; this aligns its typography,
+   controls and dialogs with the tokens above.
+   ============================================================ */
+
+@media (max-width: 999px) {
+  h1 { font-size: 22px; }
+  .lead { font-size: 13.5px; }
+
+  .card,
+  .app-download-card,
+  .mcf-fed-board-card {
+    border-radius: var(--p-r-md);
+    padding: 16px;
+  }
+
+  .actions { padding: 14px 16px 0; gap: 8px; }
+  .actions-section-title {
+    color: var(--p-text-faint);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    margin: 10px 0 -2px;
+  }
+
+  button {
+    border-radius: var(--p-r-sm);
+    font-size: 14px;
+    font-weight: 650;
+    padding: 11px 16px;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.3) inset, 0 8px 18px -14px rgba(0, 213, 255, 0.9);
+  }
+
+  button.ghost {
+    background: rgba(127, 216, 255, 0.06);
+    border: 1px solid var(--p-line-strong);
+    color: var(--p-text);
+    box-shadow: none;
+  }
+
+  input,
+  select,
+  textarea { font-size: 16px; padding: 11px 12px; }
+
+  .modal-box,
+  .modal-content,
+  #ageBox {
+    border-radius: var(--p-r-lg);
+    border: 1px solid var(--p-line-strong);
+    box-shadow: var(--p-shadow-3);
+    max-height: 88vh;
+  }
+  .modal-box { padding: 18px; }
+
+  #ageBox { padding: 28px 22px !important; }
+
+  .mobile-header {
+    margin: 0 0 16px;
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid var(--p-line);
+    background: rgba(5, 9, 16, 0.86);
+    backdrop-filter: blur(12px);
+  }
+  .mobile-header h1 { font-size: 18px; }
+
+  #legalLinks {
+    padding: 18px 16px 0;
+    border-top: 1px solid var(--p-line);
+    margin-top: 14px !important;
+  }
+}
+
+/* ============================================================
+   11. MOTION & ACCESSIBILITY
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  body::after { animation: none !important; }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --p-line: rgba(200, 226, 245, 0.34);
+    --p-line-strong: rgba(200, 226, 245, 0.5);
+    --p-text-dim: #c9d9e8;
+    --p-text-faint: #a8bccd;
+  }
+  .card { border-width: 1px; }
+}
