@@ -371,6 +371,7 @@
       keywords: ['view profile', 'open profile', 'see profile', 'profile card', 'user profile', 'someones profile'],
       answer: 'Open a profile from the User Roster, from the online list in the Arena, or by clicking a username in chat.\n' +
         'You see their photo, name, age, height, weight, favourite colour, language, bio, their tags, wins and losses, their photos, their published stories, their relationships and the timeline of them.\n' +
+        'If the member is in a federation, the profile names it on a Federation line under their last-online time, and the floating profile card from the online list shows it under their username.\n' +
         'On someone else\'s profile there are Message User and Block User buttons; your own profile has Edit Profile and Account Settings instead.',
       action: {
         label: 'Open the User Roster',
@@ -845,6 +846,7 @@
       keywords: ['story editor', 'edit story', 'write story editor', 'story toolbar', 'story formatting', 'story clip', 'story title'],
       answer: 'The editor has a title of up to 120 characters and a body of up to 20,000, with a counter showing characters, words and reading time as you go.\n' +
         'The toolbar does bold, italic, quoted speech, chapter headings and scene breaks, and Ctrl+B, Ctrl+I and Ctrl+S work as shortcuts. Under the body you can attach a GIF or clip, and there is a Preview button to see the story exactly as readers will.\n' +
+        'If you belong to a federation, the credit menu under the body lets you credit the story to it — that is worth a point to them once the story is published and approved.\n' +
         'Save when you are happy; drafts are kept automatically while you write.',
       requiresLogin: true,
       action: {
@@ -1222,6 +1224,20 @@
 
     /* ---------- BEGINNERS GUIDE ---------- */
     {
+      id: 'image-library',
+      title: 'Image Library — share and browse images',
+      keywords: ['image library', 'image gallery', 'picture library', 'upload image', 'upload images', 'browse images', 'image categories', 'share an image', 'find an image', 'library'],
+      answer: 'The Image Library is the shared shelf of pictures members use in profiles, stories and messages. Open Community → Image Library; it is for members, so sign in first.\n' +
+        'To add one, choose a category, pick a file (JPEG, PNG, GIF or WebP), add a short caption and press Upload image. The categories are Fighter Photos, Gear & Attire, Artwork, Match Moments, Events & Meetups and Other.\n' +
+        'Browsing is by category or everything at once, newest first, with pages along the bottom. Each picture shows its caption, category, who added it and when, and opens full size in a new tab.\n' +
+        'You can remove the images you uploaded yourself, and site staff can remove anything that breaks the rules.',
+      action: {
+        label: 'Open the Image Library',
+        buttonId: 'btnImageLibrary',
+        done: 'Opening the Image Library for you.'
+      }
+    },
+    {
       id: 'how-to-wrestle',
       title: 'How to cyber wrestle (beginner’s guide)',
       keywords: ['how to cyber wrestle', 'how do i cyber wrestle', 'cyber wrestle', 'cyber wrestling', 'how do i wrestle', 'how to wrestle', 'how do i fight', 'how to fight', 'beginner', 'beginners guide', 'beginner guide', 'new here', 'new to this', 'first match', 'first time', 'roleplay', 'role play', 'how does this work', 'how it works', 'getting started', 'start wrestling', 'write a match', 'rp', 'cyber fighting', 'eight rules', 'match styles', 'match style', 'no holds barred', 'nhb', 'pro wrestling', 'sub wrestling', 'accepted sub', 'catfight', 'apartment wrestling', 'kickboxing', 'death match', 'sexfight', 'erotic wrestling', 'first person', 'third person', 'yt', 'sell a move', 'selling', 'tap out', 'submission hold', 'gif match', 'guide'],
@@ -1272,6 +1288,50 @@
         buttonId: 'btnGuide',
         popupId: 'modalGuide',
         done: 'Opening the Beginner’s Guide — eight rules are section 8.'
+      }
+    },
+
+    /* ---------- THE SINGLE-PLAYER GAME ---------- */
+    {
+      id: 'wrestling-game',
+      title: 'The Wrestling Game — playing the computer',
+      keywords: ['wrestling game', 'the game', 'single player', 'single player game', 'computer opponent', 'ai opponent', 'fight the computer', 'play against the computer', 'practice match', 'arcade', 'games page', 'game page'],
+      answer: 'The Wrestling Game is a single-player match against the computer, on its own page: open Games → Wrestling Game. What you build and train there is saved to your account, so it is there next time.\n' +
+        'Start with your wrestler — name, nickname and a photo — then train the stats you want to lean on. Find Random Opponent brings up someone close to your level, and the match opens with both cards, a spotlight showing the move being used and a running commentary underneath.\n' +
+        'On your turn pick a hold, a power move, a submission or a tactic. Each one has its own effect and its own risk; damage builds until a pin, a submission or a knockout ends it, and the whole exchange is written into the log so you can read back how it went.\n' +
+        'Gym training and career mode live on the same page too — ask me about either one for the details.',
+      action: {
+        label: 'Open the Wrestling Game',
+        buttonId: 'btnWrestlingGame',
+        done: 'Opening the Wrestling Game for you.'
+      }
+    },
+    {
+      id: 'gym-training',
+      title: 'Gym training — raising your five stats',
+      keywords: ['gym', 'gym training', 'training', 'train', 'train my wrestler', 'train stats', 'energy', 'gym energy', 'workout', 'raise stats', 'increase stats', 'strength', 'agility', 'stamina', 'skill', 'charisma'],
+      answer: 'Every wrestler in the game has five trainable stats: strength, agility, stamina, skill and charisma. The gym on the Wrestling Game page raises one at a time, and shows what the next point costs before you spend it.\n' +
+        'Training spends energy. You hold ten units, one comes back every five minutes, and the bar shows the countdown to the next — so the gym rewards coming back rather than spending everything in one sitting.\n' +
+        'Early points are cheap and later ones cost more, so it pays to decide what kind of wrestler you are: a powerhouse leans on strength, a high-flyer on agility, a technician on skill.\n' +
+        'A trained wrestler simply lands more of what they attempt, which is why it is worth a few sessions before a hard opponent.',
+      action: {
+        label: 'Open the gym',
+        buttonId: 'btnWrestlingGame',
+        done: 'Opening the Wrestling Game — the gym is at the top of the page.'
+      }
+    },
+    {
+      id: 'career-mode',
+      title: 'Career mode — a story you steer',
+      keywords: ['career', 'career mode', 'story mode', 'branching story', 'career choices', 'choices in the game', 'title shot', 'career ending', 'start a career'],
+      answer: 'Career mode is a single-player story for your wrestler: a debut, rivalries, training camps, title shots and several different endings. Open the Wrestling Game page and press Start New Career.\n' +
+        'The story tells you what is happening and offers a few choices. What you pick opens some doors and closes others, and the rivals you make follow you through the run.\n' +
+        'Along the way there are training camps (a moment to put into a stat) and matches you wrestle with the same moves as a normal game match.\n' +
+        'When the run finishes you get a summary of how it went, and you can start another one at any time to try a different path.',
+      action: {
+        label: 'Start a career',
+        buttonId: 'btnWrestlingGame',
+        done: 'Opening the Wrestling Game — Career is the last card on the page.'
       }
     },
 
@@ -1483,16 +1543,41 @@
     {
       id: 'federations',
       title: 'Federations — create, manage, join, chatroom',
-      keywords: ['federation', 'federations', 'create federation', 'manage federation', 'join federation', 'federation chat', 'federation chatroom', 'federation rules', 'federation roles', 'promotion', 'run a federation', 'tournament', 'tournaments', 'bracket', 'brackets', 'federation tournament', 'federation vs federation', 'federation war'],
+      keywords: ['federation', 'federations', 'create federation', 'manage federation', 'join federation', 'federation chat', 'federation chatroom', 'federation rules', 'federation roles', 'promotion', 'run a federation', 'federation owner', 'federation admin', 'federation image'],
       answer: 'A federation is your own promotion: a name, rules, roles you can hand out, an image and a description.\n' +
         'Open Federations in the action row. Create opens the registration form (you can run only one, and you cannot be in two federations at once). Join lists every federation with a Join button — pressing it sends the owner a direct message asking for approval, and you are only added once they approve. Chatroom opens a floating, movable members-only room with the federation’s online members down the side.\n' +
         'Manage belongs to the owner and the federation’s co-owners/admins. Its Members tab lists join requests with Approve and Reject, then everyone with when they were last online, a role menu to assign or change a role, and Remove. The Roles tab adds a role, renames or re-describes one, and deletes one nobody holds — the built-in Owner, Co-owner and Member never change. Only the owner can tick “Can manage” on a role. The Federation details tab edits the name, description, rules and image. Every published story an author credits to their federation is worth 1 point — pick your federation in the story editor when you write it. The main page shows a Federation Leaderboard listing every federation from most points to fewest.\n' +
-        'Tournaments are federation against federation: press Tournaments, challenge another federation, and once its owner accepts, each owner enters up to 16 of their own members and locks the lineup in. When both lineups are locked the server draws a single-elimination bracket — round one is always one federation against the other, and later rounds pair whoever is left. A manager of either federation reports each result by pressing the wrestler who won; results are final once the next round is drawn, and the last wrestler standing wins the tournament.',
+        'Two more things live under Federations: the Tournaments button, where two federations fight a bracket, and the points your federation earns from published stories. Ask me about federation tournaments, or about federation points, and I will take you through them.',
       action: {
         label: 'Open Create Federation',
         buttonId: 'btnFederationCreate',
         done: 'Opening the federation registration form for you.'
       }
+    },
+    {
+      id: 'federation-tournaments',
+      title: 'Federation tournaments — a bracket between two federations',
+      keywords: ['federation tournament', 'federation tournaments', 'tournament', 'tournaments', 'bracket', 'brackets', 'tournament bracket', 'federation vs federation', 'federation war', 'enter wrestlers', 'lineup', 'lock in lineup', 'report a result', 'tournament champion', 'who won the tournament'],
+      answer: 'Two federations can settle it in a bracket. Open Federations → Tournaments, press Challenge a federation, pick the opponent and (if you like) name the event; the challenge lands in the other owner\'s direct messages and they accept or decline it from the same window.\n' +
+        'Once it is accepted each owner picks up to 16 of their own members and presses Lock in lineup. Only an owner or one of the federation\'s admins can pick, only that federation\'s members can be entered, and a locked lineup stays locked unless you unlock it before the bracket is drawn.\n' +
+        'The bracket is drawn the moment both lineups are locked: round one always puts one federation against the other — seed one versus seed one, with byes for a shorter lineup — and every later round pairs whoever is left, so two team-mates can end up meeting.\n' +
+        'A manager of either federation reports each match by pressing the wrestler who won. A result is final once the next round is drawn, and the last wrestler standing wins the tournament — announced in the window and messaged to the winning owner.\n' +
+        'The same window shows invitations waiting on you, your federation\'s tournaments and what is running elsewhere, and anyone signed in can open a bracket to watch it.',
+      action: {
+        label: 'Open Tournaments',
+        buttonId: 'btnFederationTournaments',
+        done: 'Opening Federation Tournaments for you.'
+      }
+    },
+    {
+      id: 'federation-points',
+      title: 'Federation points and the leaderboard',
+      keywords: ['federation points', 'federation point', 'leaderboard', 'federation leaderboard', 'standings', 'rankings', 'ranking', 'how do federations earn points', 'earn points', 'get points', 'points for a story', 'points system', 'top federation', 'federation score'],
+      answer: 'A federation earns one point for every published story its author credits to it. When you write a story, the credit menu in the editor lists your own federation — pick it before you publish, and the point lands as soon as the story is approved. A story can only credit a federation its author belongs to.\n' +
+        'Points are always the live count of those stories, so a story that is declined, withdrawn or deleted takes its point with it — nobody has to keep a tally.\n' +
+        'The count also shows on the federation\'s card in the Join list and in Manage, next to the member count.\n' +
+        'The main page carries the Federation Leaderboard: every federation, highest points first, with its image or initials, owner, member count and score — and it refreshes itself every minute.',
+      action: null
     },
     {
       id: 'match-record',
@@ -1684,7 +1769,7 @@
     {
       id: 'age',
       title: 'The 18+ gate',
-      keywords: ['18', 'age', 'age gate', 'underage', 'adult', '18+ only'],
+      keywords: ['18', 'age', 'age gate', 'underage', 'adult', '18+ only', 'age limit', 'minimum age', 'age requirement', 'how old do i have to be', 'how old must i be', 'over 18'],
       answer: 'Male Cyber Fighters is an 18+ site.\n' +
         'Everyone confirms they are 18 or over on the way in, and the age on your profile has to be 18 or over as well — it is checked when you register and when you edit your profile.\n' +
         'If you are under 18 you must not use the site.',
@@ -1697,6 +1782,17 @@
       answer: 'On a phone the site rearranges itself to fit: buttons go full width, chat windows fill the screen, and the profile card stacks instead of sitting side by side.\n' +
         'On a computer you get the wider layout, with side cards and the movable, resizable chat windows.\n' +
         'Everything works the same either way, on the same account.',
+      action: null
+    },
+    {
+      id: 'assistant-help',
+      title: 'What I can help with — the whole site',
+      keywords: ['what can you do', 'what can i ask', 'what do you know', 'assistant', 'jax', 'site features', 'all features', 'list of features', 'features', 'everything on the site', 'overview', 'table of contents', 'what is on this site', 'what can i do here'],
+      answer: 'I am Jax. Ask me about any part of the site and I will explain it, or tell me to open something and I will open that window for you.\n' +
+        'Talking to people: the Arena public chat and replies to messages, direct messages with everything inside them (search, unread marks, images, GIFs, clips, voice calls), custom rooms with invites and moderation, forums, mentions, reactions, bookmarks and reports.\n' +
+        'You and what you write: your profile, photos, tags and combat stats, the User Roster and its filters, stories and the Archives, story approval, relationships, and fighter records with achievements and challenges.\n' +
+        'Federations and matches: running a federation, its roles and join requests, the members-only chatroom, points and the leaderboard, federation tournaments, finding a match, your match record and dice matches.\n' +
+        'Games and settings: the Wrestling Game with its gym and career mode, the Image Library, themes and preferences, notifications and push, language and translation, the desktop and phone apps, and the rules — ask about any of them by name.',
       action: null
     },
     {
@@ -1728,6 +1824,10 @@
     { label: 'Send a challenge', text: 'how do I send a challenge?' },
     { label: 'My record', text: 'how do I see my record?' },
     { label: 'Achievements', text: 'what are achievements?' },
+    { label: 'Federation tournaments', text: 'how do federation tournaments work?' },
+    { label: 'The Wrestling Game', text: 'how does the wrestling game work?' },
+    { label: 'Gym training', text: 'how does gym training work?' },
+    { label: 'What can you do?', text: 'what can you do?' },
     { label: 'Report a problem', text: 'how do I report a problem?' },
     { label: 'How do I create a story?', text: 'how do I create a story?' },
     { label: 'How do forums work?', text: 'how do forums work?' },
@@ -2044,7 +2144,7 @@
     addMessage(
       'assistant',
       'I do not have an answer for "' + text + '" yet.\n' +
-        'I can help with the Arena, DMs, Rooms, Forums, the User Roster, story Archives, profiles, dice matches, challenges, your match record, reactions, bookmarks, mentions, achievements, preferences, notifications, calls, the rules, and the beginner’s guide to cyber wrestling.\n' +
+        'I can help with the Arena, DMs, Rooms, Forums, the User Roster, story Archives, profiles, federations and federation tournaments, the points leaderboard, dice matches, challenges, your match record, achievements, the Wrestling Game, the gym, career mode, the Image Library, preferences, notifications, calls, the rules, and the beginner’s guide to cyber wrestling.\n' +
         'Try asking: how do I send a DM, create a room, edit my profile, start a dice match, send a challenge, see my record, react to a message, save a message, mention someone, see my achievements, change my theme, silence notifications, enable push, find a match, report a problem, or how do I cyber wrestle.\n' +
         'If it is a bug or something you want added, send it to the admins as a support report.',
       {
@@ -2116,7 +2216,8 @@
       'assistant',
       'Hey — I am Jax, the support assistant for Male Cyber Fighters.\n' +
         'Ask me how anything on the site works and I will walk you through it, or tell me to open something and I will open that window for you.\n' +
-        'I can help with the Arena, DMs, rooms, forums, stories and the Archives, your profile and photos, dice matches, challenges, your match record, reactions, bookmarks, mentions, achievements, preferences, notifications, voice calls, blocking and reports, the rules, and the beginner’s guide to cyber wrestling.'
+        'I can help with the Arena, DMs, rooms, forums, stories and the Archives, your profile and photos, federations and their tournaments, dice matches, challenges, your match record, achievements, the Wrestling Game with its gym and career mode, the Image Library, preferences, notifications, voice calls, blocking and reports, the rules, and the beginner’s guide to cyber wrestling.\n' +
+      'Ask "what can you do?" for the whole list.'
     );
     renderQuickReplies();
   }

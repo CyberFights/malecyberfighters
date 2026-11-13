@@ -27,7 +27,7 @@ const tick = (ms = 20) => new Promise(resolve => setTimeout(resolve, ms));
 const EXPECTED_GROUPS = {
   account: ['btnLogin', 'btnRegister', 'btnBookmarks', 'btnPreferences'],
   chatrooms: ['btnOpenChat', 'btnRooms', 'btnDMs'],
-  community: ['btnRoster', 'btnForums', 'btnArchives'],
+  community: ['btnRoster', 'btnForums', 'btnArchives', 'btnImageLibrary'],
   federations: ['btnFederationCreate', 'btnFederationManage', 'btnFederationJoin', 'btnFederationChat', 'btnFederationTournaments'],
   matches: ['btnLfg', 'btnChallenges', 'btnRecord', 'btnAchievements'],
   games: ['btnWrestlingGame'],
