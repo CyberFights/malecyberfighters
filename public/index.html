@@ -450,16 +450,37 @@
     </ul>
     <p class="hero-cta"><a class="text-link" href="/wrestling-game.html">Play the Wrestling Game (Career Mode)</a></p>
 
-    <div class="updates-grid">
-      <div class="update-block">
-        <h4 class="eyebrow">Upcoming changes</h4>
-        <div id="updates" class="muted" style="max-height:200px;overflow-y:auto;white-space:pre-wrap;">Loading updates…</div>
-      </div>
-      <div class="update-block">
-        <h4 class="eyebrow">Completed updates</h4>
-        <div id="completedupdates" class="muted" style="max-height:200px;overflow-y:auto;white-space:pre-wrap;">Loading completed updates…</div>
-      </div>
+    <div class="update-block">
+      <h4 class="eyebrow">Upcoming changes</h4>
+      <div id="updates" class="muted" style="max-height:200px;overflow-y:auto;white-space:pre-wrap;">Loading updates…</div>
     </div>
+    <div class="update-block">
+      <h4 class="eyebrow">Completed updates</h4>
+      <div id="completedupdates" class="muted" style="max-height:200px;overflow-y:auto;white-space:pre-wrap;">Loading completed updates…</div>
+    </div>
+
+        <!-- New members, recent forum posts and the federation leaderboard -->
+      <div class="home-highlights">
+        <div class="card home-highlight">
+          <h4>New Members</h4>
+          <div id="newMembersList" class="highlight-scroll">
+            <div class="small muted">Loading new members…</div>
+          </div>
+        </div>
+        <div class="card home-highlight">
+          <h4>Recent Forum Posts</h4>
+          <div id="recentForumsList" class="highlight-scroll">
+            <div class="small muted">Loading recent posts…</div>
+          </div>
+        </div>
+        <div class="card home-highlight">
+          <h4>Federation Leaderboard</h4>
+          <!-- Filled by /js/federations.js from GET /api/federations/leaderboard. -->
+          <div id="federationLeaderboard" class="mcf-fed-board highlight-scroll" data-fed-leaderboard aria-live="polite">
+            <div class="small muted">Loading federations…</div>
+          </div>
+        </div>
+      </div>
 
   </div>
   <aside class="card" style="display:none;">
@@ -467,28 +488,6 @@
     <div id="quickRoster" class="roster-list"></div>
   </aside>
 </div>
-  <!-- New members, recent forum posts and the federation leaderboard -->
-  <div class="home-highlights">
-    <div class="card home-highlight">
-      <h4>New Members</h4>
-      <div id="newMembersList" class="highlight-scroll">
-        <div class="small muted">Loading new members…</div>
-      </div>
-    </div>
-    <div class="card home-highlight">
-      <h4>Recent Forum Posts</h4>
-      <div id="recentForumsList" class="highlight-scroll">
-        <div class="small muted">Loading recent posts…</div>
-      </div>
-    </div>
-    <div class="card home-highlight">
-      <h4>Federation Leaderboard</h4>
-      <!-- Filled by /js/federations.js from GET /api/federations/leaderboard. -->
-      <div id="federationLeaderboard" class="mcf-fed-board highlight-scroll" data-fed-leaderboard aria-live="polite">
-        <div class="small muted">Loading federations…</div>
-      </div>
-    </div>
-  </div>
 </div>
   </div>
   </div>
