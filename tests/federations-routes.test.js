@@ -30,7 +30,15 @@ function query(value) {
 }
 
 function createStore() {
-  const state = { federations: [], users: new Map(), nextId: 1, dms: [], deliveries: [] };
+  const state = {
+    federations: [],
+    users: new Map(),
+    nextId: 1,
+    dms: [],
+    deliveries: [],
+    storyPoints: 0,
+    pointsMap: {}
+  };
 
   function memberMatches(doc, entry) {
     if (!entry || !entry.$ne) return true;
@@ -219,7 +227,9 @@ async function startApi(store) {
     DM: store.DM,
     deliverToUser: (username, event, payload) => {
       store.state.deliveries.push({ username, event, payload });
-    }
+    },
+    countPublishedStories: () => store.state.storyPoints,
+    pointsByFederation: () => store.state.pointsMap
   }).router);
 
   const server = await new Promise(resolve => {
@@ -1295,6 +1305,82 @@ test('chatroom presence lists only federation members who are online', async () 
     const outsider = await api.call('GET', `/api/federations/${id}/presence`, { user: 'stranger' });
     assert.equal(outsider.status, 403);
     assert.equal(outsider.body.error, 'not_a_member');
+  } finally {
+    await api.close();
+  }
+});
+
+test('a federation’s points are the stories credited to it', async () => {
+  const { store, api } = await setupManagedFederation();
+  try {
+    // The host counts published stories with this federation id; the stand-in
+    // just reports the number the test sets.
+    const before = await api.call('GET', '/api/federations/mine', { user: 'boss' });
+    assert.equal(before.body.federation.points, 0);
+
+    store.state.storyPoints = 3;
+    const scored = await api.call('GET', '/api/federations/mine', { user: 'boss' });
+    assert.equal(scored.body.federation.points, 3);
+
+    // The Join list is unchanged by points — it stays a summary.
+    const list = await api.call('GET', '/api/federations', { user: 'stranger' });
+    assert.equal(list.body.federations[0].name, 'Iron Ring Federation');
+    assert.equal('points' in list.body.federations[0], false);
+  } finally {
+    await api.close();
+  }
+});
+
+test('the leaderboard lists every federation, highest points first', async () => {
+  const store = createStore();
+  addUser(store, 'boss');
+  addUser(store, 'other');
+  addUser(store, 'third');
+  const api = await startApi(store);
+  try {
+    const iron = await api.call('POST', '/api/federations', { user: 'boss', body: registration() });
+    const steel = await api.call('POST', '/api/federations', {
+      user: 'other',
+      body: registration({ name: 'Steel Cage Club' })
+    });
+    const apex = await api.call('POST', '/api/federations', {
+      user: 'third',
+      body: registration({ name: 'Apex Club' })
+    });
+
+    store.state.pointsMap = {
+      [iron.body.federation.id]: 4,
+      [steel.body.federation.id]: 0,
+      [apex.body.federation.id]: 4
+    };
+
+    // The board is public: no session needed.
+    const board = await api.call('GET', '/api/federations/leaderboard');
+    assert.equal(board.status, 200);
+    assert.equal(board.body.ok, true);
+    assert.deepEqual(
+      board.body.federations.map(row => [row.name, row.points]),
+      [['Apex Club', 4], ['Iron Ring Federation', 4], ['Steel Cage Club', 0]],
+      'most points first, ties alphabetical'
+    );
+
+    const first = board.body.federations[0];
+    assert.equal(first.owner, 'third');
+    assert.equal(first.memberCount, 1);
+    assert.ok(first.id);
+    assert.equal('members' in first, false, 'the board carries no roster');
+  } finally {
+    await api.close();
+  }
+});
+
+test('an empty leaderboard is an empty list, not an error', async () => {
+  const store = createStore();
+  const api = await startApi(store);
+  try {
+    const board = await api.call('GET', '/api/federations/leaderboard');
+    assert.equal(board.status, 200);
+    assert.deepEqual(board.body.federations, []);
   } finally {
     await api.close();
   }

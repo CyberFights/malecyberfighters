@@ -1792,6 +1792,15 @@ const storySchema = new mongoose.Schema({
   clipUrl: { type: String },
   clipType: { type: String }, // "video" | "gif"
 
+  // The federation the author credited when they wrote it. Membership is
+  // checked on write (storyRoutes.js); a published linked story is worth one
+  // point to that federation. `name` is kept in step when the federation is
+  // renamed, so old stories still read correctly.
+  federation: {
+    id: { type: String, default: null },
+    name: { type: String, default: "" }
+  },
+
   approvalOwner: { type: Boolean, default: true },
   approvalPartner: { type: Boolean, default: false },
 
@@ -1812,6 +1821,10 @@ const storySchema = new mongoose.Schema({
 
   createdAt: { type: Date, default: Date.now }
 });
+
+// A federation's points are the published stories credited to it — counted on
+// read, so this is the query to keep cheap.
+storySchema.index({ 'federation.id': 1, approved: 1, declined: 1 });
 
 const relationshipSchema = new mongoose.Schema({
   requester: { type: String, required: true },
@@ -2554,6 +2567,7 @@ async function announceRoomSystemMessage(roomId, username, action) {
    from the DM delivery setup further down this file.
 --------------------------------------------------------------------------- */
 app.use("/api/story", createStoryRouter({
+  Federation,
   Story,
   User,
   DM,
@@ -4775,7 +4789,29 @@ app.use('/api/federations', createFederationRouter({
   // A join request is delivered as a DM to the owner, then answered from it.
   DM,
   deliverToUser: (...args) => deliverToUser(...args),
-  forwardDMToDiscord
+  forwardDMToDiscord,
+  // One point per published story the author linked to this federation.
+  countPublishedStories: federationId => Story.countDocuments({
+    'federation.id': String(federationId),
+    approved: true,
+    declined: { $ne: true }
+  }),
+  // The main-page leaderboard asks for every score at once.
+  pointsByFederation: async () => {
+    const rows = await Story.aggregate([
+      { $match: { approved: true, declined: { $ne: true }, 'federation.id': { $ne: null } } },
+      { $group: { _id: '$federation.id', points: { $sum: 1 } } }
+    ]);
+    return rows.reduce((map, row) => {
+      if (row && row._id) map[String(row._id)] = Number(row.points) || 0;
+      return map;
+    }, {});
+  },
+  // Renaming a federation must not leave old stories crediting the old name.
+  renameFederationLink: (federationId, name) => Story.updateMany(
+    { 'federation.id': String(federationId) },
+    { $set: { 'federation.name': name } }
+  )
 }).router);
 
 // ---------- CHALLENGES ----------

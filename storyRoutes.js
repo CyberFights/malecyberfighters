@@ -40,7 +40,7 @@ const {
 } = require('./storyService');
 
 function createStoryRouter({
-  Story, User, DM, mongoose, emitToUser, forwardDMToDiscord, isLocalClipUrl,
+  Story, User, DM, Federation, mongoose, emitToUser, forwardDMToDiscord, isLocalClipUrl,
   // Tests hand in a pass-through so a suite is not throttled; production gets
   // the real limiter below.
   writeLimiter,
@@ -78,6 +78,26 @@ function createStoryRouter({
   /** Everyone in the story, minus one username. */
   const counterparties = (story, username) =>
     [story.owner, story.partner].filter(name => name && name !== username);
+
+  /**
+   * The federation a story may be credited to: one the author is actually in.
+   * Linking is optional — no federationId is a perfectly good story, and it is
+   * worth no points to anybody.
+   */
+  async function resolveFederation(federationId, username) {
+    if (!federationId) return { ok: true, value: null };
+    if (!Federation || typeof mongoose.isValidObjectId !== 'function' || !mongoose.isValidObjectId(federationId)) {
+      return { ok: false, error: 'bad_federation' };
+    }
+
+    const doc = await Federation.findById(federationId).lean().catch(() => null);
+    if (!doc) return { ok: false, error: 'federation_not_found' };
+
+    const isMember = (doc.members || []).some(member => member.username === username);
+    if (!isMember) return { ok: false, error: 'not_in_federation' };
+
+    return { ok: true, value: { id: String(doc._id), name: doc.name } };
+  }
 
   /**
    * Drop a system DM into the conversation and pop it on any live session.
@@ -132,11 +152,17 @@ function createStoryRouter({
       // Optional clip attached to the story — must point at our own /clips route.
       const clipUrl = isLocalClipUrl(req.body.clipUrl) ? req.body.clipUrl : null;
 
+      // Optional credit: the author's own federation earns a point once this
+      // story is published.
+      const credit = await resolveFederation(req.body.federationId, owner);
+      if (!credit.ok) return res.status(400).json({ ok: false, error: credit.error });
+
       const saved = await Story.create({
         owner,
         partner,
         title,
         story,
+        federation: credit.value,
         clipUrl,
         clipType: clipUrl ? (req.body.clipType === "gif" ? "gif" : "video") : null,
         approvalOwner: true,
@@ -188,7 +214,17 @@ function createStoryRouter({
       if (req.body.clipUrl === null || req.body.clipUrl === "") clipUrl = null;
       else if (isLocalClipUrl(req.body.clipUrl)) clipUrl = req.body.clipUrl;
 
+      // "federationId": null removes the credit; a new id moves it. Omitted
+      // leaves the existing credit alone.
+      let credit = story.federation || null;
+      if (Object.prototype.hasOwnProperty.call(req.body, 'federationId')) {
+        const next = await resolveFederation(req.body.federationId, story.owner);
+        if (!next.ok) return res.status(400).json({ ok: false, error: next.error });
+        credit = next.value;
+      }
+
       Object.assign(story, editFields(story, { ...checked.value, clipUrl, clipType: req.body.clipType }));
+      story.federation = credit;
       await story.save();
 
       await notifyStoryUser(

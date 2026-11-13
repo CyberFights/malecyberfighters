@@ -108,6 +108,15 @@
     return res.json();
   }
 
+  async function getJSON(url) {
+    try {
+      const res = await fetch(url);
+      return await res.json();
+    } catch (err) {
+      return null;
+    }
+  }
+
   /** Brief self-dismissing notice, so the editor never needs a blocking alert. */
   function toast(message, kind) {
     if (!message) return;
@@ -613,6 +622,12 @@
       byline.appendChild(node("span", { class: "mcf-story-chip", text: `revised ${plural(Number(story.revision), "time")}` }));
     }
     if (story.declined) byline.appendChild(node("span", { class: "mcf-story-chip", text: "awaiting re-approval" }));
+    if (story.federation && story.federation.name) {
+      byline.appendChild(node("span", {
+        class: "mcf-story-chip",
+        text: `${story.federation.name} · +1 point`
+      }));
+    }
 
     const closeBtn = node("button", { class: "mcf-story-btn ghost mcf-story-icon", title: "Close", text: "✕" });
     const head = node("div", { class: "mcf-story-viewer-head" }, [
@@ -1235,6 +1250,12 @@
           clipType: state.clip ? state.clip.type : null
         };
 
+        // Only sent when the control resolved: a failed federation fetch must
+        // not silently drop the credit an existing story already has.
+        if (federationField.style.display !== "none") {
+          body.federationId = federationSelect.value || null;
+        }
+
         let data;
         if (isEdit) {
           data = await postJSON("/api/story/update", { ...body, storyId: existing._id });
@@ -1338,6 +1359,60 @@
     document.addEventListener("keydown", onKey);
     window.addEventListener("beforeunload", beforeUnload);
 
+    /* ---------- federation credit ---------- */
+
+    const federationSelect = node("select", {
+      class: "mcf-story-select",
+      id: "storyFederation",
+      "data-mcf": "federation"
+    });
+    const federationNote = node("div", { class: "mcf-story-meta" });
+    const federationField = node("div", { class: "mcf-story-field", style: "display:none" }, [
+      node("label", { text: "Credit a federation (optional)" }),
+      federationSelect,
+      federationNote
+    ]);
+
+    // A story the author is editing may already be credited.
+    let federationChoice = existing && existing.federation && existing.federation.id
+      ? String(existing.federation.id)
+      : "";
+
+    const loadFederationCredit = async () => {
+      const data = await getJSON("/api/federations/mine");
+      const federation = data && data.ok ? data.federation : null;
+      if (!federation && !federationChoice) return;
+
+      federationField.style.display = "";
+      federationSelect.innerHTML = "";
+      federationSelect.appendChild(node("option", { value: "", text: "No federation" }));
+
+      if (federation) {
+        federationSelect.appendChild(node("option", {
+          value: String(federation.id),
+          text: federation.name
+        }));
+      }
+
+      // Editing a story credited to a federation they have since left: keep
+      // the option so they can see the link and choose to remove it.
+      if (federationChoice && (!federation || federationChoice !== String(federation.id))) {
+        federationSelect.appendChild(node("option", {
+          value: federationChoice,
+          text: (existing && existing.federation && existing.federation.name) || "Current federation"
+        }));
+      }
+
+      federationSelect.value = federationChoice;
+      federationNote.textContent = federation
+        ? `When this story is published, ${federation.name} earns 1 point.`
+        : "A published story earns that federation 1 point.";
+      federationSelect.onchange = () => {
+        federationChoice = federationSelect.value;
+        markDirty();
+      };
+    };
+
     /* ---------- layout ---------- */
     const footer = node("div", { class: "mcf-story-foot" }, [
       deleteBtn,
@@ -1375,7 +1450,8 @@
           node("div", { class: "mcf-story-row" }, [clipChoose, clipClear, clipStatus]),
           clipInput,
           clipPreview
-        ])
+        ]),
+        federationField
       ]),
       footer
     ]);
@@ -1383,6 +1459,7 @@
     host.appendChild(panel);
     updateCounter();
     titleInput.focus();
+    loadFederationCredit();
 
     return { host, close };
   }

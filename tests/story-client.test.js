@@ -681,3 +681,125 @@ test('a permalink opens the story, and a private one says so instead of failing'
   assert.equal(await StoryUI.openFromUrl(), false);
   assert.match(win.document.getElementById('mcfStoryToast').textContent, /not available/i);
 });
+
+/* ============================================================
+   FEDERATION CREDIT
+============================================================ */
+
+function federationResponder(extra = {}) {
+  return url => {
+    if (url === '/api/federations/mine') {
+      return { ok: true, federation: { id: 'fed1', name: 'Iron Ring Federation', points: 2 } };
+    }
+    if (url === '/api/story/save') return { ok: true, storyId: 's1' };
+    return { ok: true, ...extra };
+  };
+}
+
+test('a story can be credited to the author’s federation', async () => {
+  const { win, doc, StoryUI } = loadPage();
+  win.responder = federationResponder();
+
+  StoryUI.openEditor({ partner: 'bob' });
+  await tick(30);
+
+  const select = doc.getElementById('storyFederation');
+  assert.ok(select, 'the editor offers a federation');
+  assert.equal(select.closest('.mcf-story-field').style.display, '', 'the field becomes visible');
+  assert.deepEqual(
+    Array.from(select.options).map(option => option.textContent),
+    ['No federation', 'Iron Ring Federation']
+  );
+
+  find(doc, 'title').value = 'Rooftop';
+  find(doc, 'body').value = 'We met on the roof.';
+
+  select.value = 'fed1';
+  select.dispatchEvent(new win.Event('change'));
+
+  find(doc, 'save').click();
+  await tick();
+
+  const call = win.calls.find(c => c.url === '/api/story/save');
+  assert.equal(call.body.federationId, 'fed1', 'the credit is sent with the story');
+});
+
+test('a story left on “No federation” is not credited to anybody', async () => {
+  const { win, doc, StoryUI } = loadPage();
+  win.responder = federationResponder();
+
+  StoryUI.openEditor({ partner: 'bob' });
+  await tick(30);
+
+  find(doc, 'title').value = 'Rooftop';
+  find(doc, 'body').value = 'We met on the roof.';
+  find(doc, 'save').click();
+  await tick();
+
+  const call = win.calls.find(c => c.url === '/api/story/save');
+  assert.equal(call.body.federationId, null);
+});
+
+test('editing a credited story preselects its federation', async () => {
+  const { win, doc, StoryUI } = loadPage();
+  win.responder = federationResponder();
+
+  StoryUI.openEditor({
+    partner: 'bob',
+    story: {
+      _id: 's1',
+      owner: 'alice',
+      partner: 'bob',
+      title: 'Rooftop',
+      story: 'We met on the roof.',
+      revision: 0,
+      federation: { id: 'fed1', name: 'Iron Ring Federation' }
+    }
+  });
+  await tick(30);
+
+  const select = doc.getElementById('storyFederation');
+  assert.equal(select.value, 'fed1');
+
+  find(doc, 'body').value = 'We met on the roof, again.';
+  find(doc, 'save').click();
+  await tick();
+
+  const call = win.calls.find(c => c.url === '/api/story/update');
+  assert.equal(call.body.federationId, 'fed1');
+});
+
+test('a member with no federation never sees the credit control', async () => {
+  const { win, doc, StoryUI } = loadPage();
+  win.responder = url => (url === '/api/federations/mine'
+    ? { ok: true, federation: null }
+    : { ok: true, storyId: 's1' });
+
+  StoryUI.openEditor({ partner: 'bob' });
+  await tick(30);
+
+  const field = doc.getElementById('storyFederation').closest('.mcf-story-field');
+  assert.equal(field.style.display, 'none');
+
+  find(doc, 'title').value = 'Rooftop';
+  find(doc, 'body').value = 'We met on the roof.';
+  find(doc, 'save').click();
+  await tick();
+
+  const call = win.calls.find(c => c.url === '/api/story/save');
+  assert.equal('federationId' in call.body, false);
+});
+
+test('the reader sees which federation a story was written for', () => {
+  const { doc, StoryUI } = loadPage();
+  StoryUI.openViewer({
+    title: 'Rooftop',
+    story: 'We met on the roof.',
+    owner: 'alice',
+    partner: 'bob',
+    federation: { id: 'fed1', name: 'Iron Ring Federation' }
+  });
+
+  const text = doc.getElementById('storyViewerPopup').textContent;
+  assert.match(text, /Iron Ring Federation · \+1 point/);
+});

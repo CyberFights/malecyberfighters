@@ -366,6 +366,12 @@
     return (federation.roles || []).filter(function (role) { return role.id === roleId; })[0] || null;
   }
 
+  /** "3 points" — one per published story credited to the federation. */
+  function federationPoints(federation) {
+    var points = Math.max(0, Number(federation && federation.points) || 0);
+    return points + (points === 1 ? ' point' : ' points');
+  }
+
   function roleName(federation, roleId) {
     var match = roleFor(federation, roleId);
     return match ? match.name : (roleId || 'Member');
@@ -1065,7 +1071,8 @@
         '<div>' +
           '<h4 class="mcf-fed-name">' + MCF.escapeHtml(federation.name) + '</h4>' +
           '<p class="small muted">Run by @' + MCF.escapeHtml(federation.owner) + ' · ' +
-            federation.memberCount + (federation.memberCount === 1 ? ' member' : ' members') + '</p>' +
+            federation.memberCount + (federation.memberCount === 1 ? ' member' : ' members') + ' · ' +
+            federationPoints(federation) + '</p>' +
           '<p class="small muted">' +
             (federation.isOwner
               ? 'You run this federation.'
@@ -1462,10 +1469,74 @@
   }
 
   /* ---------------------------------------------------------
+     LEADERBOARD — the main-page card
+
+     Every federation, most points first. Points are published stories
+     credited to it, counted by the server; the page only draws the board.
+  --------------------------------------------------------- */
+
+  var leaderboardTimer = null;
+
+  function leaderboardRow(federation, index) {
+    var points = Math.max(0, Number(federation.points) || 0);
+    var image = federation.imageUrl
+      ? '<img class="mcf-fed-board-thumb" src="' + MCF.escapeHtml(federation.imageUrl) + '" alt="">'
+      : '<span class="mcf-fed-board-thumb mcf-fed-hero-empty" aria-hidden="true">' +
+        MCF.escapeHtml(String(federation.name || '?').slice(0, 2).toUpperCase()) + '</span>';
+    var members = federation.memberCount === 1 ? '1 member' : federation.memberCount + ' members';
+
+    return '<li class="mcf-fed-board-row' + (index === 0 ? ' mcf-fed-board-first' : '') + '">' +
+      '<span class="mcf-fed-board-rank" aria-hidden="true">' + (index + 1) + '</span>' +
+      image +
+      '<span class="mcf-fed-board-copy">' +
+        '<strong class="mcf-fed-board-name">' + MCF.escapeHtml(federation.name) + '</strong>' +
+        '<span class="small muted">@' + MCF.escapeHtml(federation.owner) + ' · ' + members + '</span>' +
+      '</span>' +
+      '<span class="mcf-fed-board-points">' + points + (points === 1 ? ' pt' : ' pts') + '</span>' +
+    '</li>';
+  }
+
+  function renderLeaderboard(federations) {
+    var hosts = document.querySelectorAll('[data-fed-leaderboard]');
+    if (!hosts.length) return;
+
+    var html = (federations && federations.length)
+      ? '<ol class="mcf-fed-board-list">' +
+        federations.map(leaderboardRow).join('') + '</ol>'
+      : '<p class="small muted">No federations have been registered yet — create the first one.</p>';
+
+    hosts.forEach(function (host) { host.innerHTML = html; });
+  }
+
+  /** Redraw every board on the page. Safe to call before the DOM is ready. */
+  function refreshLeaderboard() {
+    try {
+      var request = MCF.getJSON('/api/federations/leaderboard');
+      if (!request || typeof request.then !== 'function') return Promise.resolve(null);
+      return request.then(function (data) {
+        if (data && data.ok) renderLeaderboard(data.federations);
+        return data;
+      }).catch(function () { return null; });
+    } catch (err) {
+      // The board is decoration: a missing fetch must not break the page.
+      return Promise.resolve(null);
+    }
+  }
+
+  function startLeaderboard() {
+    if (!document.querySelector('[data-fed-leaderboard]')) return;
+    refreshLeaderboard();
+    if (!leaderboardTimer) {
+      leaderboardTimer = setInterval(refreshLeaderboard, 60000);
+    }
+  }
+
+  /* ---------------------------------------------------------
      Wiring
   --------------------------------------------------------- */
 
   function bind() {
+    startLeaderboard();
     bindAll('btnFederationCreate', openCreate);
     bindAll('btnFederationManage', openManage);
     bindAll('btnFederationJoin', openJoin);
@@ -1482,6 +1553,7 @@
     openCreate: openCreate,
     openManage: openManage,
     openJoin: openJoin,
-    openChatroom: openChatroom
+    openChatroom: openChatroom,
+    refreshLeaderboard: refreshLeaderboard
   };
 })();
