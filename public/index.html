@@ -101,6 +101,8 @@
 <!-- ProfileCard — the 3D member card opened from the online list in the
      public chat (see /js/profile-card.js) -->
 <link rel="stylesheet" href="/css/profile-card.css?v=1">
+<!-- Design layer — loaded last so it can refine every sheet above. -->
+  <link rel="stylesheet" href="/css/polish.css?v=1">
 
 <style>
 /* Logged-in profile card (#userProfileCard) on mobile.
@@ -438,48 +440,55 @@
   <div class="card hero">
     <h3>Welcome to the Arena</h3>
     <p class="muted">This website connects discord cyber fighters with non discord users. Now you can chat in real time with anyone on the United Gay Cyber Wrestling discord server without needing a discord account.</p>
-    <p class="muted"> Site Features:</p>
-    <div class="muted"> • Main public chatroom (called the Arena) connecting to the discord server for live chats.<br>
-      • Customizable profiles<br>
-        • Auto-translation of all messages based on selected language<br>
-          • Story creation from Direct messages and created rooms<br>
-            • Toxic free environment with a zero tolerance policy
-            </div>
-    <p><a href="/wrestling-game.html" style="color:#7fd8ff;">Play the Wrestling Game (Career Mode)</a></p>
-    <h3>UPCOMING CHANGES</h3>
-      <div id="updates" class="muted" style="max-height:200px;overflow-y:auto;white-space:pre-wrap;">Loading updates…</div> <br>
-     <h3>COMPLETED UPDATES</h3>
-    <div id="completedupdates" class="muted" style="max-height:200px;overflow-y:auto;white-space:pre-wrap;">Loading completed updates…</div>
+    <p class="eyebrow">Site features</p>
+    <ul class="feature-list muted">
+      <li>Main public chatroom (called the Arena) connecting to the discord server for live chats.</li>
+      <li>Customizable profiles</li>
+      <li>Auto-translation of all messages based on selected language</li>
+      <li>Story creation from Direct messages and created rooms</li>
+      <li>Toxic free environment with a zero tolerance policy</li>
+    </ul>
+    <p class="hero-cta"><a class="text-link" href="/wrestling-game.html">Play the Wrestling Game (Career Mode)</a></p>
 
-    <!-- Side-by-side new member and forum post containers -->
-    <div style="display:flex;gap:16px;margin-top:16px;flex-wrap:wrap;">
-      <div class="card" style="flex:1 1 0;min-width:240px;">
-        <h4 style="margin:0 0 10px;color:#7fd8ff;font-size:15px;letter-spacing:0.04em;">New Members</h4>
-        <div id="newMembersList" style="max-height:260px;overflow-y:auto;padding-right:4px;">
-          <div class="small muted">Loading new members…</div>
-        </div>
+    <div class="updates-grid">
+      <div class="update-block">
+        <h4 class="eyebrow">Upcoming changes</h4>
+        <div id="updates" class="muted" style="max-height:200px;overflow-y:auto;white-space:pre-wrap;">Loading updates…</div>
       </div>
-      <div class="card" style="flex:1 1 0;min-width:240px;">
-        <h4 style="margin:0 0 10px;color:#7fd8ff;font-size:15px;letter-spacing:0.04em;">Recent Forum Posts</h4>
-        <div id="recentForumsList" style="max-height:260px;overflow-y:auto;padding-right:4px;">
-          <div class="small muted">Loading recent posts…</div>
-        </div>
-      </div>
-      <div class="card" style="flex:1 1 0;min-width:240px;">
-        <h4 style="margin:0 0 10px;color:#7fd8ff;font-size:15px;letter-spacing:0.04em;">Federation Leaderboard</h4>
-        <!-- Filled by /js/federations.js from GET /api/federations/leaderboard. -->
-        <div id="federationLeaderboard" class="mcf-fed-board" data-fed-leaderboard aria-live="polite">
-          <div class="small muted">Loading federations…</div>
-        </div>
+      <div class="update-block">
+        <h4 class="eyebrow">Completed updates</h4>
+        <div id="completedupdates" class="muted" style="max-height:200px;overflow-y:auto;white-space:pre-wrap;">Loading completed updates…</div>
       </div>
     </div>
 
-    </div>
+  </div>
   <aside class="card" style="display:none;">
     <h3>Quick Roster</h3>
     <div id="quickRoster" class="roster-list"></div>
   </aside>
 </div>
+  <!-- New members, recent forum posts and the federation leaderboard -->
+  <div class="home-highlights">
+    <div class="card home-highlight">
+      <h4>New Members</h4>
+      <div id="newMembersList" class="highlight-scroll">
+        <div class="small muted">Loading new members…</div>
+      </div>
+    </div>
+    <div class="card home-highlight">
+      <h4>Recent Forum Posts</h4>
+      <div id="recentForumsList" class="highlight-scroll">
+        <div class="small muted">Loading recent posts…</div>
+      </div>
+    </div>
+    <div class="card home-highlight">
+      <h4>Federation Leaderboard</h4>
+      <!-- Filled by /js/federations.js from GET /api/federations/leaderboard. -->
+      <div id="federationLeaderboard" class="mcf-fed-board highlight-scroll" data-fed-leaderboard aria-live="polite">
+        <div class="small muted">Loading federations…</div>
+      </div>
+    </div>
+  </div>
 </div>
   </div>
   </div>
