@@ -222,10 +222,13 @@ a:hover { text-decoration: underline; }
   /* 236px clears the fixed rail on tablet widths; the query below
      tracks the rail exactly once it becomes the glass panel. */
   margin: 26px 32px 64px 236px;
-  padding: 0;
-  background: none;
-  border-radius: 0;
-  box-shadow: none;
+  /* The page is a framed panel with the content inset from its edge, so
+     the columns and rows keep the proportions they were built around. */
+  padding: 28px;
+  background: rgba(8, 13, 22, 0.6);
+  border: 1px solid var(--p-line);
+  border-radius: var(--p-r-lg);
+  box-shadow: var(--p-shadow-2);
 }
 
 @media (min-width: 1000px) {
@@ -241,7 +244,7 @@ a:hover { text-decoration: underline; }
 
 .container-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(200px, 260px);
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
   gap: var(--p-s5);
   align-items: start;
 }
@@ -363,15 +366,8 @@ header {
 .text-link { font-weight: 600; color: var(--p-accent); }
 .text-link::after { content: " →"; }
 
-.updates-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: var(--p-s4);
-  margin: 20px 0 0;
-}
-/* The two feeds share a row on wide cards and stack when there is no
-   room — plain grid behaviour rather than a flex guess. */
-.update-block { min-width: 0; }
+/* The two feeds stack down the card, as they always have. */
+.update-block { margin-top: 20px; min-width: 0; }
 .update-block > .eyebrow { margin: 0 0 8px; }
 
 .highlight-scroll {
@@ -380,14 +376,20 @@ header {
   padding-right: 4px;
 }
 
-/* The three highlight cards under the welcome copy. */
+/* The three highlight cards sit in a row at the foot of the welcome
+   card, as three equal columns that wrap to two and then one when the
+   card is too narrow to hold them. */
 .home-highlights {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--p-s4);
-  margin-top: var(--p-s5);
+  margin-top: 20px;
 }
-.home-highlight { padding: 16px 18px; }
+.home-highlight {
+  flex: 1 1 0;
+  min-width: 180px;
+  padding: 16px 18px;
+}
 .home-highlight h4 {
   margin: 0 0 10px;
   font-size: 12px;
