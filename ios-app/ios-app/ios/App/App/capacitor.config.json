@@ -1,0 +1,9 @@
+{
+	"appId": "com.malecyberfighters.app",
+	"appName": "Male Cyber Fighters",
+	"webDir": "www",
+	"ios": {
+		"contentInset": "automatic"
+	},
+	"packageClassList": []
+}
