@@ -1,0 +1,108 @@
+name: Build iOS App (native)
+
+# Builds the native Male Cyber Fighters iOS app (the same app as the Android
+# build, v1.5 — NOT the website wrapper) on a macOS runner.
+#
+# Setup: copy the ios-app/ folder from this delivery into the repo root,
+# then add this file as .github/workflows/build-ios-native.yml.
+#   - Run manually from the Actions tab: you get two artifacts —
+#     CyberFights-ios.ipa (unsigned, installs on a real iPhone via
+#     AltStore/Sideloadly with a free Apple ID) and
+#     CyberFights-ios-simulator.zip (runs in the iOS Simulator on a Mac).
+#   - Or push a tag like `ios-v1.5.1` to publish both to a GitHub Release
+#     (prerelease).
+#
+# These builds are UNSIGNED — no Apple Developer account needed to build
+# them, but they cannot go to TestFlight or the App Store. For that, see
+# ios-app/README.md (needs the $99/yr Apple Developer Program, a
+# distribution certificate and a provisioning profile).
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'ios-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: ios-app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ios-app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync Capacitor iOS project
+        run: npx cap sync ios
+
+      - name: Build simulator app (unsigned)
+        run: |
+          xcodebuild \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App \
+            -sdk iphonesimulator \
+            -configuration Debug \
+            -derivedDataPath build/ios-sim \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+          ditto -c -k --sequesterRsrc --keepParent \
+            build/ios-sim/Build/Products/Debug-iphonesimulator/App.app \
+            CyberFights-ios-simulator.zip
+
+      - name: Build device IPA (unsigned)
+        run: |
+          xcodebuild \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App \
+            -sdk iphoneos \
+            -configuration Release \
+            -archivePath build/ios/App.xcarchive \
+            MARKETING_VERSION=1.5.1 \
+            CURRENT_PROJECT_VERSION=1 \
+            CODE_SIGNING_ALLOWED=NO \
+            archive
+          mkdir -p Payload
+          cp -r build/ios/App.xcarchive/Products/Applications/App.app Payload/
+          ditto -c -k --sequesterRsrc --keepParent Payload CyberFights-ios.ipa
+
+      - name: Upload iOS builds
+        uses: actions/upload-artifact@v6
+        with:
+          name: ios
+          path: |
+            ios-app/CyberFights-ios.ipa
+            ios-app/CyberFights-ios-simulator.zip
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/ios-v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download iOS builds
+        uses: actions/download-artifact@v7
+        with:
+          name: ios
+          path: artifacts/ios
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          draft: false
+          prerelease: true
+          files: |
+            artifacts/ios/CyberFights-ios.ipa
+            artifacts/ios/CyberFights-ios-simulator.zip
