@@ -102,7 +102,6 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           draft: false
-          prerelease: true
           files: |
             artifacts/ios/CyberFights-ios.ipa
             artifacts/ios/CyberFights-ios-simulator.zip
