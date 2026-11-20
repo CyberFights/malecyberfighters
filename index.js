@@ -143,7 +143,8 @@ app.use(
         objectSrc: ["'none'"],
         upgradeInsecureRequests: []
       }
-    }
+    },
+      crossOriginResourcePolicy: { policy: "cross-origin" }
   })
 );
 app.use(compression());
