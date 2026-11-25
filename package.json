@@ -56,8 +56,7 @@
       "electron/**/*",
       "public/**/*",
       "package.json",
-      "!node_modules/@esbuild/**",
-      "!node_modules/esbuild/**"
+      "!node_modules/**"
     ],
     "win": {
       "target": [
